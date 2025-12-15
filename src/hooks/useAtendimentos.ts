@@ -10,8 +10,28 @@ export function useAtendimentos() {
         .from("atendimentos")
         .select("*")
         .order("hora_chegada", { ascending: false });
-      
+
       if (error) throw error;
+      return data as Atendimento[];
+    },
+  });
+}
+
+export function useAtendimentosByStatus(status: StatusAtendimento) {
+  return useQuery({
+    queryKey: ["atendimentos", "status", status],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("atendimentos")
+        .select("*")
+        .eq("status", status)
+        .order("hora_chegada", { ascending: false });
+
+      if (error) throw error;
+
+      // DEBUG: confirma dados retornando do Supabase
+      console.log("[useAtendimentosByStatus]", status, data);
+
       return data as Atendimento[];
     },
   });
