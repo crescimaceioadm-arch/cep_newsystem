@@ -107,12 +107,14 @@ export function useFinalizarVenda() {
         qtd_itens_medios_vendida: venda.qtd_itens_medios_vendida,
         qtd_itens_grandes_vendida: venda.qtd_itens_grandes_vendida,
         valor_total_venda: venda.valor_total_venda,
+
+        // Mapeamento manual dos pagamentos (colunas planas; NÃO enviar JSON)
         metodo_pagto_1: venda.pagamentos[0]?.metodo || null,
-        valor_pagto_1: venda.pagamentos[0]?.valor || null,
+        valor_pagto_1: venda.pagamentos[0]?.valor ?? 0,
         metodo_pagto_2: venda.pagamentos[1]?.metodo || null,
-        valor_pagto_2: venda.pagamentos[1]?.valor || null,
+        valor_pagto_2: venda.pagamentos[1]?.valor ?? 0,
         metodo_pagto_3: venda.pagamentos[2]?.metodo || null,
-        valor_pagto_3: venda.pagamentos[2]?.valor || null,
+        valor_pagto_3: venda.pagamentos[2]?.valor ?? 0,
       };
 
       console.log("[useFinalizarVenda] Inserindo venda:", vendaData);
@@ -172,7 +174,16 @@ export function useFinalizarVenda() {
       }
     },
     onError: (error) => {
-      toast.error("Erro ao finalizar venda: " + (error instanceof Error ? error.message : String(error)));
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "object" && error && "message" in error
+            ? String((error as any).message)
+            : typeof error === "string"
+              ? error
+              : JSON.stringify(error);
+
+      toast.error("Erro ao finalizar venda: " + message);
     },
   });
 }
