@@ -12,7 +12,7 @@ export default function Dashboard() {
   const { data: vendasHoje, isLoading: loadingVendas } = useVendasHoje();
 
   // Cálculos de KPIs
-  const totalVendasHoje = vendasHoje?.reduce((sum, v) => sum + (v.valor_total || 0), 0) || 0;
+  const totalVendasHoje = vendasHoje?.reduce((sum, v) => sum + (v.valor_total_venda || 0), 0) || 0;
   const qtdVendasHoje = vendasHoje?.length || 0;
   const ticketMedio = qtdVendasHoje > 0 ? totalVendasHoje / qtdVendasHoje : 0;
 
