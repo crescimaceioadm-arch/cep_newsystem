@@ -30,14 +30,11 @@ interface FinalizarAtendimentoModalProps {
 interface Pagamento {
   metodo: string;
   valor: string;
+  banco?: string;
 }
 
-const metodosPagamento = [
-  "Dinheiro",
-  "Pix",
-  "Cartão Débito",
-  "Cartão Crédito",
-];
+const metodosPagamento = ["PIX", "Dinheiro", "Gira crédito"];
+const bancosPix = ["Nubank", "Inter"];
 
 export function FinalizarAtendimentoModal({ 
   open, 
@@ -45,13 +42,14 @@ export function FinalizarAtendimentoModal({
   atendimento 
 }: FinalizarAtendimentoModalProps) {
   const [valorTotal, setValorTotal] = useState("");
-  const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "", valor: "" }]);
+  const [desconto, setDesconto] = useState("");
+  const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "", valor: "", banco: undefined }]);
   const { toast } = useToast();
   const finalizarAtendimento = useFinalizarAtendimento();
 
   const handleAddPagamento = () => {
     if (pagamentos.length < 3) {
-      setPagamentos([...pagamentos, { metodo: "", valor: "" }]);
+      setPagamentos([...pagamentos, { metodo: "", valor: "", banco: undefined }]);
     }
   };
 
@@ -59,9 +57,19 @@ export function FinalizarAtendimentoModal({
     setPagamentos(pagamentos.filter((_, i) => i !== index));
   };
 
-  const handlePagamentoChange = (index: number, field: keyof Pagamento, value: string) => {
+  const handlePagamentoChange = (index: number, field: keyof Pagamento, value: string | undefined) => {
     const newPagamentos = [...pagamentos];
-    newPagamentos[index][field] = value;
+    if (field === 'metodo') {
+      newPagamentos[index].metodo = value as string;
+      // Limpa banco se não for PIX
+      if (value !== 'PIX') {
+        newPagamentos[index].banco = undefined;
+      }
+    } else if (field === 'banco') {
+      newPagamentos[index].banco = value;
+    } else {
+      newPagamentos[index].valor = value as string;
+    }
     setPagamentos(newPagamentos);
   };
 
@@ -93,14 +101,19 @@ export function FinalizarAtendimentoModal({
     }
 
     try {
+      const descontoNum = parseFloat(desconto) || 0;
       const pagamentoData: any = {
         valor_total_negociado: valorTotalNum,
+        desconto_aplicado: descontoNum,
       };
 
       pagamentos.forEach((p, i) => {
         if (p.metodo && p.valor) {
           pagamentoData[`metodo_pagto_${i + 1}`] = p.metodo;
           pagamentoData[`valor_pagto_${i + 1}`] = parseFloat(p.valor);
+          if (p.metodo === 'PIX' && p.banco) {
+            pagamentoData[`pagamento_${i + 1}_banco`] = p.banco;
+          }
         }
       });
 
@@ -116,7 +129,8 @@ export function FinalizarAtendimentoModal({
       
       // Reset form
       setValorTotal("");
-      setPagamentos([{ metodo: "", valor: "" }]);
+      setDesconto("");
+      setPagamentos([{ metodo: "", valor: "", banco: undefined }]);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -158,6 +172,19 @@ export function FinalizarAtendimentoModal({
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="desconto">Desconto (R$)</Label>
+                <Input
+                  id="desconto"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={desconto}
+                  onChange={(e) => setDesconto(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>Formas de Pagamento</Label>
@@ -175,12 +202,12 @@ export function FinalizarAtendimentoModal({
                 </div>
                 
                 {pagamentos.map((pagamento, index) => (
-                  <div key={index} className="flex gap-2">
+                  <div key={index} className="flex flex-wrap gap-2 items-center">
                     <Select
                       value={pagamento.metodo}
                       onValueChange={(value) => handlePagamentoChange(index, 'metodo', value)}
                     >
-                      <SelectTrigger className="flex-1">
+                      <SelectTrigger className="w-[130px]">
                         <SelectValue placeholder="Método" />
                       </SelectTrigger>
                       <SelectContent>
@@ -191,6 +218,25 @@ export function FinalizarAtendimentoModal({
                         ))}
                       </SelectContent>
                     </Select>
+
+                    {pagamento.metodo === 'PIX' && (
+                      <Select
+                        value={pagamento.banco || ""}
+                        onValueChange={(value) => handlePagamentoChange(index, 'banco', value)}
+                      >
+                        <SelectTrigger className="w-[100px]">
+                          <SelectValue placeholder="Banco" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bancosPix.map((banco) => (
+                            <SelectItem key={banco} value={banco}>
+                              {banco}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
                     <Input
                       type="number"
                       step="0.01"
@@ -198,7 +244,7 @@ export function FinalizarAtendimentoModal({
                       value={pagamento.valor}
                       onChange={(e) => handlePagamentoChange(index, 'valor', e.target.value)}
                       placeholder="Valor"
-                      className="w-32"
+                      className="w-28"
                     />
                     {pagamentos.length > 1 && (
                       <Button
