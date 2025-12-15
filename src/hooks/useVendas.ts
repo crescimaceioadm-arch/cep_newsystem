@@ -11,7 +11,7 @@ export interface NovaVenda {
   qtd_itens_medios_vendida: number;
   qtd_itens_grandes_vendida: number;
   valor_total_venda: number;
-  pagamentos: Array<{ metodo: string; valor: number }>;
+  pagamentos: Array<{ metodo: string; valor: number; bandeira?: string }>;
 }
 
 export function useVendas() {
@@ -120,10 +120,13 @@ export function useFinalizarVenda() {
         // Mapeamento manual dos pagamentos (colunas planas; NÃO enviar JSON)
         metodo_pagto_1: venda.pagamentos[0]?.metodo || null,
         valor_pagto_1: venda.pagamentos[0]?.valor ?? 0,
+        bandeira_cartao_1: venda.pagamentos[0]?.bandeira || null,
         metodo_pagto_2: venda.pagamentos[1]?.metodo || null,
         valor_pagto_2: venda.pagamentos[1]?.valor ?? 0,
+        bandeira_cartao_2: venda.pagamentos[1]?.bandeira || null,
         metodo_pagto_3: venda.pagamentos[2]?.metodo || null,
         valor_pagto_3: venda.pagamentos[2]?.valor ?? 0,
+        bandeira_cartao_3: venda.pagamentos[2]?.bandeira || null,
       };
 
       console.log("Payload enviado:", vendaData);

@@ -20,9 +20,16 @@ const METODOS_PAGAMENTO = [
   "Crédito 10x",
 ];
 
-interface Pagamento {
+const BANDEIRAS_CARTAO = ["Visa", "Master", "Hipercard", "Elo", "Amex"];
+
+const precisaBandeira = (metodo: string) => {
+  return metodo.includes("Crédito") || metodo.includes("Débito");
+};
+
+export interface Pagamento {
   metodo: string;
   valor: number;
+  bandeira?: string;
 }
 
 interface PagamentoInputProps {
@@ -33,7 +40,7 @@ interface PagamentoInputProps {
 export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
   const adicionarPagamento = () => {
     if (pagamentos.length < 3) {
-      onChange([...pagamentos, { metodo: "Pix", valor: 0 }]);
+      onChange([...pagamentos, { metodo: "PIX", valor: 0, bandeira: undefined }]);
     }
   };
 
@@ -45,8 +52,14 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
     const novos = [...pagamentos];
     if (campo === "valor") {
       novos[index].valor = typeof valor === 'string' ? parseFloat(valor) || 0 : valor;
+    } else if (campo === "bandeira") {
+      novos[index].bandeira = valor as string;
     } else {
       novos[index].metodo = valor as string;
+      // Limpa bandeira se método não precisar
+      if (!precisaBandeira(valor as string)) {
+        novos[index].bandeira = undefined;
+      }
     }
     onChange(novos);
   };
@@ -56,7 +69,7 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
   return (
     <div className="space-y-3">
       {pagamentos.map((pagamento, index) => (
-        <div key={index} className="flex gap-2 items-center">
+        <div key={index} className="flex flex-wrap gap-2 items-center">
           <Select
             value={pagamento.metodo}
             onValueChange={(v) => atualizarPagamento(index, "metodo", v)}
@@ -70,7 +83,24 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
               ))}
             </SelectContent>
           </Select>
-          <div className="relative flex-1">
+
+          {precisaBandeira(pagamento.metodo) && (
+            <Select
+              value={pagamento.bandeira || ""}
+              onValueChange={(v) => atualizarPagamento(index, "bandeira", v)}
+            >
+              <SelectTrigger className="w-[110px]">
+                <SelectValue placeholder="Bandeira" />
+              </SelectTrigger>
+              <SelectContent>
+                {BANDEIRAS_CARTAO.map((b) => (
+                  <SelectItem key={b} value={b}>{b}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <div className="relative flex-1 min-w-[100px]">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
             <Input
               type="number"
