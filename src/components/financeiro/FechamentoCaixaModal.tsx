@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -219,7 +218,7 @@ export function FechamentoCaixaModal({
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
@@ -229,7 +228,7 @@ export function FechamentoCaixaModal({
           >
             {isPending ? "Fechando..." : "Confirmar Fechamento"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
