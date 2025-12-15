@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAtendimentosByStatus } from "@/hooks/useAtendimentos";
 import { Button } from "@/components/ui/button";
@@ -9,9 +10,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
+import { Atendimento } from "@/types/database";
 
 export default function Avaliacao() {
   const { data, isLoading, error } = useAtendimentosByStatus("aguardando_avaliacao");
+  const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const handleIniciarAvaliacao = (atendimento: Atendimento) => {
+    setSelectedAtendimento(atendimento);
+    setIsDialogOpen(true);
+  };
 
   return (
     <MainLayout title="Avaliação">
@@ -51,8 +61,11 @@ export default function Avaliacao() {
                       })}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant="secondary" disabled>
-                        Avaliar
+                      <Button
+                        size="sm"
+                        onClick={() => handleIniciarAvaliacao(a)}
+                      >
+                        Iniciar Avaliação
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -61,6 +74,12 @@ export default function Avaliacao() {
             </Table>
           </section>
         )}
+
+        <AvaliacaoModal
+          atendimento={selectedAtendimento}
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+        />
       </main>
     </MainLayout>
   );
