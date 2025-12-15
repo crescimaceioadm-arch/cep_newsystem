@@ -6,9 +6,18 @@ import { Trash2 } from "lucide-react";
 const METODOS_PAGAMENTO = [
   "Dinheiro",
   "PIX",
-  "Cartão de Débito",
-  "Cartão de Crédito",
-  "Transferência (TED/DOC)",
+  "Gira crédito",
+  "Débito",
+  "Crédito à vista",
+  "Crédito 2x",
+  "Crédito 3x",
+  "Crédito 4x",
+  "Crédito 5x",
+  "Crédito 6x",
+  "Crédito 7x",
+  "Crédito 8x",
+  "Crédito 9x",
+  "Crédito 10x",
 ];
 
 interface Pagamento {
