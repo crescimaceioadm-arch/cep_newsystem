@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useEstoque } from "@/hooks/useEstoque";
 import { useFinalizarVenda } from "@/hooks/useVendas";
+import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 
 import { PagamentoInput } from "@/components/vendas/PagamentoInput";
 import { ShoppingCart, CreditCard, AlertTriangle } from "lucide-react";
@@ -21,6 +22,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Quantidades {
   baby: number;
@@ -39,6 +47,7 @@ interface Pagamento {
 export default function Vendas() {
   const { data: estoque } = useEstoque();
   const { mutate: finalizarVenda, isPending } = useFinalizarVenda();
+  const { data: vendedoras } = useColaboradoresByFuncao("Vendedora");
 
   const [quantidades, setQuantidades] = useState<Quantidades>({
     baby: 0,
@@ -51,6 +60,7 @@ export default function Vendas() {
 
   const [valorTotal, setValorTotal] = useState<number>(0);
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: 0 }]);
+  const [vendedoraSelecionada, setVendedoraSelecionada] = useState<string>("");
   const [showAlertaEstoque, setShowAlertaEstoque] = useState(false);
   const [alertasEstoque, setAlertasEstoque] = useState<string[]>([]);
 
@@ -123,11 +133,13 @@ export default function Vendas() {
       qtd_itens_grandes_vendida: quantidades.grandes,
       valor_total_venda: valorTotal,
       pagamentos,
+      vendedora_nome: vendedoraSelecionada || undefined,
     }, {
       onSuccess: () => {
         setQuantidades({ baby: 0, infantil: 0, calcados: 0, brinquedos: 0, medios: 0, grandes: 0 });
         setValorTotal(0);
         setPagamentos([{ metodo: "Pix", valor: 0 }]);
+        setVendedoraSelecionada("");
       },
     });
   };
@@ -144,6 +156,22 @@ export default function Vendas() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="vendedora">Vendedora</Label>
+              <Select value={vendedoraSelecionada} onValueChange={setVendedoraSelecionada}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a vendedora" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendedoras?.map((v) => (
+                    <SelectItem key={v.id} value={v.nome}>
+                      {v.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="valor-total">Valor Total da Venda</Label>
               <div className="relative">
