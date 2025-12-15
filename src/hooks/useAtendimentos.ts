@@ -139,6 +139,8 @@ interface AvaliacaoData {
   qtd_brinquedos: number;
   qtd_itens_medios: number;
   qtd_itens_grandes: number;
+  valor_total_itens_medios?: number;
+  valor_total_itens_grandes?: number;
   descricao_itens_extra: string;
   avaliadora_nome?: string;
 }
@@ -160,6 +162,8 @@ export function useSaveAvaliacao() {
           qtd_brinquedos: data.qtd_brinquedos,
           qtd_itens_medios: data.qtd_itens_medios,
           qtd_itens_grandes: data.qtd_itens_grandes,
+          valor_total_itens_medios: data.valor_total_itens_medios || 0,
+          valor_total_itens_grandes: data.valor_total_itens_grandes || 0,
           descricao_itens_extra: data.descricao_itens_extra,
           avaliadora_nome: data.avaliadora_nome || null,
           status: "aguardando_pagamento" as StatusAtendimento,
