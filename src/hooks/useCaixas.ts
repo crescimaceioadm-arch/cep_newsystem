@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -11,12 +12,14 @@ export interface Caixa {
 
 export interface MovimentacaoCaixa {
   id: string;
-  caixa_id: string;
-  tipo: 'entrada' | 'saida' | 'transferencia_entrada' | 'transferencia_saida';
+  caixa_origem_id: string | null;
+  caixa_destino_id: string | null;
+  tipo: 'entrada' | 'saida' | 'transferencia_entrada' | 'transferencia_saida' | 'venda';
   valor: number;
-  motivo: string;
-  created_at: string;
-  caixas?: { nome: string };
+  motivo: string | null;
+  data_hora: string;
+  caixa_origem?: { nome: string }[] | null;
+  caixa_destino?: { nome: string }[] | null;
 }
 
 export interface FechamentoCaixa {
@@ -45,19 +48,46 @@ export function useCaixas() {
 }
 
 export function useMovimentacoesCaixa() {
-  return useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["movimentacoes_caixa"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("movimentacoes_caixa")
-        .select("*, caixas(nome)")
-        .order("created_at", { ascending: false })
+        .select("id, tipo, valor, motivo, data_hora, caixa_origem_id, caixa_destino_id, caixa_origem:caixas!movimentacoes_caixa_caixa_origem_id_fkey(nome), caixa_destino:caixas!movimentacoes_caixa_caixa_destino_id_fkey(nome)")
+        .order("data_hora", { ascending: false })
         .limit(20);
 
       if (error) throw error;
       return data as MovimentacaoCaixa[];
     },
   });
+
+  // Realtime subscription para atualizar automaticamente
+  React.useEffect(() => {
+    const channel = supabase
+      .channel('movimentacoes-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'movimentacoes_caixa'
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+          queryClient.invalidateQueries({ queryKey: ["caixas"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  return query;
 }
 
 export function useTransferenciaCaixa() {

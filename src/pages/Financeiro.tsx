@@ -358,33 +358,35 @@ export default function Financeiro() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {movimentacoes?.map((mov) => (
-                    <TableRow key={mov.id}>
-                      <TableCell>
-                        {mov.created_at ? format(new Date(mov.created_at), "dd/MM HH:mm", { locale: ptBR }) : "-"}
-                      </TableCell>
-                      <TableCell>{mov.caixas?.nome || "-"}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            mov.tipo.includes("entrada")
-                              ? "bg-green-500/20 text-green-700"
-                              : "bg-red-500/20 text-red-700"
-                          }`}
+                  {movimentacoes?.map((mov) => {
+                    const caixaNome = mov.caixa_origem?.[0]?.nome || mov.caixa_destino?.[0]?.nome || "-";
+                    const isEntrada = mov.tipo.includes("entrada") || mov.tipo === "venda";
+                    return (
+                      <TableRow key={mov.id}>
+                        <TableCell>
+                          {mov.data_hora ? format(new Date(mov.data_hora), "dd/MM HH:mm", { locale: ptBR }) : "-"}
+                        </TableCell>
+                        <TableCell>{caixaNome}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              isEntrada
+                                ? "bg-green-500/20 text-green-700"
+                                : "bg-red-500/20 text-red-700"
+                            }`}
+                          >
+                            {mov.tipo}
+                          </span>
+                        </TableCell>
+                        <TableCell
+                          className={isEntrada ? "text-green-600" : "text-red-600"}
                         >
-                          {mov.tipo}
-                        </span>
-                      </TableCell>
-                      <TableCell
-                        className={
-                          mov.tipo.includes("entrada") ? "text-green-600" : "text-red-600"
-                        }
-                      >
-                        {mov.tipo.includes("entrada") ? "+" : "-"} R$ {mov.valor.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate">{mov.motivo}</TableCell>
-                    </TableRow>
-                  ))}
+                          {isEntrada ? "+" : "-"} R$ {mov.valor.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate">{mov.motivo || "-"}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {(!movimentacoes || movimentacoes.length === 0) && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">
