@@ -228,6 +228,11 @@ export default function Financeiro() {
                       placeholder="0.00"
                       value={valorTransf}
                       onChange={(e) => setValorTransf(e.target.value)}
+                      onBlur={(e) => {
+                        if (e.target.value) {
+                          setValorTransf(parseFloat(e.target.value).toFixed(2));
+                        }
+                      }}
                     />
                   </div>
 
@@ -309,6 +314,11 @@ export default function Financeiro() {
                       placeholder="0.00"
                       value={valorMov}
                       onChange={(e) => setValorMov(e.target.value)}
+                      onBlur={(e) => {
+                        if (e.target.value) {
+                          setValorMov(parseFloat(e.target.value).toFixed(2));
+                        }
+                      }}
                     />
                   </div>
 
