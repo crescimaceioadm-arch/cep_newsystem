@@ -143,12 +143,11 @@ export default function Financeiro() {
                       {caixa.nome}
                     </div>
                     <Button
-                      variant="ghost"
+                      variant="destructive"
                       size="sm"
                       onClick={() => openFechamento(caixa)}
                     >
-                      <Lock className="h-4 w-4 mr-1" />
-                      Fechar
+                      FECHAR CAIXA
                     </Button>
                   </CardTitle>
                 </CardHeader>
