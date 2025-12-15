@@ -4,7 +4,8 @@ import {
   ShoppingCart, 
   Box, 
   BarChart3, 
-  Settings 
+  Settings,
+  Wallet 
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -23,6 +24,7 @@ const menuItems = [
   { title: "Recepção", url: "/", icon: UserPlus },
   { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
+  { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Estoque", url: "/estoque", icon: Box },
   { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
