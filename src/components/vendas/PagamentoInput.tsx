@@ -28,7 +28,7 @@ const precisaBandeira = (metodo: string) => {
 
 export interface Pagamento {
   metodo: string;
-  valor: number;
+  valor: string; // Armazenar como string para evitar arredondamentos
   bandeira?: string;
 }
 
@@ -40,7 +40,7 @@ interface PagamentoInputProps {
 export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
   const adicionarPagamento = () => {
     if (pagamentos.length < 3) {
-      onChange([...pagamentos, { metodo: "PIX", valor: 0, bandeira: undefined }]);
+      onChange([...pagamentos, { metodo: "PIX", valor: "", bandeira: undefined }]);
     }
   };
 
@@ -48,23 +48,31 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
     onChange(pagamentos.filter((_, i) => i !== index));
   };
 
-  const atualizarPagamento = (index: number, campo: keyof Pagamento, valor: string | number) => {
+  const atualizarPagamento = (index: number, campo: keyof Pagamento, valor: string) => {
     const novos = [...pagamentos];
     if (campo === "valor") {
-      novos[index].valor = typeof valor === 'string' ? parseFloat(valor) || 0 : valor;
+      novos[index].valor = valor;
     } else if (campo === "bandeira") {
-      novos[index].bandeira = valor as string;
+      novos[index].bandeira = valor;
     } else {
-      novos[index].metodo = valor as string;
-      // Limpa bandeira se método não precisar
-      if (!precisaBandeira(valor as string)) {
+      novos[index].metodo = valor;
+      if (!precisaBandeira(valor)) {
         novos[index].bandeira = undefined;
       }
     }
     onChange(novos);
   };
 
-  const totalPagamentos = pagamentos.reduce((sum, p) => sum + p.valor, 0);
+  const handleBlurValor = (index: number, valorStr: string) => {
+    if (valorStr) {
+      const num = parseFloat(valorStr);
+      if (!isNaN(num)) {
+        atualizarPagamento(index, "valor", num.toFixed(2));
+      }
+    }
+  };
+
+  const totalPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
 
   return (
     <div className="space-y-3">
@@ -106,10 +114,11 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
               type="number"
               step="0.01"
               min="0"
-              value={pagamento.valor || ""}
+              value={pagamento.valor}
               onChange={(e) => atualizarPagamento(index, "valor", e.target.value)}
+              onBlur={(e) => handleBlurValor(index, e.target.value)}
               className="pl-10"
-              placeholder="0,00"
+              placeholder="0.00"
             />
           </div>
           <Button
