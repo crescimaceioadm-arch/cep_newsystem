@@ -68,9 +68,10 @@ export function useFinalizarVenda() {
       }
 
       // 2. Verificar disponibilidade e preparar alertas
+      // IMPORTANTE: Os nomes devem corresponder EXATAMENTE à coluna 'categoria' na tabela 'estoque'
       const categoriaMap: Record<string, { vendido: number; campo: keyof Estoque }> = {
-        "Baby": { vendido: venda.qtd_baby_vendida, campo: "quantidade_atual" },
-        "1 a 16": { vendido: venda.qtd_1_a_16_vendida, campo: "quantidade_atual" },
+        "Roupas Baby": { vendido: venda.qtd_baby_vendida, campo: "quantidade_atual" },
+        "Roupas 1 a 16": { vendido: venda.qtd_1_a_16_vendida, campo: "quantidade_atual" },
         "Calçados": { vendido: venda.qtd_calcados_vendida, campo: "quantidade_atual" },
         "Brinquedos": { vendido: venda.qtd_brinquedos_vendida, campo: "quantidade_atual" },
         "Itens Médios": { vendido: venda.qtd_itens_medios_vendida, campo: "quantidade_atual" },
@@ -90,15 +91,15 @@ export function useFinalizarVenda() {
         // Continua mesmo assim (estoque físico manda)
       }
 
-      // 3. Inserir a venda
-      const vendaData: Partial<Venda> = {
+      // 3. Inserir a venda - MAPEAMENTO CORRETO para as colunas do banco
+      const vendaData = {
         qtd_baby_vendida: venda.qtd_baby_vendida,
         qtd_1_a_16_vendida: venda.qtd_1_a_16_vendida,
         qtd_calcados_vendida: venda.qtd_calcados_vendida,
         qtd_brinquedos_vendida: venda.qtd_brinquedos_vendida,
         qtd_itens_medios_vendida: venda.qtd_itens_medios_vendida,
         qtd_itens_grandes_vendida: venda.qtd_itens_grandes_vendida,
-        valor_total: venda.valor_total,
+        valor_total_venda: venda.valor_total, // Coluna correta no banco é 'valor_total_venda'
         metodo_pagto_1: venda.pagamentos[0]?.metodo || null,
         valor_pagto_1: venda.pagamentos[0]?.valor || null,
         metodo_pagto_2: venda.pagamentos[1]?.metodo || null,
@@ -107,6 +108,7 @@ export function useFinalizarVenda() {
         valor_pagto_3: venda.pagamentos[2]?.valor || null,
       };
 
+      console.log("[useFinalizarVenda] Inserindo venda:", vendaData);
       const { error: vendaError } = await supabase.from("vendas").insert(vendaData);
 
       if (vendaError) {

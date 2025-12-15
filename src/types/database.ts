@@ -41,7 +41,7 @@ export interface Venda {
   qtd_brinquedos_vendida: number | null;
   qtd_itens_medios_vendida: number | null;
   qtd_itens_grandes_vendida: number | null;
-  valor_total: number;
+  valor_total_venda: number; // Nome correto da coluna no banco
   metodo_pagto_1: string | null;
   valor_pagto_1: number | null;
   metodo_pagto_2: string | null;

@@ -176,9 +176,10 @@ export function useSaveAvaliacao() {
       console.log("[useSaveAvaliacao] Estoque atual:", estoqueAtual);
 
       // Mapeamento de categorias para as quantidades da avaliação
+      // IMPORTANTE: Os nomes devem corresponder EXATAMENTE à coluna 'categoria' na tabela 'estoque'
       const categoriaMap: Record<string, number> = {
-        "Baby": data.qtd_baby,
-        "1 a 16": data.qtd_1_a_16,
+        "Roupas Baby": data.qtd_baby,
+        "Roupas 1 a 16": data.qtd_1_a_16,
         "Calçados": data.qtd_calcados,
         "Brinquedos": data.qtd_brinquedos,
         "Itens Médios": data.qtd_itens_medios,
