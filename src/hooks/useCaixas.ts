@@ -191,6 +191,14 @@ export function useMovimentacaoManual() {
   });
 }
 
+export interface DetalhesPagamentosFechamento {
+  dinheiro: number;
+  pix: number;
+  debito: number;
+  credito: number;
+  giraCredito: number;
+}
+
 export function useFechamentoCaixa() {
   const queryClient = useQueryClient();
 
@@ -199,10 +207,12 @@ export function useFechamentoCaixa() {
       caixaId,
       valorSistema,
       valorContado,
+      detalhesPagamentos,
     }: {
       caixaId: string;
       valorSistema: number;
       valorContado: number;
+      detalhesPagamentos?: DetalhesPagamentosFechamento;
     }) => {
       const diferenca = valorSistema - valorContado;
 
@@ -212,6 +222,7 @@ export function useFechamentoCaixa() {
         valor_sistema: valorSistema,
         valor_contado: valorContado,
         diferenca: diferenca,
+        detalhes_pagamentos: detalhesPagamentos ? JSON.stringify(detalhesPagamentos) : null,
       });
 
       if (error) throw error;
@@ -219,7 +230,7 @@ export function useFechamentoCaixa() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
-      toast.success("Fechamento de caixa registrado!");
+      toast.success("Caixa fechado com sucesso!");
     },
     onError: (error: Error) => {
       toast.error("Erro ao fechar caixa: " + error.message);
@@ -279,6 +290,71 @@ export function useResumoVendasHoje() {
         totalPix,
         totalCartao,
         totalGeral: totalDinheiro + totalPix + totalCartao,
+      };
+    },
+  });
+}
+
+export interface ResumoVendasPorCaixa {
+  totalDinheiro: number;
+  totalPix: number;
+  totalDebito: number;
+  totalCredito: number;
+  totalGiraCredito: number;
+  totalGeral: number;
+}
+
+export function useResumoVendasPorCaixa(caixaNome: string | null) {
+  return useQuery({
+    queryKey: ["resumo_vendas_caixa", caixaNome],
+    enabled: !!caixaNome,
+    queryFn: async (): Promise<ResumoVendasPorCaixa> => {
+      const hoje = new Date().toISOString().split("T")[0];
+
+      const { data, error } = await supabase
+        .from("vendas")
+        .select("*")
+        .eq("caixa_origem", caixaNome)
+        .gte("created_at", `${hoje}T00:00:00`)
+        .lte("created_at", `${hoje}T23:59:59`);
+
+      if (error) throw error;
+
+      let totalDinheiro = 0;
+      let totalPix = 0;
+      let totalDebito = 0;
+      let totalCredito = 0;
+      let totalGiraCredito = 0;
+
+      const processarPagamento = (metodo: string | null, valor: number | null) => {
+        if (!metodo || !valor) return;
+        
+        if (metodo === "Dinheiro") {
+          totalDinheiro += valor;
+        } else if (metodo === "PIX") {
+          totalPix += valor;
+        } else if (metodo === "Débito") {
+          totalDebito += valor;
+        } else if (metodo.includes("Crédito")) {
+          totalCredito += valor;
+        } else if (metodo === "Gira crédito") {
+          totalGiraCredito += valor;
+        }
+      };
+
+      data?.forEach((venda) => {
+        processarPagamento(venda.metodo_pagto_1, venda.valor_pagto_1);
+        processarPagamento(venda.metodo_pagto_2, venda.valor_pagto_2);
+        processarPagamento(venda.metodo_pagto_3, venda.valor_pagto_3);
+      });
+
+      return {
+        totalDinheiro,
+        totalPix,
+        totalDebito,
+        totalCredito,
+        totalGiraCredito,
+        totalGeral: totalDinheiro + totalPix + totalDebito + totalCredito + totalGiraCredito,
       };
     },
   });
