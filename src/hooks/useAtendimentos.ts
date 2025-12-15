@@ -140,6 +140,7 @@ interface AvaliacaoData {
   qtd_itens_medios: number;
   qtd_itens_grandes: number;
   descricao_itens_extra: string;
+  avaliadora_nome?: string;
 }
 
 export function useSaveAvaliacao() {
@@ -160,6 +161,7 @@ export function useSaveAvaliacao() {
           qtd_itens_medios: data.qtd_itens_medios,
           qtd_itens_grandes: data.qtd_itens_grandes,
           descricao_itens_extra: data.descricao_itens_extra,
+          avaliadora_nome: data.avaliadora_nome || null,
           status: "aguardando_pagamento" as StatusAtendimento,
         })
         .eq("id", data.id);

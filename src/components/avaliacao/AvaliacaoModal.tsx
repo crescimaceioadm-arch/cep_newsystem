@@ -9,8 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Atendimento } from "@/types/database";
 import { useSaveAvaliacao } from "@/hooks/useAtendimentos";
+import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { toast } from "@/hooks/use-toast";
 
 interface AvaliacaoModalProps {
@@ -29,8 +37,10 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
     qtd_itens_grandes: 0,
     descricao_itens_extra: "",
   });
+  const [avaliadoraSelecionada, setAvaliadoraSelecionada] = useState("");
 
   const saveAvaliacao = useSaveAvaliacao();
+  const { data: avaliadoras } = useColaboradoresByFuncao("Avaliadora");
 
   const requiresDescription = formData.qtd_itens_grandes > 0 || formData.qtd_itens_medios > 0;
   const isDescriptionValid = !requiresDescription || formData.descricao_itens_extra.trim().length > 0;
@@ -52,7 +62,11 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
     }
 
     saveAvaliacao.mutate(
-      { id: atendimento.id, ...formData },
+      { 
+        id: atendimento.id, 
+        ...formData,
+        avaliadora_nome: avaliadoraSelecionada || undefined,
+      },
       {
         onSuccess: () => {
           toast({ title: "Avaliação salva com sucesso!" });
@@ -66,6 +80,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
             qtd_itens_grandes: 0,
             descricao_itens_extra: "",
           });
+          setAvaliadoraSelecionada("");
         },
         onError: () => {
           toast({
@@ -86,6 +101,22 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
         <DialogHeader>
           <DialogTitle>Avaliar: {atendimento.nome_cliente}</DialogTitle>
         </DialogHeader>
+
+        <div className="space-y-2 mb-4">
+          <Label htmlFor="avaliadora">Avaliadora</Label>
+          <Select value={avaliadoraSelecionada} onValueChange={setAvaliadoraSelecionada}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione a avaliadora" />
+            </SelectTrigger>
+            <SelectContent>
+              {avaliadoras?.map((a) => (
+                <SelectItem key={a.id} value={a.nome}>
+                  {a.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="grid grid-cols-2 gap-4 py-4">
           <div className="space-y-2">

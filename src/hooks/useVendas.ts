@@ -12,6 +12,7 @@ export interface NovaVenda {
   qtd_itens_grandes_vendida: number;
   valor_total_venda: number;
   pagamentos: Array<{ metodo: string; valor: number; bandeira?: string }>;
+  vendedora_nome?: string;
 }
 
 export function useVendas() {
@@ -116,6 +117,7 @@ export function useFinalizarVenda() {
         qtd_itens_medios_vendida: venda.qtd_itens_medios_vendida,
         qtd_itens_grandes_vendida: venda.qtd_itens_grandes_vendida,
         valor_total_venda: venda.valor_total_venda,
+        vendedora_nome: venda.vendedora_nome || null,
 
         // Mapeamento manual dos pagamentos (colunas planas; NÃO enviar JSON)
         metodo_pagto_1: venda.pagamentos[0]?.metodo || null,
