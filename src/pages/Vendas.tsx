@@ -41,7 +41,8 @@ interface Quantidades {
 
 interface Pagamento {
   metodo: string;
-  valor: number;
+  valor: string;
+  bandeira?: string;
 }
 
 export default function Vendas() {
@@ -59,7 +60,7 @@ export default function Vendas() {
   });
 
   const [valorTotal, setValorTotal] = useState<number>(0);
-  const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: 0 }]);
+  const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: "" }]);
   const [vendedoraSelecionada, setVendedoraSelecionada] = useState<string>("");
   const [showAlertaEstoque, setShowAlertaEstoque] = useState(false);
   const [alertasEstoque, setAlertasEstoque] = useState<string[]>([]);
@@ -76,7 +77,7 @@ export default function Vendas() {
     quantidades.medios + 
     quantidades.grandes;
 
-  const totalPagamentos = pagamentos.reduce((sum, p) => sum + p.valor, 0);
+  const totalPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
   const diferenca = valorTotal - totalPagamentos;
 
   const verificarEstoque = (): string[] => {
@@ -132,13 +133,13 @@ export default function Vendas() {
       qtd_itens_medios_vendida: quantidades.medios,
       qtd_itens_grandes_vendida: quantidades.grandes,
       valor_total_venda: valorTotal,
-      pagamentos,
+      pagamentos: pagamentos.map(p => ({ ...p, valor: parseFloat(p.valor) || 0 })),
       vendedora_nome: vendedoraSelecionada || undefined,
     }, {
       onSuccess: () => {
         setQuantidades({ baby: 0, infantil: 0, calcados: 0, brinquedos: 0, medios: 0, grandes: 0 });
         setValorTotal(0);
-        setPagamentos([{ metodo: "Pix", valor: 0 }]);
+        setPagamentos([{ metodo: "PIX", valor: "" }]);
         setVendedoraSelecionada("");
       },
     });
