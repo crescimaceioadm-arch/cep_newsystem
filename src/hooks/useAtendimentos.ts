@@ -138,6 +138,8 @@ export function useSaveAvaliacao() {
 
   return useMutation({
     mutationFn: async (data: AvaliacaoData) => {
+      console.log("[useSaveAvaliacao] Salvando avaliação:", data);
+
       // 1. Atualiza o atendimento com as quantidades e muda status
       const { error: updateError } = await supabase
         .from("atendimentos")
@@ -153,29 +155,55 @@ export function useSaveAvaliacao() {
         })
         .eq("id", data.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("[useSaveAvaliacao] Erro ao atualizar atendimento:", updateError);
+        throw updateError;
+      }
+
+      console.log("[useSaveAvaliacao] Atendimento atualizado, atualizando estoque...");
 
       // 2. CRÍTICO: Atualiza estoque imediatamente somando as quantidades
+      // Busca todas as categorias do estoque
       const { data: estoqueAtual, error: estoqueError } = await supabase
         .from("estoque")
-        .select("*")
-        .single();
+        .select("*");
 
-      if (estoqueError) throw estoqueError;
+      if (estoqueError) {
+        console.error("[useSaveAvaliacao] Erro ao buscar estoque:", estoqueError);
+        throw estoqueError;
+      }
 
-      const { error: updateEstoqueError } = await supabase
-        .from("estoque")
-        .update({
-          qtd_baby: (estoqueAtual.qtd_baby || 0) + data.qtd_baby,
-          qtd_1_a_16: (estoqueAtual.qtd_1_a_16 || 0) + data.qtd_1_a_16,
-          qtd_calcados: (estoqueAtual.qtd_calcados || 0) + data.qtd_calcados,
-          qtd_brinquedos: (estoqueAtual.qtd_brinquedos || 0) + data.qtd_brinquedos,
-          qtd_itens_medios: (estoqueAtual.qtd_itens_medios || 0) + data.qtd_itens_medios,
-          qtd_itens_grandes: (estoqueAtual.qtd_itens_grandes || 0) + data.qtd_itens_grandes,
-        })
-        .eq("id", estoqueAtual.id);
+      console.log("[useSaveAvaliacao] Estoque atual:", estoqueAtual);
 
-      if (updateEstoqueError) throw updateEstoqueError;
+      // Mapeamento de categorias para as quantidades da avaliação
+      const categoriaMap: Record<string, number> = {
+        "Baby": data.qtd_baby,
+        "1 a 16": data.qtd_1_a_16,
+        "Calçados": data.qtd_calcados,
+        "Brinquedos": data.qtd_brinquedos,
+        "Itens Médios": data.qtd_itens_medios,
+        "Itens Grandes": data.qtd_itens_grandes,
+      };
+
+      // Atualiza cada categoria no estoque
+      for (const item of estoqueAtual || []) {
+        const adicionar = categoriaMap[item.categoria] || 0;
+        if (adicionar > 0) {
+          const novaQuantidade = (item.quantidade_atual || 0) + adicionar;
+          const { error: updateEstoqueError } = await supabase
+            .from("estoque")
+            .update({ quantidade_atual: novaQuantidade })
+            .eq("id", item.id);
+
+          if (updateEstoqueError) {
+            console.error(`[useSaveAvaliacao] Erro ao atualizar estoque ${item.categoria}:`, updateEstoqueError);
+            throw updateEstoqueError;
+          }
+          console.log(`[useSaveAvaliacao] Estoque ${item.categoria}: ${item.quantidade_atual} + ${adicionar} = ${novaQuantidade}`);
+        }
+      }
+
+      console.log("[useSaveAvaliacao] Avaliação salva com sucesso!");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
