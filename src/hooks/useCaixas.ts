@@ -80,6 +80,7 @@ export function useTransferenciaCaixa() {
         p_destino_nome: destinoNome,
         p_valor: valor,
         p_motivo: motivo,
+        p_tipo: "transferencia_entre_caixas",
       });
 
       if (error) throw error;
