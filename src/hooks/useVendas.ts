@@ -99,7 +99,16 @@ export function useFinalizarVenda() {
         throw new Error("valor_total_venda inválido (não pode ser nulo/zero)");
       }
 
+      const totalItensCalculado =
+        Number(venda.qtd_baby_vendida) +
+        Number(venda.qtd_1_a_16_vendida) +
+        Number(venda.qtd_calcados_vendida) +
+        Number(venda.qtd_brinquedos_vendida) +
+        Number(venda.qtd_itens_medios_vendida) +
+        Number(venda.qtd_itens_grandes_vendida);
+
       const vendaData = {
+        qtd_total_itens: totalItensCalculado,
         qtd_baby_vendida: venda.qtd_baby_vendida,
         qtd_1_a_16_vendida: venda.qtd_1_a_16_vendida,
         qtd_calcados_vendida: venda.qtd_calcados_vendida,
@@ -117,6 +126,7 @@ export function useFinalizarVenda() {
         valor_pagto_3: venda.pagamentos[2]?.valor ?? 0,
       };
 
+      console.log("Payload enviado:", vendaData);
       console.log("[useFinalizarVenda] Inserindo venda:", vendaData);
       const { error: vendaError } = await supabase.from("vendas").insert(vendaData);
 
