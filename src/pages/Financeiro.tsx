@@ -157,7 +157,7 @@ export default function Financeiro() {
                     R$ {caixa.saldo_atual.toFixed(2)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Atualizado: {format(new Date(caixa.updated_at), "dd/MM HH:mm", { locale: ptBR })}
+                    Atualizado: {caixa.updated_at ? format(new Date(caixa.updated_at), "dd/MM HH:mm", { locale: ptBR }) : "-"}
                   </p>
                 </CardContent>
               </Card>
@@ -361,7 +361,7 @@ export default function Financeiro() {
                   {movimentacoes?.map((mov) => (
                     <TableRow key={mov.id}>
                       <TableCell>
-                        {format(new Date(mov.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                        {mov.created_at ? format(new Date(mov.created_at), "dd/MM HH:mm", { locale: ptBR }) : "-"}
                       </TableCell>
                       <TableCell>{mov.caixas?.nome || "-"}</TableCell>
                       <TableCell>
