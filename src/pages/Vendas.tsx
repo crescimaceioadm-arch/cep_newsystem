@@ -71,18 +71,23 @@ export default function Vendas() {
 
   const verificarEstoque = (): string[] => {
     const alertas: string[] = [];
-    if (quantidades.baby > getEstoqueCategoria("Baby")) 
-      alertas.push(`Baby: estoque ${getEstoqueCategoria("Baby")}, vendendo ${quantidades.baby}`);
-    if (quantidades.infantil > getEstoqueCategoria("1 a 16")) 
-      alertas.push(`1 a 16: estoque ${getEstoqueCategoria("1 a 16")}, vendendo ${quantidades.infantil}`);
-    if (quantidades.calcados > getEstoqueCategoria("Calçados")) 
+
+    const estoqueBaby = getEstoqueCategoria("Roupas Baby");
+    const estoqueInfantil = getEstoqueCategoria("Roupas 1 a 16");
+
+    if (quantidades.baby > estoqueBaby)
+      alertas.push(`Roupas Baby: estoque ${estoqueBaby}, vendendo ${quantidades.baby}`);
+    if (quantidades.infantil > estoqueInfantil)
+      alertas.push(`Roupas 1 a 16: estoque ${estoqueInfantil}, vendendo ${quantidades.infantil}`);
+    if (quantidades.calcados > getEstoqueCategoria("Calçados"))
       alertas.push(`Calçados: estoque ${getEstoqueCategoria("Calçados")}, vendendo ${quantidades.calcados}`);
-    if (quantidades.brinquedos > getEstoqueCategoria("Brinquedos")) 
+    if (quantidades.brinquedos > getEstoqueCategoria("Brinquedos"))
       alertas.push(`Brinquedos: estoque ${getEstoqueCategoria("Brinquedos")}, vendendo ${quantidades.brinquedos}`);
-    if (quantidades.medios > getEstoqueCategoria("Itens Médios")) 
+    if (quantidades.medios > getEstoqueCategoria("Itens Médios"))
       alertas.push(`Itens Médios: estoque ${getEstoqueCategoria("Itens Médios")}, vendendo ${quantidades.medios}`);
-    if (quantidades.grandes > getEstoqueCategoria("Itens Grandes")) 
+    if (quantidades.grandes > getEstoqueCategoria("Itens Grandes"))
       alertas.push(`Itens Grandes: estoque ${getEstoqueCategoria("Itens Grandes")}, vendendo ${quantidades.grandes}`);
+
     return alertas;
   };
 
@@ -116,7 +121,7 @@ export default function Vendas() {
       qtd_brinquedos_vendida: quantidades.brinquedos,
       qtd_itens_medios_vendida: quantidades.medios,
       qtd_itens_grandes_vendida: quantidades.grandes,
-      valor_total: valorTotal,
+      valor_total_venda: valorTotal,
       pagamentos,
     }, {
       onSuccess: () => {
@@ -144,13 +149,13 @@ export default function Vendas() {
                 label="Baby"
                 value={quantidades.baby}
                 onChange={(v) => setQuantidades((prev) => ({ ...prev, baby: v }))}
-                estoqueAtual={getEstoqueCategoria("Baby")}
+                estoqueAtual={getEstoqueCategoria("Roupas Baby")}
               />
               <QuantidadeInput
                 label="1 a 16"
                 value={quantidades.infantil}
                 onChange={(v) => setQuantidades((prev) => ({ ...prev, infantil: v }))}
-                estoqueAtual={getEstoqueCategoria("1 a 16")}
+                estoqueAtual={getEstoqueCategoria("Roupas 1 a 16")}
               />
               <QuantidadeInput
                 label="Calçados"

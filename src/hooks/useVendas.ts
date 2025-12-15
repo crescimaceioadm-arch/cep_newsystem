@@ -10,7 +10,7 @@ export interface NovaVenda {
   qtd_brinquedos_vendida: number;
   qtd_itens_medios_vendida: number;
   qtd_itens_grandes_vendida: number;
-  valor_total: number;
+  valor_total_venda: number;
   pagamentos: Array<{ metodo: string; valor: number }>;
 }
 
@@ -69,9 +69,12 @@ export function useFinalizarVenda() {
 
       // 2. Verificar disponibilidade e preparar alertas
       // IMPORTANTE: Os nomes devem corresponder EXATAMENTE à coluna 'categoria' na tabela 'estoque'
+      // (mantemos aliases para evitar falhas por divergência histórica de strings)
       const categoriaMap: Record<string, { vendido: number; campo: keyof Estoque }> = {
         "Roupas Baby": { vendido: venda.qtd_baby_vendida, campo: "quantidade_atual" },
+        "Baby": { vendido: venda.qtd_baby_vendida, campo: "quantidade_atual" },
         "Roupas 1 a 16": { vendido: venda.qtd_1_a_16_vendida, campo: "quantidade_atual" },
+        "1 a 16": { vendido: venda.qtd_1_a_16_vendida, campo: "quantidade_atual" },
         "Calçados": { vendido: venda.qtd_calcados_vendida, campo: "quantidade_atual" },
         "Brinquedos": { vendido: venda.qtd_brinquedos_vendida, campo: "quantidade_atual" },
         "Itens Médios": { vendido: venda.qtd_itens_medios_vendida, campo: "quantidade_atual" },
@@ -92,6 +95,10 @@ export function useFinalizarVenda() {
       }
 
       // 3. Inserir a venda - MAPEAMENTO CORRETO para as colunas do banco
+      if (!Number.isFinite(venda.valor_total_venda) || venda.valor_total_venda <= 0) {
+        throw new Error("valor_total_venda inválido (não pode ser nulo/zero)");
+      }
+
       const vendaData = {
         qtd_baby_vendida: venda.qtd_baby_vendida,
         qtd_1_a_16_vendida: venda.qtd_1_a_16_vendida,
@@ -99,7 +106,7 @@ export function useFinalizarVenda() {
         qtd_brinquedos_vendida: venda.qtd_brinquedos_vendida,
         qtd_itens_medios_vendida: venda.qtd_itens_medios_vendida,
         qtd_itens_grandes_vendida: venda.qtd_itens_grandes_vendida,
-        valor_total_venda: venda.valor_total, // Coluna correta no banco é 'valor_total_venda'
+        valor_total_venda: venda.valor_total_venda,
         metodo_pagto_1: venda.pagamentos[0]?.metodo || null,
         valor_pagto_1: venda.pagamentos[0]?.valor || null,
         metodo_pagto_2: venda.pagamentos[1]?.metodo || null,
@@ -118,22 +125,38 @@ export function useFinalizarVenda() {
 
       console.log("[useFinalizarVenda] Venda inserida, atualizando estoque...");
 
-      // 4. Atualizar estoque (subtrair)
+      // 4. Atualizar estoque (subtrair) - ler -> calcular no JS -> gravar
+      // (decrementa SOMENTE após a venda ter sido gravada com sucesso)
       for (const item of estoqueAtual || []) {
         const info = categoriaMap[item.categoria];
-        if (info && info.vendido > 0) {
-          const novaQuantidade = Math.max(0, (item.quantidade_atual || 0) - info.vendido);
-          const { error: updateError } = await supabase
-            .from("estoque")
-            .update({ quantidade_atual: novaQuantidade })
-            .eq("id", item.id);
+        if (!info || info.vendido <= 0) continue;
 
-          if (updateError) {
-            console.error(`[useFinalizarVenda] Erro ao atualizar estoque ${item.categoria}:`, updateError);
-            throw updateError;
-          }
-          console.log(`[useFinalizarVenda] Estoque ${item.categoria}: ${item.quantidade_atual} - ${info.vendido} = ${novaQuantidade}`);
+        // lê o valor mais recente desta categoria (evita divergência por cache/concorrência)
+        const { data: atualRow, error: atualError } = await supabase
+          .from("estoque")
+          .select("quantidade_atual")
+          .eq("id", item.id)
+          .single();
+
+        if (atualError) {
+          console.error(`[useFinalizarVenda] Erro ao ler estoque atual (${item.categoria}):`, atualError);
+          throw atualError;
         }
+
+        const atual = atualRow?.quantidade_atual ?? 0;
+        const novaQuantidade = atual - info.vendido; // pode ficar negativo (estoque físico manda)
+
+        const { error: updateError } = await supabase
+          .from("estoque")
+          .update({ quantidade_atual: novaQuantidade })
+          .eq("id", item.id);
+
+        if (updateError) {
+          console.error(`[useFinalizarVenda] Erro ao atualizar estoque ${item.categoria}:`, updateError);
+          throw updateError;
+        }
+
+        console.log(`[useFinalizarVenda] Estoque ${item.categoria}: ${atual} - ${info.vendido} = ${novaQuantidade}`);
       }
 
       console.log("[useFinalizarVenda] Venda finalizada com sucesso!");
@@ -149,7 +172,7 @@ export function useFinalizarVenda() {
       }
     },
     onError: (error) => {
-      toast.error("Erro ao finalizar venda: " + error.message);
+      toast.error("Erro ao finalizar venda: " + (error instanceof Error ? error.message : String(error)));
     },
   });
 }
