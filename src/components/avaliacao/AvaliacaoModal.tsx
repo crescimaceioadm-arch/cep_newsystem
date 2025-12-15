@@ -35,6 +35,8 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
     qtd_brinquedos: 0,
     qtd_itens_medios: 0,
     qtd_itens_grandes: 0,
+    valor_total_itens_medios: 0,
+    valor_total_itens_grandes: 0,
     descricao_itens_extra: "",
   });
   const [avaliadoraSelecionada, setAvaliadoraSelecionada] = useState("");
@@ -78,6 +80,8 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
             qtd_brinquedos: 0,
             qtd_itens_medios: 0,
             qtd_itens_grandes: 0,
+            valor_total_itens_medios: 0,
+            valor_total_itens_grandes: 0,
             descricao_itens_extra: "",
           });
           setAvaliadoraSelecionada("");
@@ -180,6 +184,34 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
             />
           </div>
         </div>
+
+        {formData.qtd_itens_medios > 0 && (
+          <div className="space-y-2">
+            <Label htmlFor="valor_total_itens_medios">Valor Total Ofertado (Médios) R$</Label>
+            <Input
+              id="valor_total_itens_medios"
+              type="number"
+              min={0}
+              step={0.01}
+              value={formData.valor_total_itens_medios}
+              onChange={(e) => handleChange("valor_total_itens_medios", parseFloat(e.target.value) || 0)}
+            />
+          </div>
+        )}
+
+        {formData.qtd_itens_grandes > 0 && (
+          <div className="space-y-2">
+            <Label htmlFor="valor_total_itens_grandes">Valor Total Ofertado (Grandes) R$</Label>
+            <Input
+              id="valor_total_itens_grandes"
+              type="number"
+              min={0}
+              step={0.01}
+              value={formData.valor_total_itens_grandes}
+              onChange={(e) => handleChange("valor_total_itens_grandes", parseFloat(e.target.value) || 0)}
+            />
+          </div>
+        )}
 
         {requiresDescription && (
           <div className="space-y-2">
