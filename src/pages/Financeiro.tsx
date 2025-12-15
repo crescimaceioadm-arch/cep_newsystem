@@ -137,21 +137,12 @@ export default function Financeiro() {
             caixas?.map((caixa) => (
               <Card key={caixa.id} className={getCaixaCardClass(caixa.nome)}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Wallet className={`h-5 w-5 ${getCaixaIconClass(caixa.nome)}`} />
-                      {caixa.nome}
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => openFechamento(caixa)}
-                    >
-                      FECHAR CAIXA
-                    </Button>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className={`h-5 w-5 ${getCaixaIconClass(caixa.nome)}`} />
+                    {caixa.nome}
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pb-3">
                   <p className="text-4xl font-bold">
                     R$ {caixa.saldo_atual.toFixed(2)}
                   </p>
@@ -159,6 +150,17 @@ export default function Financeiro() {
                     Atualizado: {caixa.updated_at ? format(new Date(caixa.updated_at), "dd/MM HH:mm", { locale: ptBR }) : "-"}
                   </p>
                 </CardContent>
+                <div className="px-6 pb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => openFechamento(caixa)}
+                  >
+                    <Lock className="h-4 w-4 mr-2" />
+                    Realizar Fechamento
+                  </Button>
+                </div>
               </Card>
             ))
           )}

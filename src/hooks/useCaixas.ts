@@ -314,11 +314,17 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
       const { data, error } = await supabase
         .from("vendas")
         .select("*")
-        .eq("caixa_origem", caixaNome)
-        .gte("created_at", `${hoje}T00:00:00`)
-        .lte("created_at", `${hoje}T23:59:59`);
+        .eq("caixa_origem", caixaNome);
 
       if (error) throw error;
+
+      // Filtrar vendas de hoje pelo campo data_venda (YYYY-MM-DD)
+      const vendasHoje = data?.filter((venda) => {
+        const dataVenda = venda.data_venda || venda.created_at || "";
+        return dataVenda.startsWith(hoje);
+      }) || [];
+
+      console.log("Vendas encontradas para", caixaNome, "hoje:", vendasHoje);
 
       let totalDinheiro = 0;
       let totalPix = 0;
@@ -329,20 +335,27 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
       const processarPagamento = (metodo: string | null, valor: number | null) => {
         if (!metodo || !valor) return;
         
-        if (metodo === "Dinheiro") {
+        const metodoLower = metodo.toLowerCase();
+        
+        if (metodoLower === "dinheiro") {
           totalDinheiro += valor;
-        } else if (metodo === "PIX") {
+        } else if (metodoLower === "pix") {
           totalPix += valor;
-        } else if (metodo === "Débito") {
+        } else if (metodoLower === "débito" || metodoLower === "debito") {
           totalDebito += valor;
-        } else if (metodo.includes("Crédito")) {
-          totalCredito += valor;
-        } else if (metodo === "Gira crédito") {
+        } else if (metodoLower.includes("crédito") || metodoLower.includes("credito")) {
+          // Exclui "gira crédito" que é tratado separadamente
+          if (!metodoLower.includes("gira")) {
+            totalCredito += valor;
+          }
+        }
+        
+        if (metodoLower === "gira crédito" || metodoLower === "gira credito") {
           totalGiraCredito += valor;
         }
       };
 
-      data?.forEach((venda) => {
+      vendasHoje.forEach((venda) => {
         processarPagamento(venda.metodo_pagto_1, venda.valor_pagto_1);
         processarPagamento(venda.metodo_pagto_2, venda.valor_pagto_2);
         processarPagamento(venda.metodo_pagto_3, venda.valor_pagto_3);
