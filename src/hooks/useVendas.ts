@@ -110,6 +110,7 @@ export function useFinalizarVenda() {
 
       const vendaData = {
         qtd_total_itens: totalItensCalculado,
+        caixa_origem: "Caixa 1", // Hardcoded temporário até implementar seleção de caixa
         qtd_baby_vendida: venda.qtd_baby_vendida,
         qtd_1_a_16_vendida: venda.qtd_1_a_16_vendida,
         qtd_calcados_vendida: venda.qtd_calcados_vendida,
