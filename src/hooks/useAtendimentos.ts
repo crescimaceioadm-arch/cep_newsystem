@@ -95,14 +95,20 @@ export function useFinalizarAtendimento() {
       id: string; 
       pagamento: {
         valor_total_negociado: number;
-        metodo_pagto_1?: string;
-        valor_pagto_1?: number;
-        metodo_pagto_2?: string;
-        valor_pagto_2?: number;
-        metodo_pagto_3?: string;
-        valor_pagto_3?: number;
+        desconto_aplicado?: number;
+        pagamento_1_metodo?: string | null;
+        pagamento_1_valor?: number;
+        pagamento_1_banco?: string | null;
+        pagamento_2_metodo?: string | null;
+        pagamento_2_valor?: number;
+        pagamento_2_banco?: string | null;
+        pagamento_3_metodo?: string | null;
+        pagamento_3_valor?: number;
+        pagamento_3_banco?: string | null;
       }
     }) => {
+      console.log("[useFinalizarAtendimento] Payload enviado:", pagamento);
+      
       const { data, error } = await supabase
         .from("atendimentos")
         .update({
@@ -113,7 +119,10 @@ export function useFinalizarAtendimento() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error("[useFinalizarAtendimento] Erro Supabase:", error);
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {

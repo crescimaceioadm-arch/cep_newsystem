@@ -102,20 +102,26 @@ export function FinalizarAtendimentoModal({
 
     try {
       const descontoNum = parseFloat(desconto) || 0;
+      
+      // Mapeamento correto para colunas planas do banco
       const pagamentoData: any = {
         valor_total_negociado: valorTotalNum,
         desconto_aplicado: descontoNum,
+        // Pagamento 1
+        pagamento_1_metodo: pagamentos[0]?.metodo || null,
+        pagamento_1_valor: parseFloat(pagamentos[0]?.valor) || 0,
+        pagamento_1_banco: pagamentos[0]?.metodo === 'PIX' ? (pagamentos[0]?.banco || null) : null,
+        // Pagamento 2
+        pagamento_2_metodo: pagamentos[1]?.metodo || null,
+        pagamento_2_valor: parseFloat(pagamentos[1]?.valor) || 0,
+        pagamento_2_banco: pagamentos[1]?.metodo === 'PIX' ? (pagamentos[1]?.banco || null) : null,
+        // Pagamento 3
+        pagamento_3_metodo: pagamentos[2]?.metodo || null,
+        pagamento_3_valor: parseFloat(pagamentos[2]?.valor) || 0,
+        pagamento_3_banco: pagamentos[2]?.metodo === 'PIX' ? (pagamentos[2]?.banco || null) : null,
       };
 
-      pagamentos.forEach((p, i) => {
-        if (p.metodo && p.valor) {
-          pagamentoData[`metodo_pagto_${i + 1}`] = p.metodo;
-          pagamentoData[`valor_pagto_${i + 1}`] = parseFloat(p.valor);
-          if (p.metodo === 'PIX' && p.banco) {
-            pagamentoData[`pagamento_${i + 1}_banco`] = p.banco;
-          }
-        }
-      });
+      console.log("[FinalizarAtendimentoModal] Payload enviado:", pagamentoData);
 
       await finalizarAtendimento.mutateAsync({
         id: atendimento.id,
@@ -132,11 +138,12 @@ export function FinalizarAtendimentoModal({
       setDesconto("");
       setPagamentos([{ metodo: "", valor: "", banco: undefined }]);
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("[FinalizarAtendimentoModal] Erro:", error);
       toast({
         variant: "destructive",
-        title: "Erro",
-        description: "Não foi possível finalizar o atendimento.",
+        title: "Erro técnico",
+        description: error?.message || "Não foi possível finalizar o atendimento.",
       });
     }
   };
