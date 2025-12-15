@@ -59,7 +59,7 @@ export default function Vendas() {
     grandes: 0,
   });
 
-  const [valorTotal, setValorTotal] = useState<number>(0);
+  const [valorTotal, setValorTotal] = useState<string>("");
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: "" }]);
   const [vendedoraSelecionada, setVendedoraSelecionada] = useState<string>("");
   const [showAlertaEstoque, setShowAlertaEstoque] = useState(false);
@@ -78,7 +78,8 @@ export default function Vendas() {
     quantidades.grandes;
 
   const totalPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
-  const diferenca = valorTotal - totalPagamentos;
+  const valorTotalNum = parseFloat(valorTotal) || 0;
+  const diferenca = valorTotalNum - totalPagamentos;
 
   const verificarEstoque = (): string[] => {
     const alertas: string[] = [];
@@ -108,13 +109,13 @@ export default function Vendas() {
       return;
     }
 
-    if (valorTotal <= 0) {
+    if (valorTotalNum <= 0) {
       toast.error("Informe o valor total da venda.");
       return;
     }
 
     if (Math.abs(diferenca) > 0.01) {
-      toast.error(`A soma dos pagamentos (R$ ${totalPagamentos.toFixed(2)}) deve ser igual ao valor total (R$ ${valorTotal.toFixed(2)}).`);
+      toast.error(`A soma dos pagamentos (R$ ${totalPagamentos.toFixed(2)}) deve ser igual ao valor total (R$ ${valorTotalNum.toFixed(2)}).`);
       return;
     }
 
@@ -132,13 +133,13 @@ export default function Vendas() {
       qtd_brinquedos_vendida: quantidades.brinquedos,
       qtd_itens_medios_vendida: quantidades.medios,
       qtd_itens_grandes_vendida: quantidades.grandes,
-      valor_total_venda: valorTotal,
+      valor_total_venda: valorTotalNum,
       pagamentos: pagamentos.map(p => ({ ...p, valor: parseFloat(p.valor) || 0 })),
       vendedora_nome: vendedoraSelecionada || undefined,
     }, {
       onSuccess: () => {
         setQuantidades({ baby: 0, infantil: 0, calcados: 0, brinquedos: 0, medios: 0, grandes: 0 });
-        setValorTotal(0);
+        setValorTotal("");
         setPagamentos([{ metodo: "PIX", valor: "" }]);
         setVendedoraSelecionada("");
       },
@@ -182,8 +183,13 @@ export default function Vendas() {
                   type="number"
                   step="0.01"
                   min="0"
-                  value={valorTotal || ""}
-                  onChange={(e) => setValorTotal(parseFloat(e.target.value) || 0)}
+                  value={valorTotal}
+                  onChange={(e) => setValorTotal(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      setValorTotal(parseFloat(e.target.value).toFixed(2));
+                    }
+                  }}
                   className="pl-10 text-2xl font-bold h-14"
                   placeholder="0,00"
                 />
@@ -202,7 +208,7 @@ export default function Vendas() {
             <div className="space-y-2 p-4 rounded-lg bg-muted">
               <div className="flex justify-between">
                 <span>Valor da Venda:</span>
-                <span className="font-semibold">R$ {valorTotal.toFixed(2)}</span>
+                <span className="font-semibold">R$ {valorTotalNum.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Total Pagamentos:</span>
