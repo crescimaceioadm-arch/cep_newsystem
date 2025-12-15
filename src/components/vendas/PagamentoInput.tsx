@@ -5,10 +5,10 @@ import { Trash2 } from "lucide-react";
 
 const METODOS_PAGAMENTO = [
   "Dinheiro",
-  "Pix",
-  "Cartão Débito",
-  "Cartão Crédito",
-  "Vale",
+  "PIX",
+  "Cartão de Débito",
+  "Cartão de Crédito",
+  "Transferência (TED/DOC)",
 ];
 
 interface Pagamento {

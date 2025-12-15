@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useEstoque } from "@/hooks/useEstoque";
 import { useFinalizarVenda } from "@/hooks/useVendas";
-import { QuantidadeInput } from "@/components/vendas/QuantidadeInput";
+
 import { PagamentoInput } from "@/components/vendas/PagamentoInput";
 import { ShoppingCart, CreditCard, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -50,7 +50,7 @@ export default function Vendas() {
   });
 
   const [valorTotal, setValorTotal] = useState<number>(0);
-  const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "Pix", valor: 0 }]);
+  const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: 0 }]);
   const [showAlertaEstoque, setShowAlertaEstoque] = useState(false);
   const [alertasEstoque, setAlertasEstoque] = useState<string[]>([]);
 
@@ -135,64 +135,7 @@ export default function Vendas() {
   return (
     <MainLayout title="Vendas / Caixa">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Coluna Esquerda - Lançamento */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
-              Itens da Venda
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <QuantidadeInput
-                label="Baby"
-                value={quantidades.baby}
-                onChange={(v) => setQuantidades((prev) => ({ ...prev, baby: v }))}
-                estoqueAtual={getEstoqueCategoria("Roupas Baby")}
-              />
-              <QuantidadeInput
-                label="1 a 16"
-                value={quantidades.infantil}
-                onChange={(v) => setQuantidades((prev) => ({ ...prev, infantil: v }))}
-                estoqueAtual={getEstoqueCategoria("Roupas 1 a 16")}
-              />
-              <QuantidadeInput
-                label="Calçados"
-                value={quantidades.calcados}
-                onChange={(v) => setQuantidades((prev) => ({ ...prev, calcados: v }))}
-                estoqueAtual={getEstoqueCategoria("Calçados")}
-              />
-              <QuantidadeInput
-                label="Brinquedos"
-                value={quantidades.brinquedos}
-                onChange={(v) => setQuantidades((prev) => ({ ...prev, brinquedos: v }))}
-                estoqueAtual={getEstoqueCategoria("Brinquedos")}
-              />
-              <QuantidadeInput
-                label="Itens Médios"
-                value={quantidades.medios}
-                onChange={(v) => setQuantidades((prev) => ({ ...prev, medios: v }))}
-                estoqueAtual={getEstoqueCategoria("Itens Médios")}
-              />
-              <QuantidadeInput
-                label="Itens Grandes"
-                value={quantidades.grandes}
-                onChange={(v) => setQuantidades((prev) => ({ ...prev, grandes: v }))}
-                estoqueAtual={getEstoqueCategoria("Itens Grandes")}
-              />
-            </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-              <span className="font-medium">Total de Peças:</span>
-              <span className="text-2xl font-bold">{totalPecas}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Coluna Direita - Pagamento */}
+        {/* Coluna Esquerda - Pagamento */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -251,6 +194,99 @@ export default function Vendas() {
             >
               {isPending ? "Finalizando..." : "Finalizar Venda"}
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Coluna Direita - Itens da Venda */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Itens da Venda
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Baby</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={quantidades.baby || ""}
+                  onChange={(e) => setQuantidades((prev) => ({ ...prev, baby: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="text-center text-lg font-semibold"
+                />
+                <span className="text-xs text-muted-foreground">Estoque: {getEstoqueCategoria("Roupas Baby")}</span>
+              </div>
+              <div className="space-y-2">
+                <Label>1 a 16</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={quantidades.infantil || ""}
+                  onChange={(e) => setQuantidades((prev) => ({ ...prev, infantil: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="text-center text-lg font-semibold"
+                />
+                <span className="text-xs text-muted-foreground">Estoque: {getEstoqueCategoria("Roupas 1 a 16")}</span>
+              </div>
+              <div className="space-y-2">
+                <Label>Calçados</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={quantidades.calcados || ""}
+                  onChange={(e) => setQuantidades((prev) => ({ ...prev, calcados: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="text-center text-lg font-semibold"
+                />
+                <span className="text-xs text-muted-foreground">Estoque: {getEstoqueCategoria("Calçados")}</span>
+              </div>
+              <div className="space-y-2">
+                <Label>Brinquedos</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={quantidades.brinquedos || ""}
+                  onChange={(e) => setQuantidades((prev) => ({ ...prev, brinquedos: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="text-center text-lg font-semibold"
+                />
+                <span className="text-xs text-muted-foreground">Estoque: {getEstoqueCategoria("Brinquedos")}</span>
+              </div>
+              <div className="space-y-2">
+                <Label>Itens Médios</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={quantidades.medios || ""}
+                  onChange={(e) => setQuantidades((prev) => ({ ...prev, medios: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="text-center text-lg font-semibold"
+                />
+                <span className="text-xs text-muted-foreground">Estoque: {getEstoqueCategoria("Itens Médios")}</span>
+              </div>
+              <div className="space-y-2">
+                <Label>Itens Grandes</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={quantidades.grandes || ""}
+                  onChange={(e) => setQuantidades((prev) => ({ ...prev, grandes: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="text-center text-lg font-semibold"
+                />
+                <span className="text-xs text-muted-foreground">Estoque: {getEstoqueCategoria("Itens Grandes")}</span>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+              <span className="font-medium">Total de Peças:</span>
+              <span className="text-2xl font-bold">{totalPecas}</span>
+            </div>
           </CardContent>
         </Card>
       </div>
