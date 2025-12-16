@@ -29,7 +29,8 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  Legend,
+  LabelList
 } from "recharts";
 import { useEstoque } from "@/hooks/useEstoque";
 
@@ -413,18 +414,18 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-[180px] bg-muted rounded" />
+                <div className="animate-pulse h-[120px] bg-muted rounded" />
               ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={dataFinanceiroHoje} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tickFormatter={(v) => `R$ ${v}`} />
-                    <YAxis type="category" dataKey="name" width={100} />
-                    <Tooltip content={<CurrencyTooltip />} />
-                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart layout="vertical" data={dataFinanceiroHoje} margin={{ left: 10, right: 30 }}>
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                    <Tooltip formatter={(value) => [`R$ ${value}`, 'Valor']} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
                       {dataFinanceiroHoje.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
+                      <LabelList dataKey="value" position="right" formatter={(v: number) => `R$ ${v.toFixed(2)}`} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -443,18 +444,18 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-[180px] bg-muted rounded" />
+                <div className="animate-pulse h-[120px] bg-muted rounded" />
               ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={dataFinanceiroMes} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tickFormatter={(v) => `R$ ${v}`} />
-                    <YAxis type="category" dataKey="name" width={100} />
-                    <Tooltip content={<CurrencyTooltip />} />
-                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart layout="vertical" data={dataFinanceiroMes} margin={{ left: 10, right: 30 }}>
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                    <Tooltip formatter={(value) => [`R$ ${value}`, 'Valor']} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
                       {dataFinanceiroMes.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
+                      <LabelList dataKey="value" position="right" formatter={(v: number) => `R$ ${v.toFixed(2)}`} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -473,15 +474,16 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-[180px] bg-muted rounded" />
+                <div className="animate-pulse h-[120px] bg-muted rounded" />
               ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={dataQtdHoje} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="name" width={100} />
-                    <Tooltip content={<QuantityTooltip />} />
-                    <Bar dataKey="value" fill="#F97316" radius={[0, 4, 4, 0]} />
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart layout="vertical" data={dataQtdHoje} margin={{ left: 10, right: 30 }}>
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                    <Tooltip formatter={(value) => [`${value} compras`, 'Qtd']} />
+                    <Bar dataKey="value" fill="#F97316" radius={[0, 4, 4, 0]} barSize={24}>
+                      <LabelList dataKey="value" position="right" />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -499,15 +501,16 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-[180px] bg-muted rounded" />
+                <div className="animate-pulse h-[120px] bg-muted rounded" />
               ) : (
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={dataQtdMes} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="name" width={100} />
-                    <Tooltip content={<QuantityTooltip />} />
-                    <Bar dataKey="value" fill="#F97316" radius={[0, 4, 4, 0]} />
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart layout="vertical" data={dataQtdMes} margin={{ left: 10, right: 30 }}>
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                    <Tooltip formatter={(value) => [`${value} compras`, 'Qtd']} />
+                    <Bar dataKey="value" fill="#F97316" radius={[0, 4, 4, 0]} barSize={24}>
+                      <LabelList dataKey="value" position="right" />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
