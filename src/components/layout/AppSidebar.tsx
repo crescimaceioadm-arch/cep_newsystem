@@ -6,8 +6,10 @@ import {
   BarChart3, 
   Settings,
   Wallet,
-  History
+  History,
+  LogOut
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -19,8 +21,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
 import { useUser, hasAccess } from "@/contexts/UserContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const allMenuItems = [
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
@@ -35,9 +40,20 @@ const allMenuItems = [
 
 export function AppSidebar() {
   const { cargo } = useUser();
+  const navigate = useNavigate();
   
   // Filtra menu items baseado no cargo do usuário
   const menuItems = allMenuItems.filter(item => hasAccess(cargo, item.url));
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Erro ao sair: " + error.message);
+    } else {
+      toast.success("Você saiu do sistema");
+      navigate("/auth");
+    }
+  };
 
   return (
     <Sidebar className="border-r-0">
@@ -79,6 +95,16 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sidebar-foreground/80 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="font-medium">Sair</span>
+        </button>
+      </SidebarFooter>
     </Sidebar>
   );
 }
