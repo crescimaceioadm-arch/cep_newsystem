@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { useColaboradoresByFuncao, useAddColaborador, useDeleteColaborador } from "@/hooks/useColaboradores";
 import { useCaixas } from "@/hooks/useCaixas";
 import { supabase } from "@/integrations/supabase/client";
-import { Trash2, Plus, Users, Wallet, Save } from "lucide-react";
+import { Trash2, Plus, Users, Wallet, Save, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUser } from "@/contexts/UserContext";
+import { GestaoUsuariosCard } from "@/components/configuracoes/GestaoUsuariosCard";
 
 function EquipeCard({ 
   titulo, 
@@ -193,9 +195,22 @@ function SaldosCaixasCard() {
 }
 
 export default function Configuracoes() {
+  const { isAdmin } = useUser();
+
   return (
     <MainLayout title="Configurações">
       <div className="space-y-6">
+        {/* Seção: Controle de Acesso (Apenas Admin) */}
+        {isAdmin && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-600" />
+              <h2 className="text-xl font-semibold">Controle de Acesso</h2>
+            </div>
+            <GestaoUsuariosCard />
+          </div>
+        )}
+
         {/* Seção: Saldos dos Caixas */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
