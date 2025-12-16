@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* Design System - Cresci e Perdi
-   Cores da marca: Laranja e Azul
+   Cores da marca: Laranja (Sidebar) e Azul (Botões)
    Fonte: Inter
 */
 
@@ -11,31 +11,31 @@
 
 @layer base {
   :root {
-    /* Background - Cinza gelo suave (#F3F4F6) */
+    /* Background - Cinza gelo suave */
     --background: 220 14% 96%;
-    --foreground: 224 71% 20%;
+    --foreground: 25 50% 15%;
 
     /* Cards - Brancos */
     --card: 0 0% 100%;
-    --card-foreground: 224 71% 20%;
+    --card-foreground: 25 50% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 20%;
+    --popover-foreground: 25 50% 15%;
 
-    /* Primary - Laranja Vibrante (#F97316) */
-    --primary: 25 95% 53%;
+    /* Primary - Azul Royal (#1E3A8A) */
+    --primary: 224 76% 33%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Azul para ações secundárias */
-    --secondary: 224 76% 33%;
+    /* Secondary - Laranja para ações secundárias */
+    --secondary: 25 95% 53%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 220 14% 92%;
     --muted-foreground: 220 9% 46%;
 
-    /* Accent - Laranja claro para destaques sutis */
-    --accent: 25 90% 95%;
-    --accent-foreground: 25 95% 35%;
+    /* Accent - Azul claro para destaques sutis */
+    --accent: 224 70% 95%;
+    --accent-foreground: 224 76% 30%;
 
     /* Destructive - Vermelho */
     --destructive: 0 84% 60%;
@@ -51,59 +51,59 @@
 
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 25 95% 53%;
+    --ring: 224 76% 33%;
 
     --radius: 0.5rem;
 
-    /* Sidebar - Azul Royal Profundo (#1E3A8A) */
-    --sidebar-background: 224 76% 33%;
+    /* Sidebar - Laranja Vibrante (#F97316) */
+    --sidebar-background: 25 95% 53%;
     --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 25 95% 53%;
+    --sidebar-primary: 224 76% 33%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 224 76% 40%;
+    --sidebar-accent: 25 95% 45%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 224 76% 28%;
-    --sidebar-ring: 25 95% 53%;
+    --sidebar-border: 25 95% 45%;
+    --sidebar-ring: 224 76% 33%;
   }
 
   .dark {
-    /* Dark mode - Mantém consistência com a marca */
-    --background: 224 71% 8%;
+    /* Dark mode */
+    --background: 25 30% 8%;
     --foreground: 220 14% 96%;
 
-    --card: 224 71% 12%;
+    --card: 25 30% 12%;
     --card-foreground: 220 14% 96%;
 
-    --popover: 224 71% 12%;
+    --popover: 25 30% 12%;
     --popover-foreground: 220 14% 96%;
 
-    --primary: 25 95% 55%;
+    --primary: 224 76% 45%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 224 76% 40%;
+    --secondary: 25 95% 55%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 224 71% 18%;
+    --muted: 25 30% 18%;
     --muted-foreground: 220 9% 60%;
 
-    --accent: 25 60% 20%;
-    --accent-foreground: 25 90% 70%;
+    --accent: 224 50% 20%;
+    --accent-foreground: 224 70% 70%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 224 71% 18%;
-    --input: 224 71% 18%;
-    --ring: 25 95% 55%;
+    --border: 25 30% 18%;
+    --input: 25 30% 18%;
+    --ring: 224 76% 45%;
 
-    --sidebar-background: 224 76% 15%;
+    --sidebar-background: 25 80% 35%;
     --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 25 95% 55%;
+    --sidebar-primary: 224 76% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 224 76% 22%;
+    --sidebar-accent: 25 80% 28%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 224 76% 12%;
-    --sidebar-ring: 25 95% 55%;
+    --sidebar-border: 25 80% 28%;
+    --sidebar-ring: 224 76% 45%;
   }
 }
 
