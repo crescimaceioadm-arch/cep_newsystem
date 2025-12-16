@@ -22,9 +22,9 @@ import {
 } from "@/components/ui/sidebar";
 
 const menuItems = [
-  { title: "Recepção", url: "/", icon: UserPlus },
-  { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
+  { title: "Cadastro", url: "/", icon: UserPlus },
+  { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
   { title: "Histórico Vendas", url: "/vendas/historico", icon: History },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Estoque", url: "/estoque", icon: Box },
