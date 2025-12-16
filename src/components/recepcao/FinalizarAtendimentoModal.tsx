@@ -75,7 +75,8 @@ export function FinalizarAtendimentoModal({
 
   const somaPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
   const valorTotalNum = parseFloat(valorTotal) || 0;
-  const pagamentoBalanceado = Math.abs(somaPagamentos - valorTotalNum) < 0.01;
+  // Aumentei a tolerância para 0.05 para evitar erros de arredondamento chatos
+  const pagamentoBalanceado = Math.abs(somaPagamentos - valorTotalNum) < 0.05;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +96,7 @@ export function FinalizarAtendimentoModal({
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "A soma dos pagamentos deve ser igual ao valor total.",
+        description: `A soma dos pagamentos (R$ ${somaPagamentos.toFixed(2)}) deve ser igual ao valor total (R$ ${valorTotalNum.toFixed(2)}).`,
       });
       return;
     }
@@ -103,18 +104,24 @@ export function FinalizarAtendimentoModal({
     try {
       const descontoNum = parseFloat(desconto) || 0;
       
-      // Mapeamento correto para colunas planas do banco
+      // CORREÇÃO CRÍTICA AQUI:
+      // Adicionado status: 'finalizado' e hora_encerramento
       const pagamentoData: any = {
+        status: 'finalizado', // <--- Força a mudança de status
+        hora_encerramento: new Date().toISOString(), // <--- Grava a hora do fim
         valor_total_negociado: valorTotalNum,
         desconto_aplicado: descontoNum,
+        
         // Pagamento 1
         pagamento_1_metodo: pagamentos[0]?.metodo || null,
         pagamento_1_valor: parseFloat(pagamentos[0]?.valor) || 0,
         pagamento_1_banco: pagamentos[0]?.metodo === 'PIX' ? (pagamentos[0]?.banco || null) : null,
+        
         // Pagamento 2
         pagamento_2_metodo: pagamentos[1]?.metodo || null,
         pagamento_2_valor: parseFloat(pagamentos[1]?.valor) || 0,
         pagamento_2_banco: pagamentos[1]?.metodo === 'PIX' ? (pagamentos[1]?.banco || null) : null,
+        
         // Pagamento 3
         pagamento_3_metodo: pagamentos[2]?.metodo || null,
         pagamento_3_valor: parseFloat(pagamentos[2]?.valor) || 0,
@@ -130,7 +137,7 @@ export function FinalizarAtendimentoModal({
 
       toast({
         title: "Sucesso!",
-        description: "Atendimento finalizado com sucesso.",
+        description: "Venda finalizada e registrada no financeiro!",
       });
       
       // Reset form
@@ -150,10 +157,10 @@ export function FinalizarAtendimentoModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg z-[9999]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-success" />
+            <CheckCircle className="h-5 w-5 text-green-600" />
             Finalizar Atendimento
           </DialogTitle>
         </DialogHeader>
@@ -161,38 +168,41 @@ export function FinalizarAtendimentoModal({
         {atendimento && (
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Cliente</p>
-                <p className="font-medium">{atendimento.nome_cliente}</p>
+              <div className="p-3 bg-muted rounded-lg border">
+                <p className="text-xs text-muted-foreground uppercase font-bold">Cliente</p>
+                <p className="font-medium text-lg">{atendimento.nome_cliente}</p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="valorTotal">Valor Total Negociado (R$)</Label>
-                <Input
-                  id="valorTotal"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={valorTotal}
-                  onChange={(e) => setValorTotal(e.target.value)}
-                  placeholder="0,00"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="valorTotal">Valor Total (R$)</Label>
+                  <Input
+                    id="valorTotal"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={valorTotal}
+                    onChange={(e) => setValorTotal(e.target.value)}
+                    placeholder="0,00"
+                    className="font-bold text-lg"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="desconto">Desconto (R$)</Label>
+                  <Input
+                    id="desconto"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={desconto}
+                    onChange={(e) => setDesconto(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="desconto">Desconto (R$)</Label>
-                <Input
-                  id="desconto"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={desconto}
-                  onChange={(e) => setDesconto(e.target.value)}
-                  placeholder="0,00"
-                />
-              </div>
-
-              <div className="space-y-3">
+              <div className="space-y-3 pt-2 border-t">
                 <div className="flex items-center justify-between">
                   <Label>Formas de Pagamento</Label>
                   {pagamentos.length < 3 && (
@@ -209,15 +219,15 @@ export function FinalizarAtendimentoModal({
                 </div>
                 
                 {pagamentos.map((pagamento, index) => (
-                  <div key={index} className="flex flex-wrap gap-2 items-center">
+                  <div key={index} className="flex flex-wrap gap-2 items-center bg-slate-50 p-2 rounded border">
                     <Select
                       value={pagamento.metodo}
                       onValueChange={(value) => handlePagamentoChange(index, 'metodo', value)}
                     >
-                      <SelectTrigger className="w-[130px]">
-                        <SelectValue placeholder="Método" />
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Selecione..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[99999]">
                         {metodosPagamento.map((metodo) => (
                           <SelectItem key={metodo} value={metodo}>
                             {metodo}
@@ -231,10 +241,10 @@ export function FinalizarAtendimentoModal({
                         value={pagamento.banco || ""}
                         onValueChange={(value) => handlePagamentoChange(index, 'banco', value)}
                       >
-                        <SelectTrigger className="w-[100px]">
+                        <SelectTrigger className="w-[110px]">
                           <SelectValue placeholder="Banco" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="z-[99999]">
                           {bancosPix.map((banco) => (
                             <SelectItem key={banco} value={banco}>
                               {banco}
@@ -251,7 +261,7 @@ export function FinalizarAtendimentoModal({
                       value={pagamento.valor}
                       onChange={(e) => handlePagamentoChange(index, 'valor', e.target.value)}
                       placeholder="Valor"
-                      className="w-28"
+                      className="flex-1 min-w-[100px]"
                     />
                     {pagamentos.length > 1 && (
                       <Button
@@ -266,11 +276,18 @@ export function FinalizarAtendimentoModal({
                   </div>
                 ))}
 
-                <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                  <span className="text-sm text-muted-foreground">Soma dos Pagamentos:</span>
-                  <span className={`font-medium ${pagamentoBalanceado ? 'text-success' : 'text-destructive'}`}>
-                    R$ {somaPagamentos.toFixed(2)}
-                  </span>
+                <div className="flex justify-between items-center p-3 bg-slate-100 rounded-lg border mt-4">
+                  <span className="text-sm font-medium">Soma dos Pagamentos:</span>
+                  <div className="text-right">
+                    <span className={`block font-bold text-lg ${pagamentoBalanceado ? 'text-green-600' : 'text-red-600'}`}>
+                      R$ {somaPagamentos.toFixed(2)}
+                    </span>
+                    {!pagamentoBalanceado && (
+                      <span className="text-xs text-red-500">
+                        Faltam R$ {Math.abs(valorTotalNum - somaPagamentos).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -286,6 +303,7 @@ export function FinalizarAtendimentoModal({
               <Button 
                 type="submit" 
                 disabled={finalizarAtendimento.isPending || !pagamentoBalanceado}
+                className="bg-green-600 hover:bg-green-700"
               >
                 {finalizarAtendimento.isPending ? (
                   <>
@@ -293,7 +311,7 @@ export function FinalizarAtendimentoModal({
                     Finalizando...
                   </>
                 ) : (
-                  "Finalizar"
+                  "Confirmar Venda"
                 )}
               </Button>
             </DialogFooter>
