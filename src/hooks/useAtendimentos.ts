@@ -230,3 +230,34 @@ export function useSaveAvaliacao() {
     },
   });
 }
+
+export function useRecusarAvaliacao() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { 
+      id: string; 
+      motivo_recusa: "loja" | "cliente";
+      avaliadora_nome?: string;
+    }) => {
+      console.log("[useRecusarAvaliacao] Recusando atendimento:", data);
+
+      const { error } = await supabase
+        .from("atendimentos")
+        .update({
+          status: "recusado" as StatusAtendimento,
+          motivo_recusa: data.motivo_recusa,
+          avaliadora_nome: data.avaliadora_nome || null,
+        })
+        .eq("id", data.id);
+
+      if (error) {
+        console.error("[useRecusarAvaliacao] Erro:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
+    },
+  });
+}
