@@ -20,8 +20,9 @@ import {
   SidebarMenuItem,
   SidebarHeader,
 } from "@/components/ui/sidebar";
+import { useUser, hasAccess } from "@/contexts/UserContext";
 
-const menuItems = [
+const allMenuItems = [
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
   { title: "Cadastro", url: "/", icon: UserPlus },
   { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
@@ -33,6 +34,11 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
+  const { cargo } = useUser();
+  
+  // Filtra menu items baseado no cargo do usuário
+  const menuItems = allMenuItems.filter(item => hasAccess(cargo, item.url));
+
   return (
     <Sidebar className="border-r-0">
       <SidebarHeader className="p-6 border-b border-sidebar-border">

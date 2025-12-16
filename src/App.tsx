@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { UserProvider } from "@/contexts/UserContext";
+import { RequireRole } from "@/components/auth/RequireRole";
 import Recepcao from "./pages/Recepcao";
 import Avaliacao from "./pages/Avaliacao";
 import Vendas from "./pages/Vendas";
@@ -22,18 +24,20 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Recepcao />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/avaliacao" element={<Avaliacao />} />
-          <Route path="/vendas" element={<Vendas />} />
-          <Route path="/vendas/historico" element={<VendasHistorico />} />
-          <Route path="/financeiro" element={<Financeiro />} />
-          <Route path="/estoque" element={<Estoque />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/configuracoes" element={<Configuracoes />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <UserProvider>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<RequireRole><Recepcao /></RequireRole>} />
+            <Route path="/avaliacao" element={<RequireRole><Avaliacao /></RequireRole>} />
+            <Route path="/vendas" element={<RequireRole><Vendas /></RequireRole>} />
+            <Route path="/vendas/historico" element={<RequireRole><VendasHistorico /></RequireRole>} />
+            <Route path="/financeiro" element={<RequireRole><Financeiro /></RequireRole>} />
+            <Route path="/estoque" element={<RequireRole><Estoque /></RequireRole>} />
+            <Route path="/dashboard" element={<RequireRole><Dashboard /></RequireRole>} />
+            <Route path="/configuracoes" element={<RequireRole><Configuracoes /></RequireRole>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </UserProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
