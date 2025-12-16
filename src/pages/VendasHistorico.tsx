@@ -55,8 +55,7 @@ export default function VendasHistorico() {
     // Filtro de data
     const matchData =
       !filtroData ||
-      venda.data_venda?.startsWith(format(filtroData, "yyyy-MM-dd")) ||
-      venda.created_at?.startsWith(format(filtroData, "yyyy-MM-dd"));
+      venda.data_venda?.startsWith(format(filtroData, "yyyy-MM-dd"));
 
     return matchTexto && matchData;
   });
@@ -187,8 +186,6 @@ export default function VendasHistorico() {
                       <TableCell>
                         {venda.data_venda
                           ? format(new Date(venda.data_venda), "dd/MM/yyyy HH:mm", { locale: ptBR })
-                          : venda.created_at
-                          ? format(new Date(venda.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
                           : "-"}
                       </TableCell>
                       <TableCell>{venda.vendedora_nome || "-"}</TableCell>
