@@ -116,7 +116,7 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
-  // Cálculos das métricas
+  // Cálculos das métricas - LÓGICA SIMPLIFICADA E ROBUSTA
   const metrics = useMemo(() => {
     const atendimentosHoje = allAtendimentos.filter(a => 
       isToday(new Date(a.created_at))
@@ -127,81 +127,57 @@ export default function Dashboard() {
     const finalizadosMes = atendimentosMes.filter(a => a.status === "finalizado");
     const recusadosMes = atendimentosMes.filter(a => a.status === "recusado");
 
-    // Função para calcular valores por tipo de pagamento
+    // =============================================
+    // FUNÇÃO DE CÁLCULO ROBUSTA
+    // =============================================
     const calcularPorPagamento = (atendimentos: any[]) => {
-      let dinheiroPix = 0;
-      let giraCredito = 0;
-      let naoIdentificado = 0;
+      let totalDinheiroPix = 0;
+      let totalGiraCredito = 0;
       let qtdDinheiroPix = 0;
       let qtdGira = 0;
-      let qtdNaoIdentificado = 0;
 
-      atendimentos.forEach(a => {
-        // Usar valor_total_negociado como fallback se pagamentos individuais estão vazios
-        const valorTotal = a.valor_total_negociado || 0;
+      atendimentos.forEach(compra => {
+        // 1. Obter o valor com segurança
+        const valor = Number(compra.valor_total_negociado || 0);
         
-        const pagamentos = [
-          { metodo: a.metodo_pagto_1, valor: a.valor_pagto_1 },
-          { metodo: a.metodo_pagto_2, valor: a.valor_pagto_2 },
-          { metodo: a.metodo_pagto_3, valor: a.valor_pagto_3 },
-        ].filter(p => p.metodo || p.valor);
+        // 2. Tentar obter o tipo de pagamento de múltiplas fontes possíveis
+        const tipoPagamento = (
+          compra.metodo_pagto_1 || 
+          compra.tipo_pagamento || 
+          compra.forma_pagamento || 
+          ''
+        ).toLowerCase();
 
-        // Se não há pagamentos individuais, usar valor_total_negociado
-        if (pagamentos.length === 0 || pagamentos.every(p => !p.metodo && !p.valor)) {
-          // Tentar identificar pelo campo de pagamento principal se existir
-          const metodoPrincipal = a.metodo_pagto_1 || a.forma_pagamento || a.tipo_pagamento || "";
-          
-          if (valorTotal > 0) {
-            if (isDinheiroPix(metodoPrincipal)) {
-              dinheiroPix += valorTotal;
-              qtdDinheiroPix++;
-            } else if (isGiraCredito(metodoPrincipal)) {
-              giraCredito += valorTotal;
-              qtdGira++;
-            } else {
-              naoIdentificado += valorTotal;
-              qtdNaoIdentificado++;
-            }
-          }
-          return;
-        }
-
-        let temDinheiroPix = false;
-        let temGira = false;
-        let temNaoIdentificado = false;
-
-        pagamentos.forEach(p => {
-          const valor = p.valor || 0;
-          if (isDinheiroPix(p.metodo)) {
-            dinheiroPix += valor;
-            temDinheiroPix = true;
-          } else if (isGiraCredito(p.metodo)) {
-            giraCredito += valor;
-            temGira = true;
-          } else if (p.metodo || valor > 0) {
-            naoIdentificado += valor;
-            temNaoIdentificado = true;
-          }
-        });
-
-        // Contar atendimentos por tipo predominante
-        if (temGira && !temDinheiroPix) {
-          qtdGira++;
-        } else if (temDinheiroPix) {
+        // 3. Lógica de Classificação - Insensível a maiúsculas/minúsculas
+        if (tipoPagamento.includes('pix') || 
+            tipoPagamento.includes('dinheiro') || 
+            tipoPagamento.includes('débito') || 
+            tipoPagamento.includes('debito')) {
+          // É SAÍDA DE CAIXA REAL
+          totalDinheiroPix += valor;
           qtdDinheiroPix++;
-        } else if (temNaoIdentificado) {
-          qtdNaoIdentificado++;
+        } else if (tipoPagamento.includes('gira') || 
+                   tipoPagamento.includes('crédito') || 
+                   tipoPagamento.includes('credito') || 
+                   tipoPagamento.includes('troca')) {
+          // É CRÉDITO DA LOJA
+          totalGiraCredito += valor;
+          qtdGira++;
+        } else if (valor > 0) {
+          // Se não identificado mas tem valor, considerar como Dinheiro/Pix por padrão
+          // (Isso evita gráficos zerados quando há dados)
+          totalDinheiroPix += valor;
+          qtdDinheiroPix++;
+          console.log('Tipo de pagamento não reconhecido (assumindo Dinheiro/Pix):', tipoPagamento, 'Valor:', valor);
         }
       });
 
       return { 
-        dinheiroPix, 
-        giraCredito, 
-        naoIdentificado,
+        dinheiroPix: totalDinheiroPix, 
+        giraCredito: totalGiraCredito, 
         qtdDinheiroPix, 
         qtdGira, 
-        qtdNaoIdentificado,
-        total: dinheiroPix + giraCredito + naoIdentificado 
+        total: totalDinheiroPix + totalGiraCredito 
       };
     };
 
@@ -246,31 +222,12 @@ export default function Dashboard() {
         totalGira: 0,
       };
 
-      const pagamentos = [
-        { metodo: a.metodo_pagto_1, valor: a.valor_pagto_1 || 0 },
-        { metodo: a.metodo_pagto_2, valor: a.valor_pagto_2 || 0 },
-        { metodo: a.metodo_pagto_3, valor: a.valor_pagto_3 || 0 },
-      ];
-
-      let temGira = false;
-      pagamentos.forEach(p => {
-        if (isGiraCredito(p.metodo)) {
-          current.totalGira += p.valor;
-          temGira = true;
-        }
-      });
-
-      // Se não tem pagamentos individuais, verificar valor_total_negociado
-      if (!temGira && a.valor_total_negociado > 0) {
-        const metodoPrincipal = a.metodo_pagto_1 || "";
-        if (isGiraCredito(metodoPrincipal)) {
-          current.totalGira += a.valor_total_negociado;
-          temGira = true;
-        }
-      }
-
-      if (temGira) {
+      const tipoPagamento = (a.metodo_pagto_1 || '').toLowerCase();
+      const valor = Number(a.valor_total_negociado || 0);
+      
+      if (tipoPagamento.includes('gira') || tipoPagamento.includes('crédito') || tipoPagamento.includes('credito') || tipoPagamento.includes('troca')) {
         current.aprovadoGira++;
+        current.totalGira += valor;
       } else {
         current.aprovadoDinheiro++;
       }
@@ -299,7 +256,7 @@ export default function Dashboard() {
     });
 
     const performanceData = Array.from(avaliadoras.entries()).map(([nome, data]) => ({
-      nome: nome.split(" ")[0], // Primeiro nome apenas
+      nome: nome.split(" ")[0],
       ...data,
     })).sort((a, b) => (b.aprovadoDinheiro + b.aprovadoGira) - (a.aprovadoDinheiro + a.aprovadoGira));
 
