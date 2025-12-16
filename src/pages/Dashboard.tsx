@@ -6,7 +6,6 @@ import {
   startOfMonth, 
   endOfDay,
   isToday,
-  isThisMonth,
   format
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -15,10 +14,8 @@ import {
   ShoppingBag, 
   TrendingUp,
   Crown,
-  Percent,
-  Banknote,
-  CreditCard,
-  Package
+  Package,
+  Percent
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -53,12 +50,39 @@ const isDinheiroPix = (metodo: string | null): boolean => {
 
 const isGiraCredito = (metodo: string | null): boolean => {
   if (!metodo) return false;
-  return metodo.toLowerCase().includes("gira");
+  const m = metodo.toLowerCase();
+  return m.includes("gira") || m.includes("troca");
 };
 
 // Formatar moeda
 const formatCurrency = (value: number): string => {
   return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+};
+
+// Custom tooltip para gráficos monetários
+const CurrencyTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-background border border-border p-2 rounded shadow-lg">
+        <p className="font-medium">{label}</p>
+        <p className="text-primary">{formatCurrency(payload[0].value)}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+// Custom tooltip para gráficos de quantidade
+const QuantityTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-background border border-border p-2 rounded shadow-lg">
+        <p className="font-medium">{label}</p>
+        <p className="text-primary">{payload[0].value} compras</p>
+      </div>
+    );
+  }
+  return null;
 };
 
 export default function Dashboard() {
@@ -67,7 +91,6 @@ export default function Dashboard() {
   const { data: estoqueData } = useEstoque();
 
   const hoje = new Date();
-  const inicioHoje = startOfDay(hoje);
   const inicioMes = startOfMonth(hoje);
 
   useEffect(() => {
@@ -100,34 +123,62 @@ export default function Dashboard() {
 
     const finalizadosHoje = atendimentosHoje.filter(a => a.status === "finalizado");
     const finalizadosMes = atendimentosMes.filter(a => a.status === "finalizado");
-    const recusadosHoje = atendimentosHoje.filter(a => a.status === "recusado");
     const recusadosMes = atendimentosMes.filter(a => a.status === "recusado");
 
     // Função para calcular valores por tipo de pagamento
     const calcularPorPagamento = (atendimentos: any[]) => {
       let dinheiroPix = 0;
       let giraCredito = 0;
+      let naoIdentificado = 0;
       let qtdDinheiroPix = 0;
       let qtdGira = 0;
+      let qtdNaoIdentificado = 0;
 
       atendimentos.forEach(a => {
+        // Usar valor_total_negociado como fallback se pagamentos individuais estão vazios
+        const valorTotal = a.valor_total_negociado || 0;
+        
         const pagamentos = [
-          { metodo: a.metodo_pagto_1, valor: a.valor_pagto_1 || 0 },
-          { metodo: a.metodo_pagto_2, valor: a.valor_pagto_2 || 0 },
-          { metodo: a.metodo_pagto_3, valor: a.valor_pagto_3 || 0 },
-        ];
+          { metodo: a.metodo_pagto_1, valor: a.valor_pagto_1 },
+          { metodo: a.metodo_pagto_2, valor: a.valor_pagto_2 },
+          { metodo: a.metodo_pagto_3, valor: a.valor_pagto_3 },
+        ].filter(p => p.metodo || p.valor);
+
+        // Se não há pagamentos individuais, usar valor_total_negociado
+        if (pagamentos.length === 0 || pagamentos.every(p => !p.metodo && !p.valor)) {
+          // Tentar identificar pelo campo de pagamento principal se existir
+          const metodoPrincipal = a.metodo_pagto_1 || a.forma_pagamento || a.tipo_pagamento || "";
+          
+          if (valorTotal > 0) {
+            if (isDinheiroPix(metodoPrincipal)) {
+              dinheiroPix += valorTotal;
+              qtdDinheiroPix++;
+            } else if (isGiraCredito(metodoPrincipal)) {
+              giraCredito += valorTotal;
+              qtdGira++;
+            } else {
+              naoIdentificado += valorTotal;
+              qtdNaoIdentificado++;
+            }
+          }
+          return;
+        }
 
         let temDinheiroPix = false;
         let temGira = false;
+        let temNaoIdentificado = false;
 
         pagamentos.forEach(p => {
+          const valor = p.valor || 0;
           if (isDinheiroPix(p.metodo)) {
-            dinheiroPix += p.valor;
+            dinheiroPix += valor;
             temDinheiroPix = true;
-          }
-          if (isGiraCredito(p.metodo)) {
-            giraCredito += p.valor;
+          } else if (isGiraCredito(p.metodo)) {
+            giraCredito += valor;
             temGira = true;
+          } else if (p.metodo || valor > 0) {
+            naoIdentificado += valor;
+            temNaoIdentificado = true;
           }
         });
 
@@ -136,12 +187,20 @@ export default function Dashboard() {
           qtdGira++;
         } else if (temDinheiroPix) {
           qtdDinheiroPix++;
-        } else if (temGira) {
-          qtdGira++;
+        } else if (temNaoIdentificado) {
+          qtdNaoIdentificado++;
         }
       });
 
-      return { dinheiroPix, giraCredito, qtdDinheiroPix, qtdGira, total: dinheiroPix + giraCredito };
+      return { 
+        dinheiroPix, 
+        giraCredito, 
+        naoIdentificado,
+        qtdDinheiroPix, 
+        qtdGira, 
+        qtdNaoIdentificado,
+        total: dinheiroPix + giraCredito + naoIdentificado 
+      };
     };
 
     const pagamentosHoje = calcularPorPagamento(finalizadosHoje);
@@ -198,6 +257,15 @@ export default function Dashboard() {
           temGira = true;
         }
       });
+
+      // Se não tem pagamentos individuais, verificar valor_total_negociado
+      if (!temGira && a.valor_total_negociado > 0) {
+        const metodoPrincipal = a.metodo_pagto_1 || "";
+        if (isGiraCredito(metodoPrincipal)) {
+          current.totalGira += a.valor_total_negociado;
+          temGira = true;
+        }
+      }
 
       if (temGira) {
         current.aprovadoGira++;
@@ -258,7 +326,28 @@ export default function Dashboard() {
     };
   }, [allAtendimentos]);
 
-  // Dados para os gráficos
+  // Dados para os gráficos de barras financeiros
+  const financeiroHojeData = [
+    { name: "Dinheiro+Pix", valor: metrics.gastoHoje.dinheiroPix, fill: "#10B981" },
+    { name: "Gira Crédito", valor: metrics.gastoHoje.giraCredito, fill: "#8B5CF6" },
+  ];
+
+  const financeiroMesData = [
+    { name: "Dinheiro+Pix", valor: metrics.gastoMes.dinheiroPix, fill: "#10B981" },
+    { name: "Gira Crédito", valor: metrics.gastoMes.giraCredito, fill: "#8B5CF6" },
+  ];
+
+  const quantidadeHojeData = [
+    { name: "Dinheiro+Pix", qtd: metrics.gastoHoje.qtdDinheiroPix, fill: "#F97316" },
+    { name: "Gira Crédito", qtd: metrics.gastoHoje.qtdGira, fill: "#F97316" },
+  ];
+
+  const quantidadeMesData = [
+    { name: "Dinheiro+Pix", qtd: metrics.gastoMes.qtdDinheiroPix, fill: "#F97316" },
+    { name: "Gira Crédito", qtd: metrics.gastoMes.qtdGira, fill: "#F97316" },
+  ];
+
+  // Dados para os gráficos existentes
   const pieChartData = [
     { name: "Baby", value: metrics.pecasHoje.baby },
     { name: "Infantil", value: metrics.pecasHoje.infantil },
@@ -302,141 +391,122 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* SEÇÃO 1: FINANCEIRO */}
+        {/* SEÇÃO 1 & 2: GRÁFICOS FINANCEIROS E QUANTIDADE - Grid 2x2 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Gasto Hoje */}
-          <Card className="border-l-4 border-l-orange-500">
+          {/* Gráfico A: Financeiro Hoje */}
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <DollarSign className="h-5 w-5 text-orange-500" />
-                Gasto Hoje
+                Financeiro Hoje (R$)
               </CardTitle>
+              <p className="text-2xl font-bold">{formatCurrency(metrics.gastoHoje.total)}</p>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-16 bg-muted rounded" />
+                <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
-                <>
-                  <div className="text-3xl font-bold text-foreground">
-                    {formatCurrency(metrics.gastoHoje.total)}
-                  </div>
-                  <div className="flex gap-4 mt-3 text-sm">
-                    <div className="flex items-center gap-1.5">
-                      <Banknote className="h-4 w-4 text-green-600" />
-                      <span className="text-muted-foreground">Dinheiro+Pix:</span>
-                      <span className="font-semibold text-green-600">
-                        {formatCurrency(metrics.gastoHoje.dinheiroPix)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <CreditCard className="h-4 w-4 text-purple-600" />
-                      <span className="text-muted-foreground">Gira:</span>
-                      <span className="font-semibold text-purple-600">
-                        {formatCurrency(metrics.gastoHoje.giraCredito)}
-                      </span>
-                    </div>
-                  </div>
-                </>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={financeiroHojeData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tickFormatter={(v) => `R$ ${v}`} />
+                    <YAxis type="category" dataKey="name" width={100} />
+                    <Tooltip content={<CurrencyTooltip />} />
+                    <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
+                      {financeiroHojeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
 
-          {/* Gasto Mês */}
-          <Card className="border-l-4 border-l-blue-500">
+          {/* Gráfico B: Financeiro Mês */}
+          <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <DollarSign className="h-5 w-5 text-blue-500" />
-                Gasto Mês ({format(hoje, "MMMM", { locale: ptBR })})
+                Financeiro Mês ({format(hoje, "MMMM", { locale: ptBR })})
               </CardTitle>
+              <p className="text-2xl font-bold">{formatCurrency(metrics.gastoMes.total)}</p>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-16 bg-muted rounded" />
+                <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
-                <>
-                  <div className="text-3xl font-bold text-foreground">
-                    {formatCurrency(metrics.gastoMes.total)}
-                  </div>
-                  <div className="flex gap-4 mt-3 text-sm">
-                    <div className="flex items-center gap-1.5">
-                      <Banknote className="h-4 w-4 text-green-600" />
-                      <span className="text-muted-foreground">Dinheiro+Pix:</span>
-                      <span className="font-semibold text-green-600">
-                        {formatCurrency(metrics.gastoMes.dinheiroPix)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <CreditCard className="h-4 w-4 text-purple-600" />
-                      <span className="text-muted-foreground">Gira:</span>
-                      <span className="font-semibold text-purple-600">
-                        {formatCurrency(metrics.gastoMes.giraCredito)}
-                      </span>
-                    </div>
-                  </div>
-                </>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={financeiroMesData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tickFormatter={(v) => `R$ ${v}`} />
+                    <YAxis type="category" dataKey="name" width={100} />
+                    <Tooltip content={<CurrencyTooltip />} />
+                    <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
+                      {financeiroMesData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
-        </div>
 
-        {/* SEÇÃO 2: VOLUME DE COMPRAS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Qtd Compras Hoje */}
+          {/* Gráfico C: Quantidade Hoje */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShoppingBag className="h-5 w-5 text-orange-500" />
                 Compras Hoje
               </CardTitle>
+              <p className="text-2xl font-bold">{metrics.qtdComprasHoje} compras</p>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-12 bg-muted rounded" />
+                <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
-                <>
-                  <div className="text-4xl font-bold">{metrics.qtdComprasHoje}</div>
-                  <div className="flex gap-3 mt-2 text-sm">
-                    <span className="text-green-600">
-                      {metrics.gastoHoje.qtdDinheiroPix} em Dinheiro/Pix
-                    </span>
-                    <span className="text-purple-600">
-                      {metrics.gastoHoje.qtdGira} em Gira
-                    </span>
-                  </div>
-                </>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={quantidadeHojeData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={100} />
+                    <Tooltip content={<QuantityTooltip />} />
+                    <Bar dataKey="qtd" fill="#F97316" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
 
-          {/* Qtd Compras Mês */}
+          {/* Gráfico D: Quantidade Mês */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShoppingBag className="h-5 w-5 text-blue-500" />
                 Compras no Mês
               </CardTitle>
+              <p className="text-2xl font-bold">{metrics.qtdComprasMes} compras</p>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-12 bg-muted rounded" />
+                <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
-                <>
-                  <div className="text-4xl font-bold">{metrics.qtdComprasMes}</div>
-                  <div className="flex gap-3 mt-2 text-sm">
-                    <span className="text-green-600">
-                      {metrics.gastoMes.qtdDinheiroPix} em Dinheiro/Pix
-                    </span>
-                    <span className="text-purple-600">
-                      {metrics.gastoMes.qtdGira} em Gira
-                    </span>
-                  </div>
-                </>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={quantidadeMesData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={100} />
+                    <Tooltip content={<QuantityTooltip />} />
+                    <Bar dataKey="qtd" fill="#F97316" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* SEÇÃO 3: GRÁFICOS */}
+        {/* SEÇÃO 3: GRÁFICOS DE CATEGORIAS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* PieChart - Mix de Peças do Dia */}
           <Card>
