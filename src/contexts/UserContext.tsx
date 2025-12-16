@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 
-export type UserRole = 'admin' | 'caixa' | 'avaliadora';
+export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral';
 
 interface UserProfile {
   id: string;
@@ -20,6 +20,7 @@ interface UserContextType {
   isAdmin: boolean;
   isCaixa: boolean;
   isAvaliadora: boolean;
+  isGeral: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -36,6 +37,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   avaliadora: [
     '/avaliacao', '/auth'
   ],
+  geral: [
+    '/', '/vendas', '/avaliacao', '/vendas/historico', '/financeiro', '/auth'
+  ],
 };
 
 // Rota padrão por cargo (para redirecionamento)
@@ -43,6 +47,7 @@ export const DEFAULT_ROUTE: Record<UserRole, string> = {
   admin: '/',
   caixa: '/vendas',
   avaliadora: '/avaliacao',
+  geral: '/vendas',
 };
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -131,6 +136,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     isAdmin: cargo === 'admin',
     isCaixa: cargo === 'caixa',
     isAvaliadora: cargo === 'avaliadora',
+    isGeral: cargo === 'geral',
   };
 
   return (
