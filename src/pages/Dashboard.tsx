@@ -327,28 +327,35 @@ export default function Dashboard() {
     };
   }, [allAtendimentos]);
 
-  // Dados para os gráficos de barras financeiros
-  const financeiroHojeData = [
-    { name: "Dinheiro+Pix", valor: metrics.gastoHoje.dinheiroPix, fill: "#10B981" },
-    { name: "Gira Crédito", valor: metrics.gastoHoje.giraCredito, fill: "#8B5CF6" },
+  // =============================================
+  // DADOS DOS GRÁFICOS - HARD-LINKED às métricas
+  // =============================================
+  
+  // Gráfico A: Financeiro HOJE (R$)
+  const dataFinanceiroHoje = [
+    { name: 'Dinheiro/Pix', value: metrics.gastoHoje.dinheiroPix || 0, fill: '#10B981' },
+    { name: 'Gira Crédito', value: metrics.gastoHoje.giraCredito || 0, fill: '#8B5CF6' }
   ];
 
-  const financeiroMesData = [
-    { name: "Dinheiro+Pix", valor: metrics.gastoMes.dinheiroPix, fill: "#10B981" },
-    { name: "Gira Crédito", valor: metrics.gastoMes.giraCredito, fill: "#8B5CF6" },
+  // Gráfico B: Financeiro MÊS (R$)
+  const dataFinanceiroMes = [
+    { name: 'Dinheiro/Pix', value: metrics.gastoMes.dinheiroPix || 0, fill: '#10B981' },
+    { name: 'Gira Crédito', value: metrics.gastoMes.giraCredito || 0, fill: '#8B5CF6' }
   ];
 
-  const quantidadeHojeData = [
-    { name: "Dinheiro+Pix", qtd: metrics.gastoHoje.qtdDinheiroPix, fill: "#F97316" },
-    { name: "Gira Crédito", qtd: metrics.gastoHoje.qtdGira, fill: "#F97316" },
+  // Gráfico C: Quantidade HOJE
+  const dataQtdHoje = [
+    { name: 'Dinheiro/Pix', value: metrics.gastoHoje.qtdDinheiroPix || 0, fill: '#F97316' },
+    { name: 'Gira Crédito', value: metrics.gastoHoje.qtdGira || 0, fill: '#F97316' }
   ];
 
-  const quantidadeMesData = [
-    { name: "Dinheiro+Pix", qtd: metrics.gastoMes.qtdDinheiroPix, fill: "#F97316" },
-    { name: "Gira Crédito", qtd: metrics.gastoMes.qtdGira, fill: "#F97316" },
+  // Gráfico D: Quantidade MÊS
+  const dataQtdMes = [
+    { name: 'Dinheiro/Pix', value: metrics.gastoMes.qtdDinheiroPix || 0, fill: '#F97316' },
+    { name: 'Gira Crédito', value: metrics.gastoMes.qtdGira || 0, fill: '#F97316' }
   ];
 
-  // Dados para os gráficos existentes
+  // PieChart - Mix de Peças do Dia
   const pieChartData = [
     { name: "Baby", value: metrics.pecasHoje.baby },
     { name: "Infantil", value: metrics.pecasHoje.infantil },
@@ -359,7 +366,7 @@ export default function Dashboard() {
   ].filter(d => d.value > 0);
 
   // Estoque atual por categoria
-  const estoqueAtual = useMemo(() => {
+  const estoqueAtual = (() => {
     if (!estoqueData) return { baby: 0, infantil: 0, calcados: 0, brinquedos: 0 };
     
     const map: Record<string, number> = {};
@@ -373,8 +380,9 @@ export default function Dashboard() {
       calcados: map["calcados"] || 0,
       brinquedos: map["brinquedos"] || 0,
     };
-  }, [estoqueData]);
+  })();
 
+  // Comparativo Mês vs Estoque
   const comparativoData = [
     { categoria: "Baby", comprasMes: metrics.pecasMes.baby, estoqueAtual: estoqueAtual.baby },
     { categoria: "Infantil", comprasMes: metrics.pecasMes.infantil, estoqueAtual: estoqueAtual.infantil },
@@ -408,13 +416,13 @@ export default function Dashboard() {
                 <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={financeiroHojeData} layout="vertical">
+                  <BarChart data={dataFinanceiroHoje} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" tickFormatter={(v) => `R$ ${v}`} />
                     <YAxis type="category" dataKey="name" width={100} />
                     <Tooltip content={<CurrencyTooltip />} />
-                    <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
-                      {financeiroHojeData.map((entry, index) => (
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                      {dataFinanceiroHoje.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Bar>
@@ -438,13 +446,13 @@ export default function Dashboard() {
                 <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={financeiroMesData} layout="vertical">
+                  <BarChart data={dataFinanceiroMes} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" tickFormatter={(v) => `R$ ${v}`} />
                     <YAxis type="category" dataKey="name" width={100} />
                     <Tooltip content={<CurrencyTooltip />} />
-                    <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
-                      {financeiroMesData.map((entry, index) => (
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                      {dataFinanceiroMes.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Bar>
@@ -468,12 +476,12 @@ export default function Dashboard() {
                 <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={quantidadeHojeData} layout="vertical">
+                  <BarChart data={dataQtdHoje} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" />
                     <YAxis type="category" dataKey="name" width={100} />
                     <Tooltip content={<QuantityTooltip />} />
-                    <Bar dataKey="qtd" fill="#F97316" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="value" fill="#F97316" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -494,12 +502,12 @@ export default function Dashboard() {
                 <div className="animate-pulse h-[180px] bg-muted rounded" />
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={quantidadeMesData} layout="vertical">
+                  <BarChart data={dataQtdMes} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" />
                     <YAxis type="category" dataKey="name" width={100} />
                     <Tooltip content={<QuantityTooltip />} />
-                    <Bar dataKey="qtd" fill="#F97316" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="value" fill="#F97316" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
