@@ -41,17 +41,18 @@ const COLORS_STACKED = {
   recusadoLoja: "#ef4444"
 };
 
-// Helper para verificar se é pagamento em dinheiro/pix
+// Helper para verificar se é pagamento em dinheiro/pix/débito (Grupo 1 - Saída de Caixa)
 const isDinheiroPix = (metodo: string | null): boolean => {
   if (!metodo) return false;
   const m = metodo.toLowerCase();
-  return m.includes("dinheiro") || m.includes("pix");
+  return m.includes("dinheiro") || m.includes("pix") || m.includes("débito") || m.includes("debito");
 };
 
+// Helper para verificar se é Gira Crédito (Grupo 2 - Crédito em Loja)
 const isGiraCredito = (metodo: string | null): boolean => {
   if (!metodo) return false;
   const m = metodo.toLowerCase();
-  return m.includes("gira") || m.includes("troca");
+  return m.includes("gira") || m.includes("crédito") || m.includes("credito") || m.includes("troca");
 };
 
 // Formatar moeda
