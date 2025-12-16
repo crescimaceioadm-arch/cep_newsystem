@@ -11,6 +11,7 @@ import Financeiro from "./pages/Financeiro";
 import Estoque from "./pages/Estoque";
 import Dashboard from "./pages/Dashboard";
 import Configuracoes from "./pages/Configuracoes";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Recepcao />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/avaliacao" element={<Avaliacao />} />
           <Route path="/vendas" element={<Vendas />} />
           <Route path="/vendas/historico" element={<VendasHistorico />} />
