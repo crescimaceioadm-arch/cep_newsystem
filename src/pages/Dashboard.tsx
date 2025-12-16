@@ -9,8 +9,14 @@ import { useEstoque } from "@/hooks/useEstoque";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
 
 const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-const COLORS = { dinheiro: "#10B981", gira: "#8B5CF6", recusado: "#EF4444", estoque: "#3B82F6", compras: "#F97316" };
-const PIE_COLORS = ["#F97316", "#3B82F6", "#10B981", "#8B5CF6", "#EF4444", "#FBBF24"];
+const COLORS = { 
+  dinheiro: "#34d399", // Verde Menta
+  gira: "#f7ca43",     // Laranja claro  
+  recusado: "#f87171", // Vermelho Suave
+  estoque: "#7da4ff",  // O Novo Azul
+  compras: "#fbbf24",  // Amarelo Ouro
+};
+const PIE_COLORS = ["#fbbf24", "#7da4ff", "#34d399", "#f7ca43", "#f87171", "#a78bfa"];
 
 const CustomTooltip = ({ active, payload, label, type = "currency" }: any) => {
   if (active && payload && payload.length) {

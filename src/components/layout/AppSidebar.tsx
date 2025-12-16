@@ -56,22 +56,22 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r-0">
-      <SidebarHeader className="p-6 border-b border-sidebar-border">
+    <Sidebar className="border-r-0 bg-sidebar-gradient">
+      <SidebarHeader className="p-6 border-b border-amber-300/50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <span className="text-sidebar-primary-foreground font-bold text-lg">CP</span>
+          <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shadow-sm">
+            <span className="text-slate-700 font-bold text-lg">CP</span>
           </div>
           <div>
-            <h1 className="font-semibold text-sidebar-foreground text-lg">Cresci e Perdi</h1>
-            <p className="text-xs text-sidebar-foreground/60">Sistema de Gestão</p>
+            <h1 className="font-semibold text-slate-800 text-lg">Cresci e Perdi</h1>
+            <p className="text-xs text-slate-600">Sistema de Gestão</p>
           </div>
         </div>
       </SidebarHeader>
       
-      <SidebarContent className="p-4">
+      <SidebarContent className="p-4 bg-sidebar-gradient">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider mb-2">
+          <SidebarGroupLabel className="text-slate-600 text-xs uppercase tracking-wider mb-2">
             Menu Principal
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -82,8 +82,8 @@ export function AppSidebar() {
                     <NavLink 
                       to={item.url} 
                       end={item.url === "/"} 
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-                      activeClassName="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-white/40 hover:text-slate-900 transition-colors"
+                      activeClassName="bg-white/50 text-slate-900 font-semibold hover:bg-white/50 hover:text-slate-900 shadow-sm"
                     >
                       <item.icon className="h-5 w-5" />
                       <span className="font-medium">{item.title}</span>
@@ -96,10 +96,10 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className="p-4 border-t border-amber-300/50 bg-sidebar-gradient">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sidebar-foreground/80 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-slate-700 hover:bg-red-500/20 hover:text-red-600 transition-colors"
         >
           <LogOut className="h-5 w-5" />
           <span className="font-medium">Sair</span>
