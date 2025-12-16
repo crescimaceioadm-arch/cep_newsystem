@@ -46,7 +46,9 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
 
   const saveAvaliacao = useSaveAvaliacao();
   const recusarAvaliacao = useRecusarAvaliacao();
-  const { data: avaliadoras } = useColaboradoresByFuncao("Avaliadora");
+  
+  // Adicionei isLoading para feedback visual se a internet estiver lenta
+  const { data: avaliadoras, isLoading } = useColaboradoresByFuncao("Avaliadora");
 
   const requiresDescription = formData.qtd_itens_grandes > 0 || formData.qtd_itens_medios > 0;
   const isDescriptionValid = !requiresDescription || formData.descricao_itens_extra.trim().length > 0;
@@ -146,7 +148,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg overflow-y-auto max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Avaliar: {atendimento.nome_cliente}</DialogTitle>
         </DialogHeader>
@@ -155,14 +157,24 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
           <Label htmlFor="avaliadora">Avaliadora</Label>
           <Select value={avaliadoraSelecionada} onValueChange={setAvaliadoraSelecionada}>
             <SelectTrigger>
-              <SelectValue placeholder="Selecione a avaliadora" />
+              <SelectValue placeholder={isLoading ? "Carregando..." : "Selecione a avaliadora"} />
             </SelectTrigger>
-            <SelectContent>
+            
+            {/* CORREÇÃO AQUI: z-index alto para sobrepor o Modal */}
+            <SelectContent className="z-[9999] bg-white max-h-[200px]">
+              
               {avaliadoras?.map((a) => (
                 <SelectItem key={a.id} value={a.nome}>
                   {a.nome}
                 </SelectItem>
               ))}
+
+              {/* Feedback se a lista estiver vazia (problema de banco) */}
+              {(!avaliadoras || avaliadoras.length === 0) && !isLoading && (
+                 <div className="p-2 text-sm text-muted-foreground text-center">
+                   Nenhuma avaliadora encontrada
+                 </div>
+              )}
             </SelectContent>
           </Select>
         </div>
