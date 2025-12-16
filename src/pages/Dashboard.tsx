@@ -1,36 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-import { format, subDays, startOfDay, endOfDay, differenceInMinutes } from "date-fns";
+import { 
+  startOfDay, 
+  startOfMonth, 
+  endOfDay,
+  isToday,
+  isThisMonth,
+  format
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
-  CalendarIcon, 
+  DollarSign, 
   ShoppingBag, 
-  ShoppingCart, 
-  Target, 
-  TrendingUp, 
-  TrendingDown,
-  Clock,
-  CheckCircle,
-  XCircle,
+  TrendingUp,
+  Crown,
+  Percent,
+  Banknote,
+  CreditCard,
   Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { DateRange } from "react-day-picker";
 import { 
   BarChart, 
   Bar, 
@@ -44,52 +34,50 @@ import {
   Cell,
   Legend
 } from "recharts";
+import { useEstoque } from "@/hooks/useEstoque";
 
-const COLORS = ["#8b5cf6", "#22c55e", "#f59e0b", "#3b82f6", "#ef4444", "#6b7280"];
+const COLORS_PIE = ["#8b5cf6", "#22c55e", "#f59e0b", "#3b82f6", "#ef4444", "#6b7280"];
+const COLORS_STACKED = {
+  aprovadoDinheiro: "#22c55e",
+  aprovadoGira: "#8b5cf6",
+  recusadoCliente: "#f97316",
+  recusadoLoja: "#ef4444"
+};
+
+// Helper para verificar se é pagamento em dinheiro/pix
+const isDinheiroPix = (metodo: string | null): boolean => {
+  if (!metodo) return false;
+  const m = metodo.toLowerCase();
+  return m.includes("dinheiro") || m.includes("pix");
+};
+
+const isGiraCredito = (metodo: string | null): boolean => {
+  if (!metodo) return false;
+  return metodo.toLowerCase().includes("gira");
+};
+
+// Formatar moeda
+const formatCurrency = (value: number): string => {
+  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+};
 
 export default function Dashboard() {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 30),
-    to: new Date(),
-  });
-
-  const [metaVenda, setMetaVenda] = useState(() => 
-    localStorage.getItem("dashboard_meta_venda") || ""
-  );
-  const [metaCompra, setMetaCompra] = useState(() => 
-    localStorage.getItem("dashboard_meta_compra") || ""
-  );
-
-  const [salesData, setSalesData] = useState<any[]>([]);
   const [allAtendimentos, setAllAtendimentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { data: estoqueData } = useEstoque();
 
-  useEffect(() => {
-    localStorage.setItem("dashboard_meta_venda", metaVenda);
-  }, [metaVenda]);
-
-  useEffect(() => {
-    localStorage.setItem("dashboard_meta_compra", metaCompra);
-  }, [metaCompra]);
+  const hoje = new Date();
+  const inicioHoje = startOfDay(hoje);
+  const inicioMes = startOfMonth(hoje);
 
   useEffect(() => {
     async function fetchData() {
-      if (!dateRange?.from || !dateRange?.to) return;
-      
       setLoading(true);
       
-      const startDate = startOfDay(dateRange.from).toISOString();
-      const endDate = endOfDay(dateRange.to).toISOString();
+      // Buscar atendimentos do mês atual
+      const startDate = inicioMes.toISOString();
+      const endDate = endOfDay(hoje).toISOString();
 
-      const { data: vendas } = await supabase
-        .from("vendas")
-        .select("*")
-        .gte("data_venda", startDate)
-        .lte("data_venda", endDate);
-
-      setSalesData(vendas || []);
-
-      // Buscar TODOS os atendimentos do período (não só finalizados)
       const { data: atendimentos } = await supabase
         .from("atendimentos")
         .select("*")
@@ -101,405 +89,385 @@ export default function Dashboard() {
     }
 
     fetchData();
-  }, [dateRange]);
+  }, []);
 
-  // Cálculos de KPIs
-  const kpis = useMemo(() => {
-    const finalizados = allAtendimentos.filter(a => a.status === "finalizado");
-    const recusados = allAtendimentos.filter(a => a.status === "recusado");
+  // Cálculos das métricas
+  const metrics = useMemo(() => {
+    const atendimentosHoje = allAtendimentos.filter(a => 
+      isToday(new Date(a.created_at))
+    );
+    const atendimentosMes = allAtendimentos;
 
-    // Entrada de peças (compras finalizadas)
-    const entradaPecas = finalizados.reduce((acc, a) => {
-      return acc + 
-        (a.qtd_baby || 0) + 
-        (a.qtd_1_a_16 || 0) + 
-        (a.qtd_calcados || 0) + 
-        (a.qtd_brinquedos || 0) + 
-        (a.qtd_itens_medios || 0) + 
-        (a.qtd_itens_grandes || 0);
-    }, 0);
+    const finalizadosHoje = atendimentosHoje.filter(a => a.status === "finalizado");
+    const finalizadosMes = atendimentosMes.filter(a => a.status === "finalizado");
+    const recusadosHoje = atendimentosHoje.filter(a => a.status === "recusado");
+    const recusadosMes = atendimentosMes.filter(a => a.status === "recusado");
 
-    // Saída de peças (vendas)
-    const saidaPecas = salesData.reduce((acc, v) => {
-      return acc + 
-        (v.qtd_baby || 0) + 
-        (v.qtd_1_a_16 || 0) + 
-        (v.qtd_calcados || 0) + 
-        (v.qtd_brinquedos || 0) + 
-        (v.qtd_itens_medios || 0) + 
-        (v.qtd_itens_grandes || 0);
-    }, 0);
+    // Função para calcular valores por tipo de pagamento
+    const calcularPorPagamento = (atendimentos: any[]) => {
+      let dinheiroPix = 0;
+      let giraCredito = 0;
+      let qtdDinheiroPix = 0;
+      let qtdGira = 0;
 
-    // Total gasto em compras
-    const totalGasto = finalizados.reduce((acc, a) => acc + (a.valor_total_negociado || 0), 0);
+      atendimentos.forEach(a => {
+        const pagamentos = [
+          { metodo: a.metodo_pagto_1, valor: a.valor_pagto_1 || 0 },
+          { metodo: a.metodo_pagto_2, valor: a.valor_pagto_2 || 0 },
+          { metodo: a.metodo_pagto_3, valor: a.valor_pagto_3 || 0 },
+        ];
 
-    // Taxa de conversão
-    const totalAvaliacoes = allAtendimentos.length;
-    const taxaConversao = totalAvaliacoes > 0 
-      ? ((finalizados.length / totalAvaliacoes) * 100).toFixed(1) 
-      : "0";
+        let temDinheiroPix = false;
+        let temGira = false;
 
-    // Tempo médio geral (apenas para finalizados com hora_encerramento)
-    const temposValidos = finalizados
-      .filter(a => a.hora_chegada && a.hora_encerramento)
-      .map(a => differenceInMinutes(new Date(a.hora_encerramento), new Date(a.hora_chegada)));
-    
-    const tempoMedioGeral = temposValidos.length > 0 
-      ? Math.round(temposValidos.reduce((a, b) => a + b, 0) / temposValidos.length)
-      : 0;
+        pagamentos.forEach(p => {
+          if (isDinheiroPix(p.metodo)) {
+            dinheiroPix += p.valor;
+            temDinheiroPix = true;
+          }
+          if (isGiraCredito(p.metodo)) {
+            giraCredito += p.valor;
+            temGira = true;
+          }
+        });
 
-    // Recusas por motivo
-    const recusaLoja = recusados.filter(a => a.motivo_recusa === "loja").length;
-    const recusaCliente = recusados.filter(a => a.motivo_recusa === "cliente").length;
-    const recusaNaoEspec = recusados.filter(a => !a.motivo_recusa).length;
+        // Contar atendimentos por tipo predominante
+        if (temGira && !temDinheiroPix) {
+          qtdGira++;
+        } else if (temDinheiroPix) {
+          qtdDinheiroPix++;
+        } else if (temGira) {
+          qtdGira++;
+        }
+      });
 
-    // Peças por categoria (compradas)
-    const pecasPorCategoria = {
-      baby: finalizados.reduce((acc, a) => acc + (a.qtd_baby || 0), 0),
-      infantil: finalizados.reduce((acc, a) => acc + (a.qtd_1_a_16 || 0), 0),
-      calcados: finalizados.reduce((acc, a) => acc + (a.qtd_calcados || 0), 0),
-      brinquedos: finalizados.reduce((acc, a) => acc + (a.qtd_brinquedos || 0), 0),
+      return { dinheiroPix, giraCredito, qtdDinheiroPix, qtdGira, total: dinheiroPix + giraCredito };
     };
 
-    // Performance por avaliadora
-    const avaliadoras = new Map<string, { qtd: number; tempos: number[]; total: number }>();
-    finalizados.forEach(a => {
+    const pagamentosHoje = calcularPorPagamento(finalizadosHoje);
+    const pagamentosMes = calcularPorPagamento(finalizadosMes);
+
+    // Peças por categoria (hoje)
+    const pecasHoje = {
+      baby: finalizadosHoje.reduce((acc, a) => acc + (a.qtd_baby || 0), 0),
+      infantil: finalizadosHoje.reduce((acc, a) => acc + (a.qtd_1_a_16 || 0), 0),
+      calcados: finalizadosHoje.reduce((acc, a) => acc + (a.qtd_calcados || 0), 0),
+      brinquedos: finalizadosHoje.reduce((acc, a) => acc + (a.qtd_brinquedos || 0), 0),
+      medios: finalizadosHoje.reduce((acc, a) => acc + (a.qtd_itens_medios || 0), 0),
+      grandes: finalizadosHoje.reduce((acc, a) => acc + (a.qtd_itens_grandes || 0), 0),
+    };
+
+    // Peças compradas no mês (por categoria)
+    const pecasMes = {
+      baby: finalizadosMes.reduce((acc, a) => acc + (a.qtd_baby || 0), 0),
+      infantil: finalizadosMes.reduce((acc, a) => acc + (a.qtd_1_a_16 || 0), 0),
+      calcados: finalizadosMes.reduce((acc, a) => acc + (a.qtd_calcados || 0), 0),
+      brinquedos: finalizadosMes.reduce((acc, a) => acc + (a.qtd_brinquedos || 0), 0),
+    };
+
+    // Performance por avaliadora (para gráfico empilhado)
+    const avaliadoras = new Map<string, {
+      aprovadoDinheiro: number;
+      aprovadoGira: number;
+      recusadoCliente: number;
+      recusadoLoja: number;
+      totalGira: number;
+    }>();
+
+    // Processar finalizados do mês
+    finalizadosMes.forEach(a => {
       const nome = a.avaliadora_nome || "Não especificada";
-      const current = avaliadoras.get(nome) || { qtd: 0, tempos: [], total: 0 };
-      current.qtd++;
-      current.total += (a.valor_total_negociado || 0);
-      if (a.hora_chegada && a.hora_encerramento) {
-        current.tempos.push(differenceInMinutes(new Date(a.hora_encerramento), new Date(a.hora_chegada)));
+      const current = avaliadoras.get(nome) || {
+        aprovadoDinheiro: 0,
+        aprovadoGira: 0,
+        recusadoCliente: 0,
+        recusadoLoja: 0,
+        totalGira: 0,
+      };
+
+      const pagamentos = [
+        { metodo: a.metodo_pagto_1, valor: a.valor_pagto_1 || 0 },
+        { metodo: a.metodo_pagto_2, valor: a.valor_pagto_2 || 0 },
+        { metodo: a.metodo_pagto_3, valor: a.valor_pagto_3 || 0 },
+      ];
+
+      let temGira = false;
+      pagamentos.forEach(p => {
+        if (isGiraCredito(p.metodo)) {
+          current.totalGira += p.valor;
+          temGira = true;
+        }
+      });
+
+      if (temGira) {
+        current.aprovadoGira++;
+      } else {
+        current.aprovadoDinheiro++;
       }
+
       avaliadoras.set(nome, current);
     });
 
-    const performanceAvaliadoras = Array.from(avaliadoras.entries()).map(([nome, data]) => ({
-      nome,
-      qtd: data.qtd,
-      tempoMedio: data.tempos.length > 0 
-        ? Math.round(data.tempos.reduce((a, b) => a + b, 0) / data.tempos.length)
-        : 0,
-      total: data.total,
-    })).sort((a, b) => b.qtd - a.qtd);
+    // Processar recusados do mês
+    recusadosMes.forEach(a => {
+      const nome = a.avaliadora_nome || "Não especificada";
+      const current = avaliadoras.get(nome) || {
+        aprovadoDinheiro: 0,
+        aprovadoGira: 0,
+        recusadoCliente: 0,
+        recusadoLoja: 0,
+        totalGira: 0,
+      };
+
+      if (a.motivo_recusa === "cliente") {
+        current.recusadoCliente++;
+      } else if (a.motivo_recusa === "loja") {
+        current.recusadoLoja++;
+      }
+
+      avaliadoras.set(nome, current);
+    });
+
+    const performanceData = Array.from(avaliadoras.entries()).map(([nome, data]) => ({
+      nome: nome.split(" ")[0], // Primeiro nome apenas
+      ...data,
+    })).sort((a, b) => (b.aprovadoDinheiro + b.aprovadoGira) - (a.aprovadoDinheiro + a.aprovadoGira));
+
+    // Rainha do Gira Crédito
+    let rainhaGira = { nome: "-", valor: 0, percentual: 0 };
+    performanceData.forEach(av => {
+      if (av.totalGira > rainhaGira.valor) {
+        const total = av.aprovadoDinheiro + av.aprovadoGira;
+        rainhaGira = {
+          nome: av.nome,
+          valor: av.totalGira,
+          percentual: total > 0 ? (av.aprovadoGira / total) * 100 : 0,
+        };
+      }
+    });
 
     return {
-      entradaPecas,
-      saidaPecas,
-      balancoPecas: entradaPecas - saidaPecas,
-      totalGasto,
-      totalAvaliacoes,
-      finalizados: finalizados.length,
-      taxaConversao,
-      tempoMedioGeral,
-      recusaLoja,
-      recusaCliente,
-      recusaNaoEspec,
-      pecasPorCategoria,
-      performanceAvaliadoras,
+      gastoHoje: pagamentosHoje,
+      gastoMes: pagamentosMes,
+      qtdComprasHoje: finalizadosHoje.length,
+      qtdComprasMes: finalizadosMes.length,
+      pecasHoje,
+      pecasMes,
+      performanceData,
+      rainhaGira,
     };
-  }, [allAtendimentos, salesData]);
+  }, [allAtendimentos]);
 
-  // Dados para gráficos
-  const recusasChartData = [
-    { name: "Recusado Loja", value: kpis.recusaLoja },
-    { name: "Recusado Cliente", value: kpis.recusaCliente },
-    { name: "Não Especificado", value: kpis.recusaNaoEspec },
+  // Dados para os gráficos
+  const pieChartData = [
+    { name: "Baby", value: metrics.pecasHoje.baby },
+    { name: "Infantil", value: metrics.pecasHoje.infantil },
+    { name: "Calçados", value: metrics.pecasHoje.calcados },
+    { name: "Brinquedos", value: metrics.pecasHoje.brinquedos },
+    { name: "Médios", value: metrics.pecasHoje.medios },
+    { name: "Grandes", value: metrics.pecasHoje.grandes },
   ].filter(d => d.value > 0);
 
-  const categoriasChartData = [
-    { name: "Baby", value: kpis.pecasPorCategoria.baby },
-    { name: "Infantil (1-16)", value: kpis.pecasPorCategoria.infantil },
-    { name: "Calçados", value: kpis.pecasPorCategoria.calcados },
-    { name: "Brinquedos", value: kpis.pecasPorCategoria.brinquedos },
-  ].filter(d => d.value > 0);
+  // Estoque atual por categoria
+  const estoqueAtual = useMemo(() => {
+    if (!estoqueData) return { baby: 0, infantil: 0, calcados: 0, brinquedos: 0 };
+    
+    const map: Record<string, number> = {};
+    estoqueData.forEach(e => {
+      map[e.categoria.toLowerCase()] = e.quantidade_atual;
+    });
+    
+    return {
+      baby: map["baby"] || 0,
+      infantil: map["infantil"] || map["1_a_16"] || 0,
+      calcados: map["calcados"] || 0,
+      brinquedos: map["brinquedos"] || 0,
+    };
+  }, [estoqueData]);
 
-  const handleMetaBlur = (setter: (v: string) => void, value: string) => {
-    const num = parseFloat(value);
-    if (!isNaN(num)) {
-      setter(num.toFixed(2));
-    }
-  };
+  const comparativoData = [
+    { categoria: "Baby", comprasMes: metrics.pecasMes.baby, estoqueAtual: estoqueAtual.baby },
+    { categoria: "Infantil", comprasMes: metrics.pecasMes.infantil, estoqueAtual: estoqueAtual.infantil },
+    { categoria: "Calçados", comprasMes: metrics.pecasMes.calcados, estoqueAtual: estoqueAtual.calcados },
+    { categoria: "Brinquedos", comprasMes: metrics.pecasMes.brinquedos, estoqueAtual: estoqueAtual.brinquedos },
+  ];
 
   return (
-    <MainLayout title="Dashboard Gerencial">
+    <MainLayout title="Dashboard Estratégico">
       <div className="space-y-6">
-        {/* Filtros e Metas */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Configurações
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Período de Análise</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateRange?.from ? (
-                        dateRange.to ? (
-                          <>
-                            {format(dateRange.from, "dd/MM/yy", { locale: ptBR })} -{" "}
-                            {format(dateRange.to, "dd/MM/yy", { locale: ptBR })}
-                          </>
-                        ) : (
-                          format(dateRange.from, "dd/MM/yy", { locale: ptBR })
-                        )
-                      ) : (
-                        <span>Selecione</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      initialFocus
-                      mode="range"
-                      defaultMonth={dateRange?.from}
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                      locale={ptBR}
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
+        {/* Header com data */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {format(hoje, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          </p>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="metaVenda">Meta Venda (R$)</Label>
-                <Input
-                  id="metaVenda"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={metaVenda}
-                  onChange={(e) => setMetaVenda(e.target.value)}
-                  onBlur={() => handleMetaBlur(setMetaVenda, metaVenda)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="metaCompra">Meta Compra (R$)</Label>
-                <Input
-                  id="metaCompra"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={metaCompra}
-                  onChange={(e) => setMetaCompra(e.target.value)}
-                  onBlur={() => handleMetaBlur(setMetaCompra, metaCompra)}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPIs - Balanço de Estoque */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Entrada (Compradas)
+        {/* SEÇÃO 1: FINANCEIRO */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Gasto Hoje */}
+          <Card className="border-l-4 border-l-orange-500">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <DollarSign className="h-5 w-5 text-orange-500" />
+                Gasto Hoje
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-8 w-16 bg-muted rounded" />
+                <div className="animate-pulse h-16 bg-muted rounded" />
               ) : (
-                <div className="text-3xl font-bold text-green-600">{kpis.entradaPecas}</div>
+                <>
+                  <div className="text-3xl font-bold text-foreground">
+                    {formatCurrency(metrics.gastoHoje.total)}
+                  </div>
+                  <div className="flex gap-4 mt-3 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="h-4 w-4 text-green-600" />
+                      <span className="text-muted-foreground">Dinheiro+Pix:</span>
+                      <span className="font-semibold text-green-600">
+                        {formatCurrency(metrics.gastoHoje.dinheiroPix)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-purple-600" />
+                      <span className="text-muted-foreground">Gira:</span>
+                      <span className="font-semibold text-purple-600">
+                        {formatCurrency(metrics.gastoHoje.giraCredito)}
+                      </span>
+                    </div>
+                  </div>
+                </>
               )}
-              <p className="text-xs text-muted-foreground mt-1">peças adquiridas</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Saída (Vendidas)
+          {/* Gasto Mês */}
+          <Card className="border-l-4 border-l-blue-500">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <DollarSign className="h-5 w-5 text-blue-500" />
+                Gasto Mês ({format(hoje, "MMMM", { locale: ptBR })})
               </CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-8 w-16 bg-muted rounded" />
+                <div className="animate-pulse h-16 bg-muted rounded" />
               ) : (
-                <div className="text-3xl font-bold text-red-600">{kpis.saidaPecas}</div>
+                <>
+                  <div className="text-3xl font-bold text-foreground">
+                    {formatCurrency(metrics.gastoMes.total)}
+                  </div>
+                  <div className="flex gap-4 mt-3 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="h-4 w-4 text-green-600" />
+                      <span className="text-muted-foreground">Dinheiro+Pix:</span>
+                      <span className="font-semibold text-green-600">
+                        {formatCurrency(metrics.gastoMes.dinheiroPix)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4 text-purple-600" />
+                      <span className="text-muted-foreground">Gira:</span>
+                      <span className="font-semibold text-purple-600">
+                        {formatCurrency(metrics.gastoMes.giraCredito)}
+                      </span>
+                    </div>
+                  </div>
+                </>
               )}
-              <p className="text-xs text-muted-foreground mt-1">peças vendidas</p>
-            </CardContent>
-          </Card>
-
-          <Card className={cn(
-            "border-2",
-            kpis.balancoPecas >= 0 ? "border-green-500/30" : "border-red-500/30"
-          )}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Balanço de Estoque
-              </CardTitle>
-              <Package className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="animate-pulse h-8 w-16 bg-muted rounded" />
-              ) : (
-                <div className={cn(
-                  "text-3xl font-bold",
-                  kpis.balancoPecas >= 0 ? "text-green-600" : "text-red-600"
-                )}>
-                  {kpis.balancoPecas >= 0 ? "+" : ""}{kpis.balancoPecas}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground mt-1">diferença no período</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* KPIs - Financeiro e Eficiência */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* SEÇÃO 2: VOLUME DE COMPRAS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Qtd Compras Hoje */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Gasto (R$)
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShoppingBag className="h-5 w-5 text-orange-500" />
+                Compras Hoje
               </CardTitle>
-              <ShoppingBag className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-8 w-20 bg-muted rounded" />
+                <div className="animate-pulse h-12 bg-muted rounded" />
               ) : (
-                <div className="text-2xl font-bold">
-                  R$ {kpis.totalGasto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                </div>
+                <>
+                  <div className="text-4xl font-bold">{metrics.qtdComprasHoje}</div>
+                  <div className="flex gap-3 mt-2 text-sm">
+                    <span className="text-green-600">
+                      {metrics.gastoHoje.qtdDinheiroPix} em Dinheiro/Pix
+                    </span>
+                    <span className="text-purple-600">
+                      {metrics.gastoHoje.qtdGira} em Gira
+                    </span>
+                  </div>
+                </>
               )}
-              <p className="text-xs text-muted-foreground mt-1">Dinheiro + PIX + Gira</p>
             </CardContent>
           </Card>
 
+          {/* Qtd Compras Mês */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Avaliações
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShoppingBag className="h-5 w-5 text-blue-500" />
+                Compras no Mês
               </CardTitle>
-              <ShoppingCart className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-8 w-16 bg-muted rounded" />
+                <div className="animate-pulse h-12 bg-muted rounded" />
               ) : (
-                <div className="text-2xl font-bold">{kpis.totalAvaliacoes}</div>
+                <>
+                  <div className="text-4xl font-bold">{metrics.qtdComprasMes}</div>
+                  <div className="flex gap-3 mt-2 text-sm">
+                    <span className="text-green-600">
+                      {metrics.gastoMes.qtdDinheiroPix} em Dinheiro/Pix
+                    </span>
+                    <span className="text-purple-600">
+                      {metrics.gastoMes.qtdGira} em Gira
+                    </span>
+                  </div>
+                </>
               )}
-              <p className="text-xs text-muted-foreground mt-1">{kpis.finalizados} finalizados</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Taxa de Conversão
-              </CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="animate-pulse h-8 w-16 bg-muted rounded" />
-              ) : (
-                <div className="text-2xl font-bold">{kpis.taxaConversao}%</div>
-              )}
-              <p className="text-xs text-muted-foreground mt-1">viraram compra</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tempo Médio
-              </CardTitle>
-              <Clock className="h-4 w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="animate-pulse h-8 w-16 bg-muted rounded" />
-              ) : (
-                <div className="text-2xl font-bold">{kpis.tempoMedioGeral} min</div>
-              )}
-              <p className="text-xs text-muted-foreground mt-1">por atendimento</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Gráficos */}
+        {/* SEÇÃO 3: GRÁFICOS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* BarChart - Recusas */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <XCircle className="h-5 w-5 text-destructive" />
-                Motivos de Recusa
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="animate-pulse h-[250px] bg-muted rounded" />
-              ) : recusasChartData.length === 0 ? (
-                <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                  Nenhuma recusa no período
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={recusasChartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="name" className="text-xs" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* PieChart - Categorias */}
+          {/* PieChart - Mix de Peças do Dia */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5 text-primary" />
-                Peças por Categoria (Compradas)
+                Mix de Peças (Hoje)
               </CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="animate-pulse h-[250px] bg-muted rounded" />
-              ) : categoriasChartData.length === 0 ? (
-                <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                  Nenhuma compra no período
+                <div className="animate-pulse h-[280px] bg-muted rounded" />
+              ) : pieChartData.length === 0 ? (
+                <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                  Nenhuma compra hoje
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
                     <Pie
-                      data={categoriasChartData}
+                      data={pieChartData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      outerRadius={80}
+                      outerRadius={90}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, value }) => `${name}: ${value}`}
                     >
-                      {categoriasChartData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      {pieChartData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -509,46 +477,121 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* BarChart - Compras Mês vs Estoque */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Compras Mês vs Estoque Atual
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="animate-pulse h-[280px] bg-muted rounded" />
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={comparativoData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="categoria" className="text-xs" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="comprasMes" name="Compras Mês" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="estoqueAtual" name="Estoque Atual" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Tabela de Performance */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Performance por Avaliadora</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="animate-pulse h-32 bg-muted rounded" />
-            ) : kpis.performanceAvaliadoras.length === 0 ? (
-              <div className="text-muted-foreground text-center py-8">
-                Nenhum dado de avaliadora no período
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Avaliadora</TableHead>
-                    <TableHead className="text-center">Qtd Avaliações</TableHead>
-                    <TableHead className="text-center">Tempo Médio</TableHead>
-                    <TableHead className="text-right">Total Comprado (R$)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {kpis.performanceAvaliadoras.map((av) => (
-                    <TableRow key={av.nome}>
-                      <TableCell className="font-medium">{av.nome}</TableCell>
-                      <TableCell className="text-center">{av.qtd}</TableCell>
-                      <TableCell className="text-center">{av.tempoMedio} min</TableCell>
-                      <TableCell className="text-right">
-                        R$ {av.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+        {/* SEÇÃO 4: PERFORMANCE DA EQUIPE */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* StackedBarChart - Avaliações e Recusas */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Performance das Avaliadoras (Mês)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="animate-pulse h-[300px] bg-muted rounded" />
+              ) : metrics.performanceData.length === 0 ? (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  Nenhum dado de avaliadora
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={metrics.performanceData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis type="number" allowDecimals={false} />
+                    <YAxis type="category" dataKey="nome" width={80} className="text-xs" />
+                    <Tooltip />
+                    <Legend />
+                    <Bar 
+                      dataKey="aprovadoDinheiro" 
+                      name="Aprovado (Din/Pix)" 
+                      stackId="a" 
+                      fill={COLORS_STACKED.aprovadoDinheiro} 
+                    />
+                    <Bar 
+                      dataKey="aprovadoGira" 
+                      name="Aprovado (Gira)" 
+                      stackId="a" 
+                      fill={COLORS_STACKED.aprovadoGira} 
+                    />
+                    <Bar 
+                      dataKey="recusadoCliente" 
+                      name="Recusa Cliente" 
+                      stackId="a" 
+                      fill={COLORS_STACKED.recusadoCliente} 
+                    />
+                    <Bar 
+                      dataKey="recusadoLoja" 
+                      name="Recusa Loja" 
+                      stackId="a" 
+                      fill={COLORS_STACKED.recusadoLoja} 
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Highlight Card - Rainha do Gira */}
+          <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-purple-700">
+                <Crown className="h-5 w-5" />
+                Rainha do Gira Crédito
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="animate-pulse h-32 bg-muted rounded" />
+              ) : metrics.rainhaGira.valor === 0 ? (
+                <div className="text-muted-foreground text-center py-8">
+                  Sem dados de Gira Crédito
+                </div>
+              ) : (
+                <div className="text-center space-y-3">
+                  <div className="text-3xl font-bold text-purple-700">
+                    {metrics.rainhaGira.nome}
+                  </div>
+                  <div className="text-xl font-semibold">
+                    {formatCurrency(metrics.rainhaGira.valor)}
+                  </div>
+                  <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                    <Percent className="h-4 w-4" />
+                    <span>
+                      {metrics.rainhaGira.percentual.toFixed(0)}% das compras em Gira
+                    </span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </MainLayout>
   );
