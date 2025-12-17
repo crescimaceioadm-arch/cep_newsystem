@@ -33,8 +33,10 @@ import { History, Search, CalendarIcon, Pencil, Trash2, RefreshCw } from "lucide
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/contexts/UserContext";
 
 export default function VendasHistorico() {
+  const { isAdmin } = useUser();
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroData, setFiltroData] = useState<Date | undefined>(undefined);
   const { data: vendas, isLoading, refetch } = useVendasHistorico();
@@ -207,15 +209,17 @@ export default function VendasHistorico() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setVendaParaExcluir(venda)}
-                            title="Excluir venda"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setVendaParaExcluir(venda)}
+                              title="Excluir venda"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
