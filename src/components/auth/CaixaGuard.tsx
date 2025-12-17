@@ -19,7 +19,7 @@ export function CaixaGuard() {
     // 2. User has a role that uses cash registers (admin, caixa, geral)
     // 3. No cash register is selected
     // 4. Not on auth page
-    const needsCaixa = cargo === "admin" || cargo === "caixa" || cargo === "geral";
+    const needsCaixa = cargo === "caixa" || cargo === "geral";
     const isAuthPage = location.pathname === "/auth";
     
     if (!loading && user && needsCaixa && !caixaSelecionado && !isAuthPage) {
