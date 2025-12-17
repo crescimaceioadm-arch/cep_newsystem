@@ -13,6 +13,7 @@ export interface NovaVenda {
   valor_total_venda: number;
   pagamentos: Array<{ metodo: string; valor: number; bandeira?: string }>;
   vendedora_nome?: string;
+  caixa_origem?: string;
 }
 
 export function useVendas() {
@@ -110,7 +111,7 @@ export function useFinalizarVenda() {
 
       const vendaData = {
         qtd_total_itens: totalItensCalculado,
-        caixa_origem: "Caixa 1", // Hardcoded temporário até implementar seleção de caixa
+        caixa_origem: venda.caixa_origem || "Caixa 1",
         qtd_baby_vendida: venda.qtd_baby_vendida,
         qtd_1_a_16_vendida: venda.qtd_1_a_16_vendida,
         qtd_calcados_vendida: venda.qtd_calcados_vendida,
