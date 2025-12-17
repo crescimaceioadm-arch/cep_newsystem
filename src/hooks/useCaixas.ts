@@ -207,11 +207,13 @@ export function useFechamentoCaixa() {
       caixaId,
       valorSistema,
       valorContado,
+      justificativa,
       detalhesPagamentos,
     }: {
       caixaId: string;
       valorSistema: number;
       valorContado: number;
+      justificativa?: string | null;
       detalhesPagamentos?: DetalhesPagamentosFechamento;
     }) => {
       const diferenca = valorSistema - valorContado;
@@ -222,6 +224,7 @@ export function useFechamentoCaixa() {
         valor_sistema: valorSistema,
         valor_contado: valorContado,
         diferenca: diferenca,
+        justificativa: justificativa || null,
         detalhes_pagamentos: detalhesPagamentos ? JSON.stringify(detalhesPagamentos) : null,
       });
 

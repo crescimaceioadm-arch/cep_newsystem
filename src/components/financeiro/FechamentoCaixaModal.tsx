@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useFechamentoCaixa, useResumoVendasPorCaixa, Caixa } from "@/hooks/useCaixas";
 import { Banknote, CreditCard, Smartphone, Wallet, RefreshCcw } from "lucide-react";
 
@@ -23,6 +24,7 @@ export function FechamentoCaixaModal({
   caixa,
 }: FechamentoCaixaModalProps) {
   const [valorContado, setValorContado] = useState("");
+  const [justificativa, setJustificativa] = useState("");
   const { data: resumo, isLoading, refetch } = useResumoVendasPorCaixa(caixa?.nome || null);
   const { mutate: fecharCaixa, isPending } = useFechamentoCaixa();
 
@@ -30,6 +32,7 @@ export function FechamentoCaixaModal({
   useEffect(() => {
     if (open) {
       setValorContado("");
+      setJustificativa("");
       refetch();
     }
   }, [open, refetch]);
@@ -37,15 +40,19 @@ export function FechamentoCaixaModal({
   const valorSistema = caixa?.saldo_atual || 0;
   const valorContadoNum = parseFloat(valorContado) || 0;
   const diferenca = valorContadoNum - valorSistema;
+  const temDiferenca = Math.abs(diferenca) >= 0.01;
+  const justificativaObrigatoria = temDiferenca && !justificativa.trim();
 
   const handleConfirmar = () => {
     if (!caixa) return;
+    if (justificativaObrigatoria) return;
 
     fecharCaixa(
       {
         caixaId: caixa.id,
         valorSistema: valorSistema,
         valorContado: valorContadoNum,
+        justificativa: justificativa.trim() || null,
         detalhesPagamentos: resumo ? {
           dinheiro: resumo.totalDinheiro,
           pix: resumo.totalPix,
@@ -57,6 +64,7 @@ export function FechamentoCaixaModal({
       {
         onSuccess: () => {
           setValorContado("");
+          setJustificativa("");
           onOpenChange(false);
         },
       }
@@ -188,7 +196,7 @@ export function FechamentoCaixaModal({
           {valorContado && (
             <div
               className={`p-4 rounded-lg border-2 ${
-                diferenca === 0
+                !temDiferenca
                   ? "bg-green-500/10 border-green-500/30"
                   : diferenca > 0
                   ? "bg-blue-500/10 border-blue-500/30"
@@ -198,7 +206,7 @@ export function FechamentoCaixaModal({
               <p className="text-sm text-muted-foreground">Diferença (Físico - Sistema)</p>
               <p
                 className={`text-2xl font-bold ${
-                  diferenca === 0
+                  !temDiferenca
                     ? "text-green-600"
                     : diferenca > 0
                     ? "text-blue-600"
@@ -208,7 +216,7 @@ export function FechamentoCaixaModal({
                 {diferenca > 0 ? "+" : ""}R$ {diferenca.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {diferenca === 0
+                {!temDiferenca
                   ? "✅ Caixa batendo perfeitamente!"
                   : diferenca > 0
                   ? "ℹ️ Sobra de dinheiro na gaveta"
@@ -216,6 +224,29 @@ export function FechamentoCaixaModal({
               </p>
             </div>
           )}
+
+          {/* Campo Justificativa */}
+          <div className="space-y-2">
+            <Label htmlFor="justificativa" className="text-base font-medium">
+              Justificativa {temDiferenca && <span className="text-destructive">*</span>}
+            </Label>
+            <Textarea
+              id="justificativa"
+              placeholder={temDiferenca 
+                ? "Obrigatório: explique o motivo da diferença..." 
+                : "Opcional: adicione observações sobre o fechamento..."
+              }
+              value={justificativa}
+              onChange={(e) => setJustificativa(e.target.value)}
+              className={justificativaObrigatoria ? "border-destructive" : ""}
+              rows={3}
+            />
+            {justificativaObrigatoria && (
+              <p className="text-xs text-destructive">
+                ⚠️ Justificativa obrigatória quando há diferença entre valores
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-4 border-t">
@@ -224,7 +255,7 @@ export function FechamentoCaixaModal({
           </Button>
           <Button
             onClick={handleConfirmar}
-            disabled={!valorContado || isPending}
+            disabled={!valorContado || isPending || justificativaObrigatoria}
           >
             {isPending ? "Fechando..." : "Confirmar Fechamento"}
           </Button>
