@@ -24,8 +24,10 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { useUser, hasAccess } from "@/contexts/UserContext";
+import { useCaixa } from "@/contexts/CaixaContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { CaixaIndicator } from "./CaixaIndicator";
 
 const allMenuItems = [
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
@@ -40,6 +42,7 @@ const allMenuItems = [
 
 export function AppSidebar() {
   const { cargo } = useUser();
+  const { limparCaixa } = useCaixa();
   const navigate = useNavigate();
   
   // Filtra menu items baseado no cargo do usuário
@@ -50,6 +53,7 @@ export function AppSidebar() {
     if (error) {
       toast.error("Erro ao sair: " + error.message);
     } else {
+      limparCaixa(); // Limpa o caixa selecionado ao fazer logout
       toast.success("Você saiu do sistema");
       navigate("/auth");
     }
@@ -58,14 +62,17 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r-0 bg-sidebar-gradient">
       <SidebarHeader className="p-6 border-b border-amber-300/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shadow-sm">
-            <span className="text-slate-700 font-bold text-lg">CP</span>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shadow-sm">
+              <span className="text-slate-700 font-bold text-lg">CP</span>
+            </div>
+            <div>
+              <h1 className="font-semibold text-slate-800 text-lg">Cresci e Perdi</h1>
+              <p className="text-xs text-slate-600">Sistema de Gestão</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-semibold text-slate-800 text-lg">Cresci e Perdi</h1>
-            <p className="text-xs text-slate-600">Sistema de Gestão</p>
-          </div>
+          <CaixaIndicator />
         </div>
       </SidebarHeader>
       

@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { useEstoque } from "@/hooks/useEstoque";
 import { useFinalizarVenda } from "@/hooks/useVendas";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
+import { useCaixa } from "@/contexts/CaixaContext";
 import { PagamentoInput } from "@/components/vendas/PagamentoInput";
 import { ShoppingCart, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
 // CORREÇÃO 1: Usando o hook padrão do projeto em vez do Sonner (evita crash de Provider)
@@ -48,6 +49,7 @@ interface Pagamento {
 
 export default function Vendas() {
   const { toast } = useToast(); // Hook correto
+  const { caixaSelecionado } = useCaixa();
   
   // CORREÇÃO 2: Proteção contra dados undefined/null do banco
   const { data: rawEstoque, isLoading: loadingEstoque } = useEstoque();
@@ -132,6 +134,7 @@ export default function Vendas() {
       valor_total_venda: valorTotalNum,
       pagamentos: pagamentos.map(p => ({ ...p, valor: parseFloat(p.valor) || 0 })),
       vendedora_nome: vendedoraSelecionada || undefined,
+      caixa_origem: caixaSelecionado || "Caixa 1",
     }, {
       onSuccess: () => {
         setQuantidades({ baby: 0, infantil: 0, calcados: 0, brinquedos: 0, medios: 0, grandes: 0 });
