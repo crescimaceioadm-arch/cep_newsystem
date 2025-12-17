@@ -261,3 +261,24 @@ export function useRecusarAvaliacao() {
     },
   });
 }
+
+export function useDeleteAtendimento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("atendimentos")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        console.error("[useDeleteAtendimento] Erro:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
+    },
+  });
+}
