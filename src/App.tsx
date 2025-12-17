@@ -12,6 +12,7 @@ import Recepcao from "./pages/Recepcao";
 import Avaliacao from "./pages/Avaliacao";
 import Vendas from "./pages/Vendas";
 import VendasHistorico from "./pages/VendasHistorico";
+import HistoricoAtendimentos from "./pages/HistoricoAtendimentos";
 import Financeiro from "./pages/Financeiro";
 import Estoque from "./pages/Estoque";
 import Dashboard from "./pages/Dashboard";
@@ -35,6 +36,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/" element={<RequireRole><Recepcao /></RequireRole>} />
                 <Route path="/avaliacao" element={<RequireRole><Avaliacao /></RequireRole>} />
+                <Route path="/atendimentos/historico" element={<RequireRole><HistoricoAtendimentos /></RequireRole>} />
                 <Route path="/vendas" element={<RequireRole><Vendas /></RequireRole>} />
                 <Route path="/vendas/historico" element={<RequireRole><VendasHistorico /></RequireRole>} />
                 <Route path="/financeiro" element={<RequireRole><Financeiro /></RequireRole>} />

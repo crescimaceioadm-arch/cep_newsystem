@@ -7,6 +7,7 @@ import {
   Settings,
   Wallet,
   History,
+  ClipboardList,
   LogOut
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -33,6 +34,7 @@ const allMenuItems = [
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
   { title: "Cadastro", url: "/", icon: UserPlus },
   { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
+  { title: "Histórico Avaliações", url: "/atendimentos/historico", icon: ClipboardList },
   { title: "Histórico Vendas", url: "/vendas/historico", icon: History },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Estoque", url: "/estoque", icon: Box },
