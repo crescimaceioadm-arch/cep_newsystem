@@ -12,19 +12,29 @@ interface CaixaContextType {
   setShowModal: (show: boolean) => void;
 }
 
-const CaixaContext = createContext<CaixaContextType | undefined>(undefined);
+// Default values for when context is not yet available
+const defaultContextValue: CaixaContextType = {
+  caixaSelecionado: null,
+  setCaixaSelecionado: () => {},
+  limparCaixa: () => {},
+  showModal: false,
+  setShowModal: () => {},
+};
+
+const CaixaContext = createContext<CaixaContextType>(defaultContextValue);
 
 export function CaixaProvider({ children }: { children: ReactNode }) {
-  const [caixaSelecionado, setCaixaState] = useState<CaixaOption | null>(null);
-  const [showModal, setShowModal] = useState(false);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && ["Caixa 1", "Caixa 2", "Caixa 3"].includes(stored)) {
-      setCaixaState(stored as CaixaOption);
+  const [caixaSelecionado, setCaixaState] = useState<CaixaOption | null>(() => {
+    // Initialize from localStorage synchronously to prevent flicker
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored && ["Caixa 1", "Caixa 2", "Caixa 3"].includes(stored)) {
+        return stored as CaixaOption;
+      }
     }
-  }, []);
+    return null;
+  });
+  const [showModal, setShowModal] = useState(false);
 
   const setCaixaSelecionado = (caixa: CaixaOption) => {
     setCaixaState(caixa);
@@ -53,9 +63,5 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
 }
 
 export function useCaixa() {
-  const context = useContext(CaixaContext);
-  if (!context) {
-    throw new Error("useCaixa must be used within a CaixaProvider");
-  }
-  return context;
+  return useContext(CaixaContext);
 }
