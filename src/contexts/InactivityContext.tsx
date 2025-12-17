@@ -9,11 +9,15 @@ interface InactivityContextType {
   resetTimer: () => void;
 }
 
-const InactivityContext = createContext<InactivityContextType | undefined>(undefined);
+const defaultContextValue: InactivityContextType = {
+  resetTimer: () => {},
+};
+
+const InactivityContext = createContext<InactivityContextType>(defaultContextValue);
 
 export function InactivityProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -62,9 +66,5 @@ export function InactivityProvider({ children }: { children: ReactNode }) {
 }
 
 export function useInactivity() {
-  const context = useContext(InactivityContext);
-  if (!context) {
-    throw new Error("useInactivity must be used within an InactivityProvider");
-  }
-  return context;
+  return useContext(InactivityContext);
 }
