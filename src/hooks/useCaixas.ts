@@ -14,7 +14,8 @@ export interface MovimentacaoCaixa {
   id: string;
   caixa_origem_id: string | null;
   caixa_destino_id: string | null;
-  tipo: 'entrada' | 'saida' | 'transferencia_entrada' | 'transferencia_saida' | 'venda';
+  // 🔥 TIPOS REAIS DO BANCO:
+  tipo: 'venda' | 'pagamento_avaliacao' | 'entrada' | 'saida' | 'transferencia_entre_caixas';
   valor: number;
   motivo: string | null;
   data_hora: string;
@@ -30,6 +31,185 @@ export interface FechamentoCaixa {
   valor_contado: number;
   diferenca: number;
   created_at: string;
+}
+
+/**
+ * 🛡️ HOOK BLINDADO: Busca o saldo inicial do dia anterior
+ * Com tratamento de erros e fallbacks seguros
+ */
+export function useSaldoInicial(caixaId: string | null, dataInicio: string | null) {
+  return useQuery({
+    queryKey: ["saldo_inicial", caixaId, dataInicio],
+    enabled: !!caixaId && !!dataInicio,
+    queryFn: async () => {
+      try {
+        console.log("🔍 [SALDO INICIAL] Iniciando busca...", { caixaId, dataInicio });
+        
+        // Null checks
+        if (!caixaId || !dataInicio) {
+          console.log("⚠️ [SALDO INICIAL] Parâmetros inválidos, retornando 0");
+          return { valor: 0, fonte: "fallback", data_fechamento: null };
+        }
+
+        // Calcular dia anterior com segurança
+        let diaAnterior: string;
+        try {
+          const dataInicialDate = new Date(dataInicio + 'T00:00:00');
+          if (isNaN(dataInicialDate.getTime())) {
+            throw new Error("Data inválida");
+          }
+          dataInicialDate.setDate(dataInicialDate.getDate() - 1);
+          diaAnterior = dataInicialDate.toISOString().split('T')[0];
+        } catch (err) {
+          console.error("❌ [SALDO INICIAL] Erro ao calcular dia anterior:", err);
+          return { valor: 0, fonte: "erro_data", data_fechamento: null };
+        }
+
+        console.log("✅ [SALDO INICIAL] Dia anterior:", diaAnterior);
+
+        // Buscar fechamento do dia anterior
+        // 🔥 CORREÇÃO: created_at NÃO EXISTE! Removendo .order()
+        const { data, error } = await supabase
+          .from("fechamentos_caixa")
+          .select("*")
+          .eq("caixa_id", caixaId)
+          .eq("data_fechamento", diaAnterior)
+          .limit(1)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error("❌ [SALDO INICIAL] Erro ao buscar fechamento:", error);
+          return { valor: 0, fonte: "erro_query", data_fechamento: null };
+        }
+
+        if (data) {
+          console.log("✅ [SALDO INICIAL] Fechamento encontrado:", data.valor_sistema);
+          return { 
+            valor: data.valor_sistema || 0, 
+            fonte: "fechamento", 
+            data_fechamento: data.data_fechamento 
+          };
+        }
+
+        // Fallback: buscar o fechamento mais recente antes da data
+        const { data: dataFallback, error: errorFallback } = await supabase
+          .from("fechamentos_caixa")
+          .select("*")
+          .eq("caixa_id", caixaId)
+          .lt("data_fechamento", dataInicio)
+          .order("data_fechamento", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (dataFallback && !errorFallback) {
+          console.log("✅ [SALDO INICIAL] Fechamento anterior encontrado:", dataFallback.valor_sistema);
+          return { 
+            valor: dataFallback.valor_sistema || 0, 
+            fonte: "fechamento_anterior",
+            data_fechamento: dataFallback.data_fechamento 
+          };
+        }
+
+        console.log("⚠️ [SALDO INICIAL] Nenhum fechamento encontrado, usando 0");
+        return { valor: 0, fonte: "sem_fechamento", data_fechamento: null };
+
+      } catch (error) {
+        console.error("❌ [SALDO INICIAL] Erro crítico:", error);
+        return { valor: 0, fonte: "erro_critico", data_fechamento: null };
+      }
+    },
+  });
+}
+
+/**
+ * 🛡️ HOOK BLINDADO: Busca movimentações em dinheiro do período
+ * Com tratamento de erros e validações
+ */
+export function useMovimentacoesDinheiro(
+  caixaId: string | null,
+  dataInicio: string | null,
+  dataFim: string | null
+) {
+  return useQuery({
+    queryKey: ["movimentacoes_dinheiro", caixaId, dataInicio, dataFim],
+    enabled: !!caixaId && !!dataInicio && !!dataFim,
+    queryFn: async () => {
+      try {
+        console.log("🔍 [MOVIMENTAÇÕES] Iniciando busca...", { caixaId, dataInicio, dataFim });
+
+        // Null checks
+        if (!caixaId || !dataInicio || !dataFim) {
+          console.log("⚠️ [MOVIMENTAÇÕES] Parâmetros inválidos");
+          return [];
+        }
+
+        // Validar datas
+        const dataInicioObj = new Date(dataInicio + 'T00:00:00');
+        const dataFimObj = new Date(dataFim + 'T23:59:59');
+        
+        if (isNaN(dataInicioObj.getTime()) || isNaN(dataFimObj.getTime())) {
+          console.error("❌ [MOVIMENTAÇÕES] Datas inválidas");
+          return [];
+        }
+
+        const dataHoraInicio = dataInicioObj.toISOString();
+        const dataHoraFim = dataFimObj.toISOString();
+
+        console.log("✅ [MOVIMENTAÇÕES] Range:", { dataHoraInicio, dataHoraFim });
+
+        // 🔍 BUSCAR MOVIMENTAÇÕES DO CAIXA
+        // A tabela movimentacoes_caixa NÃO TEM coluna de método de pagamento!
+        // Todas as movimentações nela SÃO em dinheiro físico:
+        // - entrada: dinheiro entrando no caixa
+        // - saida: dinheiro saindo do caixa  
+        // - transferencia: dinheiro movendo entre caixas
+        // - venda: ATUALMENTE NÃO GRAVA VENDAS AQUI (verificar com logs)
+        
+        // 🔥 CORREÇÃO: caixa_id NÃO EXISTE! Usar apenas origem e destino
+        const { data, error } = await supabase
+          .from("movimentacoes_caixa")
+          .select(`
+            id, 
+            tipo, 
+            valor, 
+            motivo, 
+            data_hora,
+            caixa_origem_id, 
+            caixa_destino_id,
+            caixa_origem:caixas!movimentacoes_caixa_caixa_origem_id_fkey(nome),
+            caixa_destino:caixas!movimentacoes_caixa_caixa_destino_id_fkey(nome)
+          `)
+          .or(`caixa_origem_id.eq.${caixaId},caixa_destino_id.eq.${caixaId}`)
+          .gte("data_hora", dataHoraInicio)
+          .lte("data_hora", dataHoraFim)
+          .order("data_hora", { ascending: true });
+
+        if (error) {
+          console.error("❌ [MOVIMENTAÇÕES] Erro na query:", error);
+          throw error;
+        }
+
+        // 🚨🚨🚨 DEBUG VISUAL COMPLETO 🚨🚨🚨
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("🔍 DADOS DO BANCO (movimentacoes_caixa):");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📊 Total de registros:", data?.length || 0);
+        console.log("📋 Tipos encontrados:", data?.map(m => m.tipo).join(', ') || 'nenhum');
+        console.log("🔍 ANÁLISE DETALHADA:");
+        data?.forEach((mov, i) => {
+          console.log(`  [${i+1}] tipo="${mov.tipo}" | valor=${mov.valor} | origem_id=${mov.caixa_origem_id || 'NULL'} | destino_id=${mov.caixa_destino_id || 'NULL'} | origem_nome=${mov.caixa_origem?.[0]?.nome || 'NULL'} | destino_nome=${mov.caixa_destino?.[0]?.nome || 'NULL'}`);
+        });
+        console.log("📦 DADOS BRUTOS:", data);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        
+        return (data as MovimentacaoCaixa[]) || [];
+
+      } catch (error) {
+        console.error("❌ [MOVIMENTAÇÕES] Erro crítico:", error);
+        return [];
+      }
+    },
+  });
 }
 
 export function useCaixas() {
@@ -163,20 +343,33 @@ export function useMovimentacaoManual() {
       // Atualizar saldo
       const { error: updateError } = await supabase
         .from("caixas")
-        .update({ saldo_atual: novoSaldo, updated_at: new Date().toISOString() })
+        .update({ saldo_atual: novoSaldo })
         .eq("id", caixa.id);
 
       if (updateError) throw updateError;
 
       // Registrar movimentação
+      // Para ENTRADA: destino é o caixa que recebeu
+      // Para SAÍDA: origem é o caixa que perdeu
+      const movimentacao = tipo === "entrada" 
+        ? {
+            caixa_destino_id: caixa.id,
+            caixa_origem_id: null,
+            tipo: tipo,
+            valor: valor,
+            motivo: motivo,
+          }
+        : {
+            caixa_origem_id: caixa.id,
+            caixa_destino_id: null,
+            tipo: tipo,
+            valor: valor,
+            motivo: motivo,
+          };
+
       const { error: movError } = await supabase
         .from("movimentacoes_caixa")
-        .insert({
-          caixa_id: caixa.id,
-          tipo: tipo,
-          valor: valor,
-          motivo: motivo,
-        });
+        .insert(movimentacao);
 
       if (movError) throw movError;
     },

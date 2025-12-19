@@ -26,12 +26,15 @@ import {
   useMovimentacoesCaixa,
   useTransferenciaCaixa,
   useMovimentacaoManual,
+  useSaldoInicial,
+  useMovimentacoesDinheiro,
   Caixa,
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
-import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw } from "lucide-react";
+import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function Financeiro() {
   const { caixaSelecionado } = useCaixa();
@@ -59,6 +62,9 @@ export default function Financeiro() {
   // Filtro de Data
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
+  
+  // Estado para capturar erros
+  const [erroRenderizacao, setErroRenderizacao] = useState<string | null>(null);
 
   const handleTransferencia = () => {
     if (!origem || !destino || !valorTransf || origem === destino) return;
@@ -120,91 +126,196 @@ export default function Financeiro() {
     return "text-primary";
   };
 
-  // Calcular extrato do caixa selecionado
+  // 🛡️ Handlers seguros para mudança de data
+  const handleDataInicioChange = (novaData: string) => {
+    try {
+      console.log("📅 Mudando data início:", novaData);
+      setErroRenderizacao(null);
+      setDataInicio(novaData || "");
+    } catch (error) {
+      console.error("❌ Erro ao mudar data início:", error);
+      setErroRenderizacao("Erro ao mudar data inicial");
+    }
+  };
+
+  const handleDataFimChange = (novaData: string) => {
+    try {
+      console.log("📅 Mudando data fim:", novaData);
+      setErroRenderizacao(null);
+      setDataFim(novaData || "");
+    } catch (error) {
+      console.error("❌ Erro ao mudar data fim:", error);
+      setErroRenderizacao("Erro ao mudar data final");
+    }
+  };
+
+  // Buscar caixa atual
+  const caixaAtual = useMemo(() => {
+    if (!caixaSelecionado || !caixas) return null;
+    return caixas.find(c => c.nome === caixaSelecionado) || null;
+  }, [caixaSelecionado, caixas]);
+
+  // Buscar saldo inicial (do fechamento do dia anterior)
+  const { data: saldoInicialData } = useSaldoInicial(
+    caixaAtual?.id || null,
+    dataInicio || null
+  );
+
+  // Buscar movimentações em dinheiro do período
+  const { data: movimentacoesPeriodo } = useMovimentacoesDinheiro(
+    caixaAtual?.id || null,
+    dataInicio || null,
+    dataFim || null
+  );
+
+  // 🛡️ CÁLCULO BLINDADO: Extrato com try/catch
   const extratoCalculado = useMemo(() => {
-    if (!caixaSelecionado || !caixas || !movimentacoes) {
-      return {
-        caixaAtual: null,
-        movimentacoesFiltradas: [],
-        saldoInicial: 0,
-        saldoFinal: 0,
-        totalEntradas: 0,
-        totalSaidas: 0
-      };
-    }
+    try {
+      console.log("🧮 [CÁLCULO] Iniciando...");
 
-    const caixaAtual = caixas.find(c => c.nome === caixaSelecionado);
-    if (!caixaAtual) {
-      return {
-        caixaAtual: null,
-        movimentacoesFiltradas: [],
-        saldoInicial: 0,
-        saldoFinal: 0,
-        totalEntradas: 0,
-        totalSaidas: 0
-      };
-    }
+      // Sem caixa selecionado
+      if (!caixaSelecionado || !caixaAtual) {
+        return {
+          caixaAtual: null,
+          movimentacoes: [],
+          saldoInicial: 0,
+          saldoFinal: 0,
+          totalEntradas: 0,
+          totalSaidas: 0
+        };
+      }
 
-    // Filtrar movimentações do caixa selecionado
-    let movimentacoesFiltradas = movimentacoes.filter(mov => {
-      const origemNome = mov.caixa_origem?.[0]?.nome;
-      const destinoNome = mov.caixa_destino?.[0]?.nome;
-      return origemNome === caixaSelecionado || destinoNome === caixaSelecionado;
-    });
+      // Sem filtro de data: usar saldo atual do caixa
+      if (!dataInicio || !dataFim) {
+        const movs = movimentacoes?.filter(mov => {
+          const origemNome = mov.caixa_origem?.[0]?.nome;
+          const destinoNome = mov.caixa_destino?.[0]?.nome;
+          return origemNome === caixaSelecionado || destinoNome === caixaSelecionado;
+        }).slice(0, 20) || [];
 
-    // Filtrar por data se houver filtros
-    if (dataInicio || dataFim) {
-      movimentacoesFiltradas = movimentacoesFiltradas.filter(mov => {
-        if (!mov.data_hora) return false;
+        return {
+          caixaAtual,
+          movimentacoes: movs,
+          saldoInicial: 0,
+          saldoFinal: caixaAtual.saldo_atual,
+          totalEntradas: 0,
+          totalSaidas: 0
+        };
+      }
+
+      // COM FILTRO DE DATA: Usar nova lógica
+      const saldoInicial = saldoInicialData?.valor || 0;
+      const movs = movimentacoesPeriodo || [];
+
+      console.log("═══════════════════════════════════════");
+      console.log("🧮 [CÁLCULO] DIAGNÓSTICO COMPLETO");
+      console.log("═══════════════════════════════════════");
+      console.log("📊 Dados recebidos:");
+      console.log("  • Saldo Inicial:", saldoInicial, "(fonte:", saldoInicialData?.fonte, ")");
+      console.log("  • Total de Movimentações:", movs.length);
+      console.log("  • Caixa Selecionado:", caixaSelecionado);
+      console.log("  • Caixa ID:", caixaAtual?.id);
+      console.log("");
+
+      if (movs.length === 0) {
+        console.log("⚠️ ATENÇÃO: Nenhuma movimentação encontrada!");
+        console.log("   Possíveis causas:");
+        console.log("   1. Não há movimentações no período");
+        console.log("   2. O caixa_id não corresponde");
+        console.log("   3. As datas estão fora do range");
+        console.log("═══════════════════════════════════════");
+      }
+
+      let totalEntradas = 0;
+      let totalSaidas = 0;
+
+      movs.forEach((mov, idx) => {
+        const tipo = mov.tipo;
+        const destinoId = mov.caixa_destino_id;
+        const origemId = mov.caixa_origem_id;
+        const caixaIdAtual = caixaAtual?.id;
         
-        // Criar data da movimentação no horário local (sem conversão UTC)
-        const movData = new Date(mov.data_hora);
-        const ano = movData.getFullYear();
-        const mes = String(movData.getMonth() + 1).padStart(2, '0');
-        const dia = String(movData.getDate()).padStart(2, '0');
-        const movDataStr = `${ano}-${mes}-${dia}`; // Formato: YYYY-MM-DD
-        
-        // Comparar strings no formato YYYY-MM-DD
-        if (dataInicio && movDataStr < dataInicio) {
-          return false;
+        console.log(`\n📌 Movimentação #${idx + 1}:`);
+        console.log(`   Tipo: ${tipo}`);
+        console.log(`   Valor: R$ ${mov.valor}`);
+        console.log(`   Data: ${mov.data_hora}`);
+        console.log(`   Origem ID: ${origemId || 'N/A'}`);
+        console.log(`   Destino ID: ${destinoId || 'N/A'}`);
+        console.log(`   Caixa Atual ID: ${caixaIdAtual}`);
+
+        // 💰 VENDAS e PAGAMENTOS = ENTRADA (positivo) 
+        // Vendas têm destino_id = caixa que recebeu
+        if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
+          // Se o destino é o caixa selecionado, é uma ENTRADA
+          if (destinoId === caixaIdAtual) {
+            totalEntradas += mov.valor;
+            console.log(`   ✅ CLASSIFICAÇÃO: ENTRADA - Venda/Pagamento (+${mov.valor})`);
+          }
+        } 
+        // 📥 ENTRADAS MANUAIS = ENTRADA (positivo)
+        else if (tipo === 'entrada') {
+          totalEntradas += mov.valor;
+          console.log(`   ✅ CLASSIFICAÇÃO: ENTRADA (+${mov.valor})`);
         }
-        
-        if (dataFim && movDataStr > dataFim) {
-          return false;
+        // 📤 SAÍDAS = NEGATIVO (subtrai)
+        else if (tipo === 'saida') {
+          totalSaidas += mov.valor;
+          console.log(`   ❌ CLASSIFICAÇÃO: SAÍDA (-${mov.valor})`);
         }
-        
-        return true;
+        // 🔄 TRANSFERÊNCIAS: depende da direção
+        else if (tipo === 'transferencia_entre_caixas' || tipo.includes('transferencia')) {
+          // Se o destino é o caixa selecionado = RECEBEU dinheiro (entrada)
+          if (destinoId === caixaIdAtual) {
+            totalEntradas += mov.valor;
+            console.log(`   ✅ CLASSIFICAÇÃO: ENTRADA por Transferência (+${mov.valor})`);
+          } 
+          // Se a origem é o caixa selecionado = ENVIOU dinheiro (saída)
+          else if (origemId === caixaIdAtual) {
+            totalSaidas += mov.valor;
+            console.log(`   ❌ CLASSIFICAÇÃO: SAÍDA por Transferência (-${mov.valor})`);
+          } else {
+            console.log(`   ⚠️ ATENÇÃO: Transferência não corresponde ao caixa selecionado!`);
+          }
+        }
       });
+
+      const saldoFinal = saldoInicial + totalEntradas - totalSaidas;
+
+      console.log("");
+      console.log("═══════════════════════════════════════");
+      console.log("🎯 RESULTADO FINAL:");
+      console.log("═══════════════════════════════════════");
+      console.log(`   Saldo Inicial:    R$ ${saldoInicial.toFixed(2)}`);
+      console.log(`   Total Entradas:  +R$ ${totalEntradas.toFixed(2)}`);
+      console.log(`   Total Saídas:    -R$ ${totalSaidas.toFixed(2)}`);
+      console.log(`   ─────────────────────────────────────`);
+      console.log(`   Saldo Final:      R$ ${saldoFinal.toFixed(2)}`);
+      console.log("");
+      console.log(`   Fórmula: ${saldoInicial} + ${totalEntradas} - ${totalSaidas} = ${saldoFinal}`);
+      console.log("═══════════════════════════════════════");
+
+      return {
+        caixaAtual,
+        movimentacoes: movs,
+        saldoInicial,
+        saldoFinal,
+        totalEntradas,
+        totalSaidas
+      };
+
+    } catch (error) {
+      console.error("❌ [CÁLCULO] Erro crítico:", error);
+      setErroRenderizacao(`Erro ao calcular extrato: ${error}`);
+      return {
+        caixaAtual: null,
+        movimentacoes: [],
+        saldoInicial: 0,
+        saldoFinal: 0,
+        totalEntradas: 0,
+        totalSaidas: 0
+      };
     }
-
-    // Calcular totais das movimentações filtradas
-    let totalEntradas = 0;
-    let totalSaidas = 0;
-
-    movimentacoesFiltradas.forEach(mov => {
-      const destinoNome = mov.caixa_destino?.[0]?.nome;
-      const origemNome = mov.caixa_origem?.[0]?.nome;
-      
-      if (destinoNome === caixaSelecionado) {
-        totalEntradas += mov.valor;
-      }
-      if (origemNome === caixaSelecionado) {
-        totalSaidas += mov.valor;
-      }
-    });
-
-    const saldoFinal = caixaAtual.saldo_atual;
-    const saldoInicial = saldoFinal - totalEntradas + totalSaidas;
-
-    return {
-      caixaAtual,
-      movimentacoesFiltradas,
-      saldoInicial,
-      saldoFinal,
-      totalEntradas,
-      totalSaidas
-    };
-  }, [caixaSelecionado, caixas, movimentacoes, dataInicio, dataFim]);
+  }, [caixaSelecionado, caixaAtual, movimentacoes, movimentacoesPeriodo, saldoInicialData, dataInicio, dataFim]);
 
   return (
     <MainLayout title="Financeiro / Caixas">
@@ -464,7 +575,7 @@ export default function Financeiro() {
                         id="dataInicio"
                         type="date"
                         value={dataInicio}
-                        onChange={(e) => setDataInicio(e.target.value)}
+                        onChange={(e) => handleDataInicioChange(e.target.value)}
                         className="w-[160px]"
                       />
                     </div>
@@ -474,7 +585,7 @@ export default function Financeiro() {
                         id="dataFim"
                         type="date"
                         value={dataFim}
-                        onChange={(e) => setDataFim(e.target.value)}
+                        onChange={(e) => handleDataFimChange(e.target.value)}
                         className="w-[160px]"
                       />
                     </div>
@@ -534,51 +645,48 @@ export default function Financeiro() {
                   </div>
                   
                   {/* Info sobre o filtro */}
-                  {(dataInicio || dataFim) && (
-                    <div className="text-sm text-muted-foreground px-3">
-                      {extratoCalculado.movimentacoesFiltradas.length > 0 ? (
-                        <span className="text-green-700">
-                          ✓ Encontradas {extratoCalculado.movimentacoesFiltradas.length} movimentações 
-                          {dataInicio && dataFim && dataInicio === dataFim ? 
-                            ` no dia ${new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')}` :
-                            ` entre ${dataInicio ? new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR') : 'início'} e ${dataFim ? new Date(dataFim + 'T12:00:00').toLocaleDateString('pt-BR') : 'hoje'}`
-                          }
-                        </span>
-                      ) : (
-                        <span className="text-orange-600">
-                          ⚠️ Nenhuma movimentação encontrada 
-                          {dataInicio && dataFim && dataInicio === dataFim ? 
-                            ` no dia ${new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')}` :
-                            ` entre ${dataInicio ? new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR') : 'início'} e ${dataFim ? new Date(dataFim + 'T12:00:00').toLocaleDateString('pt-BR') : 'hoje'}`
-                          }
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {!dataInicio && !dataFim && (
-                    <div className="text-sm px-3">
-                      {extratoCalculado.movimentacoesFiltradas.length > 0 ? (
-                        <span className="text-blue-600">
-                          📋 Mostrando todas as {extratoCalculado.movimentacoesFiltradas.length} movimentações do caixa
-                        </span>
-                      ) : (
-                        <div className="space-y-1">
-                          <span className="text-orange-600">
-                            ⚠️ Nenhuma movimentação encontrada para este caixa
-                          </span>
-                          <div className="text-xs text-gray-500">
-                            Debug: Total de movimentações no sistema: {movimentacoes?.length || 0}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="text-sm px-3 space-y-2">
+                    {dataInicio && dataFim ? (
+                      <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                        <p className="font-bold text-blue-900">🔍 Buscando movimentações:</p>
+                        <p className="text-blue-700">Período: {dataInicio} até {dataFim}</p>
+                        <p className="text-blue-700">Encontradas: {extratoCalculado.movimentacoes.length}</p>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                        <p className="text-gray-700">📋 Mostrando últimas {movimentacoes?.length || 0} movimentações do sistema</p>
+                        <p className="text-xs text-gray-500">Selecione um período para filtrar</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           </CardHeader>
           <CardContent>
-            {!caixaSelecionado ? (
+            {/* 🚨 TELA DE ERRO VISUAL */}
+            {erroRenderizacao ? (
+              <Card className="border-red-500 bg-red-50">
+                <CardContent className="py-8">
+                  <div className="flex flex-col items-center gap-4 text-center">
+                    <AlertTriangle className="h-12 w-12 text-red-600" />
+                    <div>
+                      <h3 className="text-lg font-bold text-red-900 mb-2">Erro ao Carregar Extrato</h3>
+                      <p className="text-sm text-red-700 mb-4">{erroRenderizacao}</p>
+                      <Button 
+                        onClick={() => {
+                          setErroRenderizacao(null);
+                          window.location.reload();
+                        }}
+                        variant="destructive"
+                      >
+                        Recarregar Página
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : !caixaSelecionado ? (
               <div className="text-center py-8 text-muted-foreground">
                 <p>Selecione um caixa no login para ver o extrato</p>
               </div>
@@ -586,140 +694,354 @@ export default function Financeiro() {
               <p className="text-muted-foreground">Carregando...</p>
             ) : (
               <>
-                {/* Resumo */}
-                <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-600 mb-1">Saldo Inicial</p>
-                    <p className="text-xl font-bold text-blue-600">R$ {extratoCalculado.saldoInicial.toFixed(2)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-600 mb-1">Total Movimentações</p>
-                    <p className="text-sm text-green-600">+ R$ {extratoCalculado.totalEntradas.toFixed(2)}</p>
-                    <p className="text-sm text-red-600">- R$ {extratoCalculado.totalSaidas.toFixed(2)}</p>
-                  </div>
-                  <div className="text-center bg-purple-50 rounded-lg p-2">
-                    <p className="text-xs text-gray-600 mb-1">Saldo Fechamento</p>
-                    <p className="text-xl font-bold text-purple-600">R$ {extratoCalculado.saldoFinal.toFixed(2)}</p>
-                  </div>
+                {/* 📊 CARDS DE RESUMO */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  {/* Card 1: Saldo Anterior */}
+                  <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-blue-700 flex items-center gap-2">
+                        <Wallet className="h-4 w-4" />
+                        Saldo Anterior
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold text-blue-900">
+                        R$ {extratoCalculado.saldoInicial.toFixed(2)}
+                      </p>
+                      {dataInicio && saldoInicialData?.fonte && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          {saldoInicialData.fonte === 'fechamento' ? '✓ Fechamento' : 
+                           saldoInicialData.fonte === 'fechamento_anterior' ? '⚠ Fechamento anterior' :
+                           saldoInicialData.fonte === 'sem_fechamento' ? '⚠ Sem fechamento' : 'Calculado'}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Card 2: Total Entradas */}
+                  <Card className="bg-gradient-to-br from-green-50 to-green-100/50 border-green-200">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-green-700 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Entradas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold text-green-900">
+                        + R$ {extratoCalculado.totalEntradas.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        Vendas e recebimentos
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card 3: Total Saídas */}
+                  <Card className="bg-gradient-to-br from-red-50 to-red-100/50 border-red-200">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-red-700 flex items-center gap-2">
+                        <TrendingDown className="h-4 w-4" />
+                        Saídas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold text-red-900">
+                        - R$ {extratoCalculado.totalSaidas.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-red-600 mt-1">
+                        Despesas e retiradas
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card 4: Saldo Atual */}
+                  <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-200">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-purple-700 flex items-center gap-2">
+                        <Wallet className="h-4 w-4" />
+                        Saldo Atual
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold text-purple-900">
+                        R$ {extratoCalculado.saldoFinal.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-purple-600 mt-1">
+                        Do período
+                      </p>
+                    </CardContent>
+                  </Card>
                 </div>
 
-                {/* Tabela */}
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data/Hora</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead className="text-right">Entrada (+)</TableHead>
-                      <TableHead className="text-right">Saída (-)</TableHead>
-                      <TableHead className="text-right">Saldo</TableHead>
-                      <TableHead>Motivo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {/* Primeira linha: SALDO FINAL (FECHAMENTO) */}
-                    <TableRow className="bg-purple-50 font-bold">
-                      <TableCell colSpan={4} className="text-right">VALOR DE FECHAMENTO:</TableCell>
-                      <TableCell className="text-right text-purple-700 text-lg">
-                        R$ {extratoCalculado.saldoFinal.toFixed(2)}
-                      </TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
+                {/* 📈 GRÁFICO DE EVOLUÇÃO */}
+                {extratoCalculado.movimentacoes.length > 0 && dataInicio && dataFim && (
+                  <Card className="mb-6">
+                    <CardHeader>
+                      <CardTitle className="text-lg">📈 Evolução do Saldo</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <AreaChart
+                          data={(() => {
+                            try {
+                              let saldo = extratoCalculado.saldoInicial;
+                              const dados = [{ momento: 'Início', saldo }];
+                              
+                              extratoCalculado.movimentacoes.forEach((mov, idx) => {
+                                const tipo = mov.tipo;
+                                const destinoId = mov.caixa_destino_id;
+                                const origemId = mov.caixa_origem_id;
+                                const caixaIdAtual = caixaAtual?.id;
+                                
+                                // 🔥 TIPOS REAIS: venda, pagamento_avaliacao, entrada, saida, transferencia_entre_caixas
+                                if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
+                                  if (destinoId === caixaIdAtual) saldo += mov.valor;
+                                } else if (tipo === 'entrada') {
+                                  saldo += mov.valor;
+                                } else if (tipo === 'saida') {
+                                  saldo -= mov.valor;
+                                } else if (tipo === 'transferencia_entre_caixas' || tipo.includes('transferencia')) {
+                                  if (destinoId === caixaIdAtual) saldo += mov.valor;
+                                  else if (origemId === caixaIdAtual) saldo -= mov.valor;
+                                }
+                                
+                                dados.push({ momento: `#${idx + 1}`, saldo });
+                              });
+                              
+                              return dados;
+                            } catch (err) {
+                              console.error("Erro ao gerar dados do gráfico:", err);
+                              return [{ momento: 'Início', saldo: 0 }];
+                            }
+                          })()}
+                          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                        >
+                          <defs>
+                            <linearGradient id="colorSaldo" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="momento" tick={{ fontSize: 12 }} />
+                          <YAxis tickFormatter={(value) => `R$ ${value.toFixed(0)}`} />
+                          <Tooltip 
+                            formatter={(value: number) => `R$ ${value.toFixed(2)}`}
+                            contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '4px' }}
+                          />
+                          <Area type="monotone" dataKey="saldo" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorSaldo)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
 
-                    {/* Movimentações (do mais recente para o mais antigo) */}
-                    {extratoCalculado.movimentacoesFiltradas.map((mov, index) => {
-                      const origemNome = mov.caixa_origem?.[0]?.nome;
-                      const destinoNome = mov.caixa_destino?.[0]?.nome;
-                      const isEntrada = destinoNome === caixaSelecionado;
-                      const isSaida = origemNome === caixaSelecionado;
-                      
-                      // Calcular saldo acumulado até esta movimentação
-                      let saldoAteAqui = extratoCalculado.saldoInicial;
-                      for (let i = extratoCalculado.movimentacoesFiltradas.length - 1; i > index; i--) {
-                        const m = extratoCalculado.movimentacoesFiltradas[i];
-                        if (m.caixa_destino?.[0]?.nome === caixaSelecionado) {
-                          saldoAteAqui += m.valor;
-                        }
-                        if (m.caixa_origem?.[0]?.nome === caixaSelecionado) {
-                          saldoAteAqui -= m.valor;
-                        }
-                      }
-                      
-                      let descricao = "";
-                      if (mov.tipo === "transferencia") {
-                        if (isEntrada) descricao = `Recebido de ${origemNome}`;
-                        else if (isSaida) descricao = `Transferido para ${destinoNome}`;
-                      } else {
-                        descricao = mov.tipo.charAt(0).toUpperCase() + mov.tipo.slice(1).replace(/_/g, " ");
-                      }
-
-                      return (
-                        <TableRow key={mov.id}>
-                          <TableCell className="whitespace-nowrap">
-                            {mov.data_hora ? format(new Date(mov.data_hora), "dd/MM HH:mm", { locale: ptBR }) : "-"}
-                          </TableCell>
-                          <TableCell>{descricao}</TableCell>
-                          <TableCell className="text-right text-green-600 font-semibold">
-                            {isEntrada ? `R$ ${mov.valor.toFixed(2)}` : "-"}
-                          </TableCell>
-                          <TableCell className="text-right text-red-600 font-semibold">
-                            {isSaida ? `R$ ${mov.valor.toFixed(2)}` : "-"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            R$ {saldoAteAqui.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate text-xs">
-                            {mov.motivo || "-"}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-
-                    {/* Última linha: SALDO INICIAL */}
-                    <TableRow className="bg-blue-50 font-bold border-t-2">
-                      <TableCell colSpan={4} className="text-right">SALDO INICIAL (Abertura):</TableCell>
-                      <TableCell className="text-right text-blue-700 text-lg">
-                        R$ {extratoCalculado.saldoInicial.toFixed(2)}
-                      </TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-
-                    {extratoCalculado.movimentacoesFiltradas.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-4">
-                          <div className="space-y-2">
-                            <p className="text-muted-foreground">
-                              Nenhuma movimentação encontrada para este caixa
-                            </p>
-                            <div className="text-xs text-gray-500 space-y-1">
-                              <p>Debug Info:</p>
-                              <p>• Caixa Selecionado: {caixaSelecionado}</p>
-                              <p>• Total de Movimentações no Sistema: {movimentacoes?.length || 0}</p>
-                              <p>• Saldo do Caixa: R$ {extratoCalculado.saldoFinal.toFixed(2)}</p>
-                              {movimentacoes && movimentacoes.length > 0 && (
-                                <details className="mt-2">
-                                  <summary className="cursor-pointer text-blue-600 hover:underline">
-                                    Ver primeiras movimentações (debug)
-                                  </summary>
-                                  <div className="mt-2 text-left max-h-40 overflow-auto bg-gray-50 p-2 rounded">
-                                    {movimentacoes.slice(0, 3).map((mov, i) => (
-                                      <div key={i} className="mb-2 text-xs border-b pb-1">
-                                        <p>Tipo: {mov.tipo}</p>
-                                        <p>Origem: {mov.caixa_origem?.[0]?.nome || "null"}</p>
-                                        <p>Destino: {mov.caixa_destino?.[0]?.nome || "null"}</p>
-                                        <p>Valor: R$ {mov.valor.toFixed(2)}</p>
-                                        <p>Data: {mov.data_hora ? format(new Date(mov.data_hora), "dd/MM HH:mm") : "-"}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </details>
-                              )}
-                            </div>
+                {/* 🐛 DEBUG VISUAL - Dados Brutos do Banco */}
+                {movimentacoes && (
+                  <Card className="mb-4 bg-yellow-50 border-yellow-300">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm text-yellow-900 flex items-center gap-2">
+                        <span className="text-lg">🐛</span>
+                        DEBUG: Dados do Banco (Total: {movimentacoes.length} registros)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="bg-white p-3 rounded border border-yellow-200">
+                        <p className="font-bold text-sm mb-2">📊 Resumo dos Dados:</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="font-semibold">Total de registros:</span> {movimentacoes.length}
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                          <div>
+                            <span className="font-semibold">Tipos encontrados:</span>{" "}
+                            {Array.from(new Set(movimentacoes.map(m => m.tipo))).join(", ")}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {movimentacoes.length > 0 && (
+                        <details className="bg-white p-3 rounded border border-yellow-200">
+                          <summary className="cursor-pointer font-semibold text-sm text-yellow-800 hover:text-yellow-900">
+                            👁️ Clique para ver os primeiros 3 registros RAW
+                          </summary>
+                          <pre className="mt-2 text-xs overflow-auto p-2 bg-gray-50 rounded max-h-60">
+                            {JSON.stringify(movimentacoes.slice(0, 3), null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 📋 TABELA ESTILO EXTRATO BANCÁRIO */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Extrato de Movimentações</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data/Hora</TableHead>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead className="text-right">Entrada (+)</TableHead>
+                          <TableHead className="text-right">Saída (-)</TableHead>
+                          <TableHead className="text-right font-bold">Saldo</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {/* Primeira Linha: SALDO INICIAL */}
+                        {dataInicio && dataFim && (
+                          <TableRow className="bg-blue-50 font-bold border-b-2">
+                            <TableCell colSpan={4} className="text-right text-blue-900">
+                              📊 SALDO INICIAL:
+                            </TableCell>
+                            <TableCell className="text-right text-blue-700 text-lg">
+                              R$ {extratoCalculado.saldoInicial.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {/* Movimentações */}
+                        {(() => {
+                          try {
+                            let saldoAcumulado = extratoCalculado.saldoInicial;
+                            
+                            // 🐛 DEBUG: Log de TODAS as movimentações
+                            console.log("🔍 RENDERIZANDO TABELA - Total de movimentações:", extratoCalculado.movimentacoes.length);
+                            extratoCalculado.movimentacoes.forEach((m, i) => {
+                              console.log(`  #${i+1}: tipo="${m.tipo}", valor=${m.valor}, origem=${m.caixa_origem?.[0]?.nome || 'null'}, destino=${m.caixa_destino?.[0]?.nome || 'null'}`);
+                            });
+                            
+                            return extratoCalculado.movimentacoes.map((mov) => {
+                              const tipo = mov.tipo;
+                              const destinoId = mov.caixa_destino_id;
+                              const origemId = mov.caixa_origem_id;
+                              const caixaIdAtual = caixaAtual?.id;
+                              
+                              let isEntrada = false;
+                              let isSaida = false;
+                              let descricao = "";
+                              
+                              // 💰 VENDAS = ENTRADA (positivo)
+                              if (tipo === 'venda') {
+                                // Só conta como entrada se o destino é este caixa
+                                if (destinoId === caixaIdAtual) {
+                                  isEntrada = true;
+                                  descricao = "💰 Venda";
+                                }
+                              }
+                              // 🎯 PAGAMENTO DE AVALIAÇÃO = ENTRADA (positivo)
+                              else if (tipo === 'pagamento_avaliacao') {
+                                if (destinoId === caixaIdAtual) {
+                                  isEntrada = true;
+                                  descricao = "🎯 Avaliação";
+                                }
+                              }
+                              // 📥 ENTRADAS MANUAIS = ENTRADA (positivo)
+                              else if (tipo === 'entrada') {
+                                isEntrada = true;
+                                descricao = "📥 Entrada";
+                              }
+                              // 📤 SAÍDAS/DESPESAS = SAÍDA (negativo)
+                              else if (tipo === 'saida') {
+                                isSaida = true;
+                                descricao = "📤 Despesa/Saída";
+                              }
+                              // 🔄 TRANSFERÊNCIAS (tipo real: "transferencia_entre_caixas")
+                              else if (tipo === 'transferencia_entre_caixas' || tipo.includes('transferencia')) {
+                                // Se o destino é o caixa atual = RECEBEU
+                                if (destinoId === caixaIdAtual) {
+                                  isEntrada = true;
+                                  descricao = `🔄 Transferência recebida`;
+                                } 
+                                // Se a origem é o caixa atual = ENVIOU
+                                else if (origemId === caixaIdAtual) {
+                                  isSaida = true;
+                                  descricao = `🔄 Transferência enviada`;
+                                }
+                              }
+                              // 🚨 TIPO NÃO RECONHECIDO - DEBUG
+                              else {
+                                descricao = `⚠️ TIPO DESCONHECIDO: "${tipo}"`;
+                                console.warn(`🚨 TIPO NÃO RECONHECIDO:`, mov);
+                              }
+                              
+                              // Se não é entrada nem saída, não renderizar (pular)
+                              if (!isEntrada && !isSaida) {
+                                return null;
+                              }
+                              
+                              // Calcular saldo após esta movimentação
+                              if (isEntrada) saldoAcumulado += mov.valor;
+                              else if (isSaida) saldoAcumulado -= mov.valor;
+                              
+                              return (
+                                <TableRow key={mov.id} className="hover:bg-gray-50">
+                                  <TableCell className="whitespace-nowrap">
+                                    {mov.data_hora ? format(new Date(mov.data_hora), "dd/MM HH:mm", { locale: ptBR }) : "-"}
+                                  </TableCell>
+                                  <TableCell className="font-medium">{descricao}</TableCell>
+                                  <TableCell className="text-right text-green-600 font-semibold">
+                                    {isEntrada ? `R$ ${mov.valor.toFixed(2)}` : "-"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-red-600 font-semibold">
+                                    {isSaida ? `R$ ${mov.valor.toFixed(2)}` : "-"}
+                                  </TableCell>
+                                  <TableCell className="text-right font-bold bg-gray-50">
+                                    R$ {saldoAcumulado.toFixed(2)}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            });
+                          } catch (err) {
+                            console.error("Erro ao renderizar movimentações:", err);
+                            setErroRenderizacao(`Erro na tabela: ${err}`);
+                            return null;
+                          }
+                        })()}
+
+                        {/* Última Linha: SALDO FINAL */}
+                        {dataInicio && dataFim && extratoCalculado.movimentacoes.length > 0 && (
+                          <TableRow className="bg-purple-50 font-bold border-t-2">
+                            <TableCell colSpan={4} className="text-right text-purple-900">
+                              🎯 SALDO FINAL:
+                            </TableCell>
+                            <TableCell className="text-right text-purple-700 text-lg">
+                              R$ {extratoCalculado.saldoFinal.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {/* Sem movimentações */}
+                        {extratoCalculado.movimentacoes.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8">
+                              <div className="space-y-4">
+                                <p className="text-muted-foreground">
+                                  Nenhuma movimentação encontrada para o período
+                                </p>
+                                {dataInicio && dataFim && (
+                                  <div className="text-sm bg-yellow-50 border border-yellow-200 rounded p-4 text-left">
+                                    <p className="font-bold text-yellow-900 mb-2">🔍 DEBUG - Informações da Busca:</p>
+                                    <div className="space-y-1 text-yellow-800">
+                                      <p>• <strong>Caixa ID:</strong> {caixaAtual?.id || 'não encontrado'}</p>
+                                      <p>• <strong>Período:</strong> {dataInicio} até {dataFim}</p>
+                                      <p>• <strong>Tabela:</strong> movimentacoes_caixa</p>
+                                      <p>• <strong>Nota:</strong> A tabela movimentacoes_caixa NÃO tem coluna de método de pagamento</p>
+                                      <p>• <strong>Tipos esperados:</strong> entrada, saida, transferencia_entrada, transferencia_saida</p>
+                                      <p className="mt-2 text-xs">📋 Abra o Console (F12) para ver os logs detalhados da query</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
               </>
             )}
           </CardContent>
