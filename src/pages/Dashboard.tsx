@@ -195,54 +195,126 @@ export default function Dashboard() {
   }
 
   // ==================================================================================
-  // LÓGICA 2: VENDAS (NOVA LÓGICA)
+  // LÓGICA 2: VENDAS (NOVA LÓGICA EXPANDIDA)
   // ==================================================================================
   
   const salesMetrics = useMemo(() => {
     const vendasHoje = allVendas.filter(v => isSameDay(parseISO(v.created_at), hoje));
 
-    // KPIs
+    // === KPIs PRINCIPAIS ===
     const totalVendidoHoje = vendasHoje.reduce((acc, curr) => acc + Number(curr.valor_total_venda || 0), 0);
     const totalVendidoMes = allVendas.reduce((acc, curr) => acc + Number(curr.valor_total_venda || 0), 0);
+    const qtdVendasHoje = vendasHoje.length;
+    const qtdVendasMes = allVendas.length;
     
-    // Contagem de Peças
-    const contarPecas = (lista: any[]) => lista.reduce((acc, curr) => 
-      acc + (curr.qtd_baby_vendida || 0) + (curr.qtd_1_a_16_vendida || 0) + (curr.qtd_calcados_vendida || 0) + (curr.qtd_brinquedos_vendida || 0) + (curr.qtd_itens_medios_vendida || 0) + (curr.qtd_itens_grandes_vendida || 0), 0);
-    
-    const pecasHoje = contarPecas(vendasHoje);
-    const pecasMes = contarPecas(allVendas);
-
-    // Gráfico de Pagamentos (Agrupamento Inteligente)
-    const pagMap = new Map();
-    allVendas.forEach(venda => {
-        const pags = venda.pagamentos;
-        if (Array.isArray(pags)) {
-            pags.forEach((p: any) => {
-                let metodo = p.metodo || "Outros";
-                const valor = Number(p.valor || 0);
-                if (metodo.toLowerCase().includes("crédito") || metodo.toLowerCase().includes("credito")) {
-                    metodo = "Cartão de Crédito";
-                }
-                pagMap.set(metodo, (pagMap.get(metodo) || 0) + valor);
-            });
-        }
+    // === CONTAGEM DE PEÇAS POR CATEGORIA ===
+    const contarPecasPorCategoria = (lista: any[]) => ({
+      baby: lista.reduce((acc, curr) => acc + (curr.qtd_baby_vendida || 0), 0),
+      infantil: lista.reduce((acc, curr) => acc + (curr.qtd_1_a_16_vendida || 0), 0),
+      calcados: lista.reduce((acc, curr) => acc + (curr.qtd_calcados_vendida || 0), 0),
+      brinquedos: lista.reduce((acc, curr) => acc + (curr.qtd_brinquedos_vendida || 0), 0),
+      itens_medios: lista.reduce((acc, curr) => acc + (curr.qtd_itens_medios_vendida || 0), 0),
+      itens_grandes: lista.reduce((acc, curr) => acc + (curr.qtd_itens_grandes_vendida || 0), 0),
     });
-    const piePagamentos = Array.from(pagMap, ([name, value]) => ({ name, value })).filter(d => d.value > 0);
+    
+    const pecasHoje = contarPecasPorCategoria(vendasHoje);
+    const pecasMes = contarPecasPorCategoria(allVendas);
+    
+    const totalPecasHoje = Object.values(pecasHoje).reduce((a, b) => a + b, 0);
+    const totalPecasMes = Object.values(pecasMes).reduce((a, b) => a + b, 0);
 
-    // Gráfico de Vendedoras
-    const vendMap = new Map();
+    // === TICKET MÉDIO ===
+    const ticketMedioGeral = qtdVendasMes > 0 ? totalVendidoMes / qtdVendasMes : 0;
+
+    // === VENDAS POR VENDEDORA (DIA E MÊS) ===
+    const vendedorasMap = new Map();
+    
     allVendas.forEach(venda => {
-        const nome = venda.vendedora_nome || "N/A";
+        const nome = venda.vendedora_nome || "Sem Vendedora";
         const valor = Number(venda.valor_total_venda || 0);
-        const qtd = (venda.qtd_baby_vendida || 0) + (venda.qtd_1_a_16_vendida || 0) + (venda.qtd_calcados_vendida || 0) + (venda.qtd_brinquedos_vendida || 0);
+        const ehHoje = isSameDay(parseISO(venda.created_at), hoje);
         
-        const current = vendMap.get(nome) || { valor: 0, qtd: 0 };
-        vendMap.set(nome, { valor: current.valor + valor, qtd: current.qtd + qtd });
+        const current = vendedorasMap.get(nome) || { 
+          valorMes: 0, qtdMes: 0, valorHoje: 0, qtdHoje: 0 
+        };
+        
+        current.valorMes += valor;
+        current.qtdMes += 1;
+        
+        if (ehHoje) {
+          current.valorHoje += valor;
+          current.qtdHoje += 1;
+        }
+        
+        vendedorasMap.set(nome, current);
     });
-    const barVendedoras = Array.from(vendMap, ([name, data]) => ({ name, ...data }));
+    
+    const vendedorasData = Array.from(vendedorasMap, ([nome, data]) => ({
+      nome,
+      ...data,
+      ticketMedio: data.qtdMes > 0 ? data.valorMes / data.qtdMes : 0
+    })).sort((a, b) => b.valorMes - a.valorMes);
 
-    return { totalVendidoHoje, totalVendidoMes, pecasHoje, pecasMes, piePagamentos, barVendedoras };
-  }, [allVendas]);
+    // === VENDAS EM GIRA-CRÉDITO ===
+    let totalGiraCreditoMes = 0;
+    let totalGiraCreditoHoje = 0;
+    
+    allVendas.forEach(venda => {
+      const ehHoje = isSameDay(parseISO(venda.created_at), hoje);
+      let valorGiraVenda = 0;
+      
+      // Verificar nos 3 métodos de pagamento
+      [
+        { metodo: venda.metodo_pagto_1, valor: venda.valor_pagto_1 },
+        { metodo: venda.metodo_pagto_2, valor: venda.valor_pagto_2 },
+        { metodo: venda.metodo_pagto_3, valor: venda.valor_pagto_3 },
+      ].forEach(pag => {
+        const metodo = (pag.metodo || "").toLowerCase();
+        if (metodo.includes("gira") || metodo.includes("crédito") || metodo.includes("credito")) {
+          valorGiraVenda += Number(pag.valor || 0);
+        }
+      });
+      
+      totalGiraCreditoMes += valorGiraVenda;
+      if (ehHoje) {
+        totalGiraCreditoHoje += valorGiraVenda;
+      }
+    });
+
+    // === PICOS DE VENDAS POR HORÁRIO ===
+    const vendasPorHora = new Map();
+    allVendas.forEach(venda => {
+      const hora = new Date(venda.created_at).getHours();
+      const faixaHoraria = `${hora}h`;
+      const valor = Number(venda.valor_total_venda || 0);
+      vendasPorHora.set(faixaHoraria, (vendasPorHora.get(faixaHoraria) || 0) + valor);
+    });
+    
+    const picosHorarios = Array.from(vendasPorHora, ([hora, valor]) => ({ 
+      hora, 
+      valor 
+    })).sort((a, b) => {
+      const horaA = parseInt(a.hora);
+      const horaB = parseInt(b.hora);
+      return horaA - horaB;
+    });
+
+    return { 
+      totalVendidoHoje, 
+      totalVendidoMes, 
+      qtdVendasHoje,
+      qtdVendasMes,
+      pecasHoje,
+      pecasMes,
+      totalPecasHoje,
+      totalPecasMes,
+      ticketMedioGeral,
+      vendedorasData,
+      totalGiraCreditoMes,
+      totalGiraCreditoHoje,
+      picosHorarios
+    };
+  }, [allVendas, hoje]);
 
 
   // ==================================================================================
@@ -266,89 +338,377 @@ export default function Dashboard() {
                 <TabsTrigger value="compras">Resultados de Compras</TabsTrigger>
             </TabsList>
 
-            {/* --- ABA 1: VENDAS (NOVO) --- */}
+            {/* --- ABA 1: VENDAS (COMPLETA) --- */}
             <TabsContent value="vendas" className="space-y-6 animate-in fade-in-50">
-                {/* KPIs */}
+                
+                {/* === RESUMO GERAL NO TOPO === */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Vendido Hoje</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold">{formatCurrency(salesMetrics.totalVendidoHoje)}</div></CardContent>
+                    <Card className="border-blue-200 bg-blue-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-blue-700">💰 Valor Total - Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-blue-900">{formatCurrency(salesMetrics.totalVendidoMes)}</div>
+                            <p className="text-xs text-blue-600 mt-1">{salesMetrics.qtdVendasMes} vendas realizadas</p>
+                        </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Peças Hoje</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold">{salesMetrics.pecasHoje} un</div></CardContent>
+                    
+                    <Card className="border-green-200 bg-green-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-green-700">💵 Valor Total - Hoje</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-green-900">{formatCurrency(salesMetrics.totalVendidoHoje)}</div>
+                            <p className="text-xs text-green-600 mt-1">{salesMetrics.qtdVendasHoje} vendas hoje</p>
+                        </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Vendido no Mês</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold text-blue-600">{formatCurrency(salesMetrics.totalVendidoMes)}</div></CardContent>
+                    
+                    <Card className="border-purple-200 bg-purple-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-purple-700">📦 Peças Vendidas - Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-purple-900">{salesMetrics.totalPecasMes}</div>
+                            <p className="text-xs text-purple-600 mt-1">peças em {salesMetrics.qtdVendasMes} vendas</p>
+                        </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Peças no Mês</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold">{salesMetrics.pecasMes} un</div></CardContent>
+                    
+                    <Card className="border-orange-200 bg-orange-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-orange-700">🎯 Peças Vendidas - Hoje</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-orange-900">{salesMetrics.totalPecasHoje}</div>
+                            <p className="text-xs text-orange-600 mt-1">peças em {salesMetrics.qtdVendasHoje} vendas</p>
+                        </CardContent>
                     </Card>
                 </div>
 
-                {/* GRÁFICOS */}
-                <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-                    {/* Ranking Vendedoras */}
-                    <Card className="lg:col-span-4">
-                        <CardHeader><CardTitle className="flex gap-2 text-sm"><Users className="w-4"/> Desempenho por Vendedora</CardTitle></CardHeader>
-                        <CardContent className="h-[350px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={salesMetrics.barVendedoras}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="name" />
-                                    <YAxis />
-                                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                                    <Legend />
-                                    <Bar dataKey="valor" name="Total Vendido (R$)" fill={COLORS.vendas} radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    {/* Pizza Pagamentos */}
-                    <Card className="lg:col-span-3">
-                        <CardHeader><CardTitle className="flex gap-2 text-sm"><CreditCard className="w-4"/> Meios de Pagamento</CardTitle></CardHeader>
-                        <CardContent className="h-[350px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie 
-                                        data={salesMetrics.piePagamentos} 
-                                        cx="50%" cy="50%" 
-                                        innerRadius={60} 
-                                        outerRadius={80} 
-                                        paddingAngle={5} 
-                                        dataKey="value"
+                {/* === PROPORÇÃO GIRA-CRÉDITO (BARRAS HORIZONTAIS) === */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Barra do Mês */}
+                    <Card className="border-blue-200">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium flex items-center justify-between">
+                                <span>Proporção de Pagamentos - Mês</span>
+                                <span className="text-xs text-gray-500">{formatCurrency(salesMetrics.totalVendidoMes)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {/* Barra de progresso */}
+                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                                    <div 
+                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${salesMetrics.totalVendidoMes > 0 ? ((salesMetrics.totalVendidoMes - salesMetrics.totalGiraCreditoMes) / salesMetrics.totalVendidoMes * 100) : 0}%` }}
                                     >
-                                        {salesMetrics.piePagamentos.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={SALES_COLORS[index % SALES_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
+                                        {salesMetrics.totalVendidoMes > 0 && ((salesMetrics.totalVendidoMes - salesMetrics.totalGiraCreditoMes) / salesMetrics.totalVendidoMes * 100).toFixed(1)}%
+                                    </div>
+                                    <div 
+                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${salesMetrics.totalVendidoMes > 0 ? (salesMetrics.totalGiraCreditoMes / salesMetrics.totalVendidoMes * 100) : 0}%` }}
+                                    >
+                                        {salesMetrics.totalVendidoMes > 0 && (salesMetrics.totalGiraCreditoMes / salesMetrics.totalVendidoMes * 100).toFixed(1)}%
+                                    </div>
+                                </div>
+                                
+                                {/* Legenda */}
+                                <div className="flex justify-between text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                                        <span className="text-gray-700">Outras Formas: <strong>{formatCurrency(salesMetrics.totalVendidoMes - salesMetrics.totalGiraCreditoMes)}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-amber-600 rounded"></div>
+                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(salesMetrics.totalGiraCreditoMes)}</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Barra de Hoje */}
+                    <Card className="border-green-200">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium flex items-center justify-between">
+                                <span>Proporção de Pagamentos - Hoje</span>
+                                <span className="text-xs text-gray-500">{formatCurrency(salesMetrics.totalVendidoHoje)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {/* Barra de progresso */}
+                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                                    <div 
+                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${salesMetrics.totalVendidoHoje > 0 ? ((salesMetrics.totalVendidoHoje - salesMetrics.totalGiraCreditoHoje) / salesMetrics.totalVendidoHoje * 100) : 0}%` }}
+                                    >
+                                        {salesMetrics.totalVendidoHoje > 0 && ((salesMetrics.totalVendidoHoje - salesMetrics.totalGiraCreditoHoje) / salesMetrics.totalVendidoHoje * 100).toFixed(1)}%
+                                    </div>
+                                    <div 
+                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${salesMetrics.totalVendidoHoje > 0 ? (salesMetrics.totalGiraCreditoHoje / salesMetrics.totalVendidoHoje * 100) : 0}%` }}
+                                    >
+                                        {salesMetrics.totalVendidoHoje > 0 && (salesMetrics.totalGiraCreditoHoje / salesMetrics.totalVendidoHoje * 100).toFixed(1)}%
+                                    </div>
+                                </div>
+                                
+                                {/* Legenda */}
+                                <div className="flex justify-between text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-green-600 rounded"></div>
+                                        <span className="text-gray-700">Outras Formas: <strong>{formatCurrency(salesMetrics.totalVendidoHoje - salesMetrics.totalGiraCreditoHoje)}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-amber-600 rounded"></div>
+                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(salesMetrics.totalGiraCreditoHoje)}</strong></span>
+                                    </div>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* === PEÇAS POR CATEGORIA (GRÁFICO) === */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex gap-2 items-center"><Package className="w-5"/> Peças Vendidas por Categoria</CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[
+                                { categoria: 'Baby', Mês: salesMetrics.pecasMes.baby, Hoje: salesMetrics.pecasHoje.baby },
+                                { categoria: 'Infantil', Mês: salesMetrics.pecasMes.infantil, Hoje: salesMetrics.pecasHoje.infantil },
+                                { categoria: 'Calçados', Mês: salesMetrics.pecasMes.calcados, Hoje: salesMetrics.pecasHoje.calcados },
+                                { categoria: 'Brinquedos', Mês: salesMetrics.pecasMes.brinquedos, Hoje: salesMetrics.pecasHoje.brinquedos },
+                                { categoria: 'Itens Médios', Mês: salesMetrics.pecasMes.itens_medios, Hoje: salesMetrics.pecasHoje.itens_medios },
+                                { categoria: 'Itens Grandes', Mês: salesMetrics.pecasMes.itens_grandes, Hoje: salesMetrics.pecasHoje.itens_grandes },
+                            ]}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="categoria" angle={-15} textAnchor="end" height={80} />
+                                <YAxis />
+                                <Tooltip content={<CustomTooltip type="number" />} />
+                                <Legend />
+                                <Bar dataKey="Mês" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="Hoje" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+
+                {/* === TICKET MÉDIO === */}
+                <Card className="border-teal-200 bg-teal-50">
+                    <CardHeader>
+                        <CardTitle className="flex gap-2 items-center text-teal-800">
+                            <DollarSign className="w-5"/> Ticket Médio Geral
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-4xl font-bold text-teal-900">{formatCurrency(salesMetrics.ticketMedioGeral)}</div>
+                        <p className="text-sm text-teal-700 mt-2">Valor médio por venda no mês</p>
+                    </CardContent>
+                </Card>
+
+                {/* === DESEMPENHO POR VENDEDORA === */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex gap-2 items-center"><Users className="w-5"/> Desempenho por Vendedora</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {salesMetrics.vendedorasData.map((vendedora, index) => (
+                                <div key={index} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <h3 className="font-bold text-lg">{vendedora.nome}</h3>
+                                            <p className="text-sm text-gray-600">Ticket Médio: {formatCurrency(vendedora.ticketMedio)}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="bg-blue-50 p-3 rounded">
+                                            <div className="text-xs text-gray-600">Valor - Mês</div>
+                                            <div className="text-lg font-bold text-blue-700">{formatCurrency(vendedora.valorMes)}</div>
+                                        </div>
+                                        <div className="bg-blue-50 p-3 rounded">
+                                            <div className="text-xs text-gray-600">Qtd - Mês</div>
+                                            <div className="text-lg font-bold text-blue-700">{vendedora.qtdMes} vendas</div>
+                                        </div>
+                                        <div className="bg-green-50 p-3 rounded">
+                                            <div className="text-xs text-gray-600">Valor - Hoje</div>
+                                            <div className="text-lg font-bold text-green-700">{formatCurrency(vendedora.valorHoje)}</div>
+                                        </div>
+                                        <div className="bg-green-50 p-3 rounded">
+                                            <div className="text-xs text-gray-600">Qtd - Hoje</div>
+                                            <div className="text-lg font-bold text-green-700">{vendedora.qtdHoje} vendas</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* === PICOS DE VENDAS POR HORÁRIO === */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex gap-2 items-center"><BarChart3 className="w-5"/> Picos de Vendas por Horário (Mês)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={salesMetrics.picosHorarios}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="hora" />
+                                <YAxis />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="valor" name="Valor Vendido" fill="#0088FE" radius={[8, 8, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
             </TabsContent>
 
-            {/* --- ABA 2: COMPRAS (SEU CÓDIGO ORIGINAL) --- */}
-            <TabsContent value="compras" className="space-y-8 animate-in fade-in-50">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card><CardHeader><CardTitle className="text-sm text-gray-500">Financeiro (Mês)</CardTitle><div className="text-2xl font-bold">{formatCurrency(metrics.metricasMes.total)}</div></CardHeader>
-                    <CardContent className="h-48"><ResponsiveContainer><BarChart layout="vertical" data={[dataFinanceiro[0]]}><XAxis type="number" hide /><YAxis type="category" dataKey="name" hide /><Tooltip content={<CustomTooltip />} /><Legend /><Bar dataKey="dinheiro" name="Dinheiro/Pix" stackId="a" fill={COLORS.dinheiro} /><Bar dataKey="gira" name="Gira Crédito" stackId="a" fill={COLORS.gira} /></BarChart></ResponsiveContainer></CardContent></Card>
+            {/* --- ABA 2: COMPRAS (REFORMULADA) --- */}
+            <TabsContent value="compras" className="space-y-6 animate-in fade-in-50">
+                
+                {/* === RESUMO GERAL NO TOPO === */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card className="border-blue-200 bg-blue-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-blue-700">💰 Valor Total - Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-blue-900">{formatCurrency(metrics.metricasMes.total)}</div>
+                            <p className="text-xs text-blue-600 mt-1">{metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira} compras realizadas</p>
+                        </CardContent>
+                    </Card>
                     
-                    <Card><CardHeader><CardTitle className="text-sm text-gray-500">Financeiro (Hoje)</CardTitle><div className="text-2xl font-bold">{formatCurrency(metrics.metricasHoje.total)}</div></CardHeader>
-                    <CardContent className="h-48"><ResponsiveContainer><BarChart layout="vertical" data={[dataFinanceiro[1]]}><XAxis type="number" hide /><YAxis type="category" dataKey="name" hide /><Tooltip content={<CustomTooltip />} /><Legend /><Bar dataKey="dinheiro" name="Dinheiro/Pix" stackId="a" fill={COLORS.dinheiro} /><Bar dataKey="gira" name="Gira Crédito" stackId="a" fill={COLORS.gira} /></BarChart></ResponsiveContainer></CardContent></Card>
+                    <Card className="border-green-200 bg-green-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-green-700">💵 Valor Total - Hoje</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-green-900">{formatCurrency(metrics.metricasHoje.total)}</div>
+                            <p className="text-xs text-green-600 mt-1">{metrics.metricasHoje.qtdDinheiro + metrics.metricasHoje.qtdGira} compras hoje</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="border-purple-200 bg-purple-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-purple-700">🛍️ Quantidade - Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-purple-900">{metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira}</div>
+                            <p className="text-xs text-purple-600 mt-1">atendimentos finalizados</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="border-orange-200 bg-orange-50">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-orange-700">🎯 Quantidade - Hoje</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-orange-900">{metrics.metricasHoje.qtdDinheiro + metrics.metricasHoje.qtdGira}</div>
+                            <p className="text-xs text-orange-600 mt-1">atendimentos finalizados</p>
+                        </CardContent>
+                    </Card>
                 </div>
 
+                {/* === PROPORÇÃO DINHEIRO VS GIRA === */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card><CardHeader><CardTitle className="text-sm text-gray-500">Compras (Mês)</CardTitle><div className="text-2xl font-bold">{metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira} un</div></CardHeader>
-                    <CardContent className="h-32"><ResponsiveContainer><BarChart layout="vertical" data={[dataQtd[0]]}><XAxis type="number" hide /><YAxis type="category" dataKey="name" hide /><Tooltip content={<CustomTooltip type="number" />} /><Bar dataKey="dinheiro" stackId="a" fill={COLORS.dinheiro} /><Bar dataKey="gira" stackId="a" fill={COLORS.gira} /></BarChart></ResponsiveContainer></CardContent></Card>
-                    <Card><CardHeader><CardTitle className="text-sm text-gray-500">Compras (Hoje)</CardTitle><div className="text-2xl font-bold">{metrics.metricasHoje.qtdDinheiro + metrics.metricasHoje.qtdGira} un</div></CardHeader>
-                    <CardContent className="h-32"><ResponsiveContainer><BarChart layout="vertical" data={[dataQtd[1]]}><XAxis type="number" hide /><YAxis type="category" dataKey="name" hide /><Tooltip content={<CustomTooltip type="number" />} /><Bar dataKey="dinheiro" stackId="a" fill={COLORS.dinheiro} /><Bar dataKey="gira" stackId="a" fill={COLORS.gira} /></BarChart></ResponsiveContainer></CardContent></Card>
+                    {/* Barra do Mês */}
+                    <Card className="border-blue-200">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium flex items-center justify-between">
+                                <span>Proporção de Pagamentos - Mês</span>
+                                <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasMes.total)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {/* Barra de progresso */}
+                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                                    <div 
+                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${metrics.metricasMes.total > 0 ? (metrics.metricasMes.dinheiro / metrics.metricasMes.total * 100) : 0}%` }}
+                                    >
+                                        {metrics.metricasMes.total > 0 && (metrics.metricasMes.dinheiro / metrics.metricasMes.total * 100).toFixed(1)}%
+                                    </div>
+                                    <div 
+                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${metrics.metricasMes.total > 0 ? (metrics.metricasMes.gira / metrics.metricasMes.total * 100) : 0}%` }}
+                                    >
+                                        {metrics.metricasMes.total > 0 && (metrics.metricasMes.gira / metrics.metricasMes.total * 100).toFixed(1)}%
+                                    </div>
+                                </div>
+                                
+                                {/* Legenda */}
+                                <div className="flex justify-between text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-emerald-600 rounded"></div>
+                                        <span className="text-gray-700">Dinheiro/PIX: <strong>{formatCurrency(metrics.metricasMes.dinheiro)}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-yellow-600 rounded"></div>
+                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(metrics.metricasMes.gira)}</strong></span>
+                                    </div>
+                                </div>
+                                
+                                {/* Info adicional */}
+                                <div className="flex justify-between text-xs text-gray-600 pt-2 border-t">
+                                    <span>{metrics.metricasMes.qtdDinheiro} compras em dinheiro</span>
+                                    <span>{metrics.metricasMes.qtdGira} compras em gira</span>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Barra de Hoje */}
+                    <Card className="border-green-200">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium flex items-center justify-between">
+                                <span>Proporção de Pagamentos - Hoje</span>
+                                <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasHoje.total)}</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {/* Barra de progresso */}
+                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                                    <div 
+                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${metrics.metricasHoje.total > 0 ? (metrics.metricasHoje.dinheiro / metrics.metricasHoje.total * 100) : 0}%` }}
+                                    >
+                                        {metrics.metricasHoje.total > 0 && (metrics.metricasHoje.dinheiro / metrics.metricasHoje.total * 100).toFixed(1)}%
+                                    </div>
+                                    <div 
+                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                                        style={{ width: `${metrics.metricasHoje.total > 0 ? (metrics.metricasHoje.gira / metrics.metricasHoje.total * 100) : 0}%` }}
+                                    >
+                                        {metrics.metricasHoje.total > 0 && (metrics.metricasHoje.gira / metrics.metricasHoje.total * 100).toFixed(1)}%
+                                    </div>
+                                </div>
+                                
+                                {/* Legenda */}
+                                <div className="flex justify-between text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-emerald-600 rounded"></div>
+                                        <span className="text-gray-700">Dinheiro/PIX: <strong>{formatCurrency(metrics.metricasHoje.dinheiro)}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 bg-yellow-600 rounded"></div>
+                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(metrics.metricasHoje.gira)}</strong></span>
+                                    </div>
+                                </div>
+                                
+                                {/* Info adicional */}
+                                <div className="flex justify-between text-xs text-gray-600 pt-2 border-t">
+                                    <span>{metrics.metricasHoje.qtdDinheiro} compras em dinheiro</span>
+                                    <span>{metrics.metricasHoje.qtdGira} compras em gira</span>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
