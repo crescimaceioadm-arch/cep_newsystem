@@ -34,7 +34,7 @@ import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaMod
 import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export default function Financeiro() {
   const { caixaSelecionado } = useCaixa();
@@ -263,7 +263,7 @@ export default function Financeiro() {
           console.log(`   ❌ CLASSIFICAÇÃO: SAÍDA (-${mov.valor})`);
         }
         // 🔄 TRANSFERÊNCIAS: depende da direção
-        else if (tipo === 'transferencia_entre_caixas' || tipo.includes('transferencia')) {
+        else if (tipo === 'transferencia_entre_caixas') {
           // Se o destino é o caixa selecionado = RECEBEU dinheiro (entrada)
           if (destinoId === caixaIdAtual) {
             totalEntradas += mov.valor;
@@ -773,64 +773,115 @@ export default function Financeiro() {
                   </Card>
                 </div>
 
-                {/* 📈 GRÁFICO DE EVOLUÇÃO */}
+                {/* 📊 GRÁFICO DE MOVIMENTAÇÕES */}
                 {extratoCalculado.movimentacoes.length > 0 && dataInicio && dataFim && (
                   <Card className="mb-6">
                     <CardHeader>
-                      <CardTitle className="text-lg">📈 Evolução do Saldo</CardTitle>
+                      <CardTitle className="text-lg">📊 Entradas vs Saídas por Horário</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Verde = Entradas | Vermelho = Saídas
+                      </p>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={250}>
-                        <AreaChart
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart
                           data={(() => {
                             try {
-                              let saldo = extratoCalculado.saldoInicial;
-                              const dados = [{ momento: 'Início', saldo }];
+                              const caixaIdAtual = caixaAtual?.id;
                               
-                              extratoCalculado.movimentacoes.forEach((mov, idx) => {
+                              return extratoCalculado.movimentacoes.map((mov, idx) => {
                                 const tipo = mov.tipo;
                                 const destinoId = mov.caixa_destino_id;
                                 const origemId = mov.caixa_origem_id;
-                                const caixaIdAtual = caixaAtual?.id;
                                 
-                                // 🔥 TIPOS REAIS: venda, pagamento_avaliacao, entrada, saida, transferencia_entre_caixas
+                                let isEntrada = false;
+                                let isSaida = false;
+                                let descricao = '';
+                                
+                                // Classificar a movimentação
                                 if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
-                                  if (destinoId === caixaIdAtual) saldo += mov.valor;
+                                  if (destinoId === caixaIdAtual) {
+                                    isEntrada = true;
+                                    descricao = tipo === 'venda' ? 'Venda' : 'Avaliação';
+                                  }
                                 } else if (tipo === 'entrada') {
-                                  saldo += mov.valor;
+                                  isEntrada = true;
+                                  descricao = 'Entrada';
                                 } else if (tipo === 'saida') {
-                                  saldo -= mov.valor;
-                                } else if (tipo === 'transferencia_entre_caixas' || tipo.includes('transferencia')) {
-                                  if (destinoId === caixaIdAtual) saldo += mov.valor;
-                                  else if (origemId === caixaIdAtual) saldo -= mov.valor;
+                                  isSaida = true;
+                                  descricao = 'Despesa';
+                                } else if (tipo === 'transferencia_entre_caixas') {
+                                  if (destinoId === caixaIdAtual) {
+                                    isEntrada = true;
+                                    descricao = 'Transf. IN';
+                                  } else if (origemId === caixaIdAtual) {
+                                    isSaida = true;
+                                    descricao = 'Transf. OUT';
+                                  }
                                 }
                                 
-                                dados.push({ momento: `#${idx + 1}`, saldo });
-                              });
-                              
-                              return dados;
+                                // Extrair hora
+                                const dataHora = new Date(mov.data_hora);
+                                const hora = `${dataHora.getHours().toString().padStart(2, '0')}:${dataHora.getMinutes().toString().padStart(2, '0')}`;
+                                
+                                return {
+                                  hora,
+                                  descricao,
+                                  entrada: isEntrada ? mov.valor : 0,
+                                  saida: isSaida ? mov.valor : 0,
+                                  tipo: isEntrada ? 'entrada' : 'saida'
+                                };
+                              }).filter(item => item.entrada > 0 || item.saida > 0);
                             } catch (err) {
                               console.error("Erro ao gerar dados do gráfico:", err);
-                              return [{ momento: 'Início', saldo: 0 }];
+                              return [];
                             }
                           })()}
-                          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                          margin={{ top: 10, right: 30, left: 20, bottom: 20 }}
                         >
-                          <defs>
-                            <linearGradient id="colorSaldo" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="momento" tick={{ fontSize: 12 }} />
-                          <YAxis tickFormatter={(value) => `R$ ${value.toFixed(0)}`} />
-                          <Tooltip 
-                            formatter={(value: number) => `R$ ${value.toFixed(2)}`}
-                            contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '4px' }}
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="hora" 
+                            tick={{ fontSize: 10 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
                           />
-                          <Area type="monotone" dataKey="saldo" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorSaldo)" />
-                        </AreaChart>
+                          <YAxis 
+                            tickFormatter={(value) => `R$ ${value}`}
+                            tick={{ fontSize: 11 }}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length > 0) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+                                    <p className="font-bold text-sm mb-1">{data.hora}</p>
+                                    <p className="text-xs text-gray-600 mb-2">{data.descricao}</p>
+                                    {data.entrada > 0 && (
+                                      <p className="text-green-600 font-semibold">
+                                        ▲ Entrada: R$ {data.entrada.toFixed(2)}
+                                      </p>
+                                    )}
+                                    {data.saida > 0 && (
+                                      <p className="text-red-600 font-semibold">
+                                        ▼ Saída: R$ {data.saida.toFixed(2)}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Legend 
+                            wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                            formatter={(value) => value === 'entrada' ? 'Entradas' : 'Saídas'}
+                          />
+                          <Bar dataKey="entrada" fill="#10b981" name="entrada" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="saida" fill="#ef4444" name="saida" radius={[4, 4, 0, 0]} />
+                        </BarChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
@@ -884,6 +935,7 @@ export default function Financeiro() {
                         <TableRow>
                           <TableHead>Data/Hora</TableHead>
                           <TableHead>Descrição</TableHead>
+                          <TableHead>Motivo</TableHead>
                           <TableHead className="text-right">Entrada (+)</TableHead>
                           <TableHead className="text-right">Saída (-)</TableHead>
                           <TableHead className="text-right font-bold">Saldo</TableHead>
@@ -893,7 +945,7 @@ export default function Financeiro() {
                         {/* Primeira Linha: SALDO INICIAL */}
                         {dataInicio && dataFim && (
                           <TableRow className="bg-blue-50 font-bold border-b-2">
-                            <TableCell colSpan={4} className="text-right text-blue-900">
+                            <TableCell colSpan={5} className="text-right text-blue-900">
                               📊 SALDO INICIAL:
                             </TableCell>
                             <TableCell className="text-right text-blue-700 text-lg">
@@ -949,7 +1001,7 @@ export default function Financeiro() {
                                 descricao = "📤 Despesa/Saída";
                               }
                               // 🔄 TRANSFERÊNCIAS (tipo real: "transferencia_entre_caixas")
-                              else if (tipo === 'transferencia_entre_caixas' || tipo.includes('transferencia')) {
+                              else if (tipo === 'transferencia_entre_caixas') {
                                 // Se o destino é o caixa atual = RECEBEU
                                 if (destinoId === caixaIdAtual) {
                                   isEntrada = true;
@@ -982,6 +1034,9 @@ export default function Financeiro() {
                                     {mov.data_hora ? format(new Date(mov.data_hora), "dd/MM HH:mm", { locale: ptBR }) : "-"}
                                   </TableCell>
                                   <TableCell className="font-medium">{descricao}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                                    {mov.motivo || "-"}
+                                  </TableCell>
                                   <TableCell className="text-right text-green-600 font-semibold">
                                     {isEntrada ? `R$ ${mov.valor.toFixed(2)}` : "-"}
                                   </TableCell>
@@ -1004,7 +1059,7 @@ export default function Financeiro() {
                         {/* Última Linha: SALDO FINAL */}
                         {dataInicio && dataFim && extratoCalculado.movimentacoes.length > 0 && (
                           <TableRow className="bg-purple-50 font-bold border-t-2">
-                            <TableCell colSpan={4} className="text-right text-purple-900">
+                            <TableCell colSpan={5} className="text-right text-purple-900">
                               🎯 SALDO FINAL:
                             </TableCell>
                             <TableCell className="text-right text-purple-700 text-lg">
@@ -1016,7 +1071,7 @@ export default function Financeiro() {
                         {/* Sem movimentações */}
                         {extratoCalculado.movimentacoes.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center py-8">
+                            <TableCell colSpan={6} className="text-center py-8">
                               <div className="space-y-4">
                                 <p className="text-muted-foreground">
                                   Nenhuma movimentação encontrada para o período
