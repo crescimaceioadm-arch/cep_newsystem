@@ -54,17 +54,162 @@ export function useAtualizarVenda() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, dados }: { id: string; dados: AtualizacaoVenda }) => {
+    mutationFn: async ({ id, dados, vendaOriginal }: { id: string; dados: AtualizacaoVenda; vendaOriginal?: Venda }) => {
+      // 1. Buscar venda original se não fornecida
+      let vendaAnterior = vendaOriginal;
+      if (!vendaAnterior) {
+        const { data } = await supabase
+          .from("vendas")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+        vendaAnterior = data as Venda | undefined;
+      }
+
+      // 2. Atualizar a venda
       const { error } = await supabase
         .from("vendas")
         .update(dados)
         .eq("id", id);
 
       if (error) throw error;
+
+      // 3. Ajustar movimentações de caixa se método de pagamento mudou
+      const metodoAnterior = vendaAnterior?.metodo_pagto_1?.toLowerCase();
+      const metodoNovo = dados.metodo_pagto_1?.toLowerCase();
+      const valorAnterior = vendaAnterior?.valor_total_venda || 0;
+      const valorNovo = dados.valor_total_venda ?? valorAnterior;
+      const caixaAnterior = vendaAnterior?.caixa_origem || "Caixa 1";
+      const caixaNovo = dados.caixa_origem || caixaAnterior;
+
+      const eraDinheiro = metodoAnterior === 'dinheiro';
+      const agoraDinheiro = metodoNovo === 'dinheiro';
+
+      // Se tinha movimentação de dinheiro anterior, precisamos ajustar
+      if (eraDinheiro || agoraDinheiro) {
+        // Buscar caixa anterior
+        const { data: caixaAnteriorData } = await supabase
+          .from("caixas")
+          .select("id, saldo_atual")
+          .eq("nome", caixaAnterior)
+          .maybeSingle();
+
+        // Buscar caixa novo (pode ser o mesmo)
+        const { data: caixaNovoData } = await supabase
+          .from("caixas")
+          .select("id, saldo_atual")
+          .eq("nome", caixaNovo)
+          .maybeSingle();
+
+        // Buscar movimentação existente para esta venda
+        const { data: movExistente } = await supabase
+          .from("movimentacoes_caixa")
+          .select("id, valor, caixa_destino_id")
+          .eq("tipo", "venda")
+          .ilike("motivo", `%${id}%`)
+          .maybeSingle();
+
+        if (eraDinheiro && !agoraDinheiro) {
+          // ERA dinheiro, AGORA não é mais → remover movimentação e subtrair do saldo
+          if (movExistente && caixaAnteriorData) {
+            await supabase
+              .from("movimentacoes_caixa")
+              .delete()
+              .eq("id", movExistente.id);
+
+            await supabase
+              .from("caixas")
+              .update({ saldo_atual: (caixaAnteriorData.saldo_atual || 0) - movExistente.valor })
+              .eq("id", caixaAnteriorData.id);
+          }
+        } else if (!eraDinheiro && agoraDinheiro) {
+          // NÃO era dinheiro, AGORA é → criar movimentação e somar ao saldo
+          if (caixaNovoData) {
+            await supabase
+              .from("movimentacoes_caixa")
+              .insert({
+                caixa_destino_id: caixaNovoData.id,
+                caixa_origem_id: null,
+                tipo: 'venda',
+                valor: valorNovo,
+                motivo: `Venda #${id}`,
+              });
+
+            await supabase
+              .from("caixas")
+              .update({ saldo_atual: (caixaNovoData.saldo_atual || 0) + valorNovo })
+              .eq("id", caixaNovoData.id);
+          }
+        } else if (eraDinheiro && agoraDinheiro) {
+          // ERA e CONTINUA dinheiro → ajustar diferença de valor/caixa
+          const diferencaValor = valorNovo - valorAnterior;
+          const mudouCaixa = caixaAnterior !== caixaNovo;
+
+          if (movExistente) {
+            if (mudouCaixa) {
+              // Remover do caixa anterior
+              if (caixaAnteriorData) {
+                await supabase
+                  .from("caixas")
+                  .update({ saldo_atual: (caixaAnteriorData.saldo_atual || 0) - movExistente.valor })
+                  .eq("id", caixaAnteriorData.id);
+              }
+              // Adicionar ao novo caixa
+              if (caixaNovoData) {
+                await supabase
+                  .from("caixas")
+                  .update({ saldo_atual: (caixaNovoData.saldo_atual || 0) + valorNovo })
+                  .eq("id", caixaNovoData.id);
+
+                // Atualizar movimentação para o novo caixa
+                await supabase
+                  .from("movimentacoes_caixa")
+                  .update({ 
+                    caixa_destino_id: caixaNovoData.id, 
+                    valor: valorNovo 
+                  })
+                  .eq("id", movExistente.id);
+              }
+            } else if (diferencaValor !== 0) {
+              // Mesmo caixa, valor diferente
+              if (caixaAnteriorData) {
+                await supabase
+                  .from("caixas")
+                  .update({ saldo_atual: (caixaAnteriorData.saldo_atual || 0) + diferencaValor })
+                  .eq("id", caixaAnteriorData.id);
+
+                await supabase
+                  .from("movimentacoes_caixa")
+                  .update({ valor: valorNovo })
+                  .eq("id", movExistente.id);
+              }
+            }
+          } else {
+            // Não existia movimentação (venda antiga), criar agora
+            if (caixaNovoData) {
+              await supabase
+                .from("movimentacoes_caixa")
+                .insert({
+                  caixa_destino_id: caixaNovoData.id,
+                  caixa_origem_id: null,
+                  tipo: 'venda',
+                  valor: valorNovo,
+                  motivo: `Venda #${id}`,
+                });
+
+              await supabase
+                .from("caixas")
+                .update({ saldo_atual: (caixaNovoData.saldo_atual || 0) + valorNovo })
+                .eq("id", caixaNovoData.id);
+            }
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vendas"] });
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes"] });
       toast.success("Venda atualizada com sucesso!");
     },
     onError: (error) => {

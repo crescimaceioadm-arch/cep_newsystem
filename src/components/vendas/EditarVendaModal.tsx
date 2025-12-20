@@ -81,6 +81,7 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
           valor_total_venda: valorNum,
           caixa_origem: caixaOrigem || null,
         },
+        vendaOriginal: venda,
       },
       {
         onSuccess: () => {
