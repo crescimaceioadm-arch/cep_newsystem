@@ -153,8 +153,8 @@ export function useFinalizarAtendimento() {
           console.error("[useFinalizarAtendimento] Erro ao buscar caixa Avaliação:", caixaError);
           // Não lançar erro para não impedir a finalização do atendimento
         } else if (caixaAvaliacao) {
-          // Atualizar saldo do caixa
-          const novoSaldo = caixaAvaliacao.saldo_atual + valorDinheiro;
+          // Atualizar saldo do caixa - SUBTRAIR pois é pagamento ao cliente
+          const novoSaldo = caixaAvaliacao.saldo_atual - valorDinheiro;
           
           const { error: updateError } = await supabase
             .from("caixas")
@@ -165,12 +165,12 @@ export function useFinalizarAtendimento() {
             console.error("[useFinalizarAtendimento] Erro ao atualizar saldo:", updateError);
           }
 
-          // Registrar movimentação
+          // Registrar movimentação como SAÍDA (origem é o caixa Avaliação)
           const { error: movError } = await supabase
             .from("movimentacoes_caixa")
             .insert({
-              caixa_destino_id: caixaAvaliacao.id,
-              caixa_origem_id: null,
+              caixa_origem_id: caixaAvaliacao.id,
+              caixa_destino_id: null,
               tipo: 'pagamento_avaliacao',
               valor: valorDinheiro,
               motivo: `Pagamento avaliação - ${data.nome_cliente || 'Cliente'}`,
@@ -331,6 +331,55 @@ export function useDeleteAtendimento() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // 1. Buscar o atendimento para verificar se há pagamento em dinheiro
+      const { data: atendimento } = await supabase
+        .from("atendimentos")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (atendimento && atendimento.status === 'finalizado') {
+        // 2. Calcular total em dinheiro
+        let valorDinheiro = 0;
+        if (atendimento.pagamento_1_metodo?.toLowerCase() === 'dinheiro') {
+          valorDinheiro += atendimento.pagamento_1_valor || 0;
+        }
+        if (atendimento.pagamento_2_metodo?.toLowerCase() === 'dinheiro') {
+          valorDinheiro += atendimento.pagamento_2_valor || 0;
+        }
+        if (atendimento.pagamento_3_metodo?.toLowerCase() === 'dinheiro') {
+          valorDinheiro += atendimento.pagamento_3_valor || 0;
+        }
+
+        // 3. Se houve pagamento em dinheiro, reverter no caixa Avaliação
+        if (valorDinheiro > 0) {
+          const { data: caixaAvaliacao } = await supabase
+            .from("caixas")
+            .select("id, saldo_atual")
+            .eq("nome", "Avaliação")
+            .single();
+
+          if (caixaAvaliacao) {
+            // SOMAR de volta (reverter a subtração)
+            const novoSaldo = caixaAvaliacao.saldo_atual + valorDinheiro;
+            await supabase
+              .from("caixas")
+              .update({ saldo_atual: novoSaldo })
+              .eq("id", caixaAvaliacao.id);
+
+            // Deletar a movimentação associada
+            await supabase
+              .from("movimentacoes_caixa")
+              .delete()
+              .eq("tipo", "pagamento_avaliacao")
+              .ilike("motivo", `%${atendimento.nome_cliente}%`);
+              
+            console.log("[useDeleteAtendimento] ✅ Valor revertido ao caixa Avaliação:", valorDinheiro);
+          }
+        }
+      }
+
+      // 4. Finalmente, deletar o atendimento
       const { error } = await supabase
         .from("atendimentos")
         .delete()
@@ -343,6 +392,9 @@ export function useDeleteAtendimento() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
+      queryClient.invalidateQueries({ queryKey: ["caixas"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
     },
   });
 }
