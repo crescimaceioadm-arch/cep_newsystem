@@ -135,11 +135,68 @@ export function useFinalizarVenda() {
 
       console.log("Payload enviado:", vendaData);
       console.log("[useFinalizarVenda] Inserindo venda:", vendaData);
-      const { error: vendaError } = await supabase.from("vendas").insert(vendaData);
+      const { data: vendaInserida, error: vendaError } = await supabase
+        .from("vendas")
+        .insert(vendaData)
+        .select()
+        .single();
 
       if (vendaError) {
         console.error("[useFinalizarVenda] Erro ao inserir venda:", vendaError);
         throw vendaError;
+      }
+
+      // 5. Registrar movimentação em dinheiro no caixa
+      // Calcular valor em dinheiro da venda
+      const valorDinheiro = venda.pagamentos
+        .filter(p => p.metodo?.toLowerCase() === 'dinheiro')
+        .reduce((sum, p) => sum + (p.valor || 0), 0);
+
+      if (valorDinheiro > 0) {
+        console.log("[useFinalizarVenda] Registrando movimentação de dinheiro:", valorDinheiro);
+        
+        // Buscar o caixa de destino pelo nome
+        const { data: caixaDestino, error: caixaError } = await supabase
+          .from("caixas")
+          .select("id")
+          .eq("nome", venda.caixa_origem || "Caixa 1")
+          .single();
+
+        if (caixaError) {
+          console.error("[useFinalizarVenda] Erro ao buscar caixa:", caixaError);
+          // Não interrompe a venda, apenas loga o erro
+        } else if (caixaDestino) {
+          // Inserir movimentação
+          const { error: movError } = await supabase
+            .from("movimentacoes_caixa")
+            .insert({
+              caixa_destino_id: caixaDestino.id,
+              caixa_origem_id: null,
+              tipo: 'venda',
+              valor: valorDinheiro,
+              motivo: `Venda #${vendaInserida.id}`,
+            });
+
+          if (movError) {
+            console.error("[useFinalizarVenda] Erro ao registrar movimentação:", movError);
+          } else {
+            console.log("[useFinalizarVenda] Movimentação registrada com sucesso!");
+            
+            // Atualizar saldo do caixa
+            const { data: caixaAtual } = await supabase
+              .from("caixas")
+              .select("saldo_atual")
+              .eq("id", caixaDestino.id)
+              .single();
+
+            if (caixaAtual) {
+              await supabase
+                .from("caixas")
+                .update({ saldo_atual: (caixaAtual.saldo_atual || 0) + valorDinheiro })
+                .eq("id", caixaDestino.id);
+            }
+          }
+        }
       }
 
       console.log("[useFinalizarVenda] Venda inserida, atualizando estoque...");
