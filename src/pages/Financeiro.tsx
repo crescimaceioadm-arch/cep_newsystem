@@ -121,6 +121,9 @@ export default function Financeiro() {
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
   
+  // Caixa selecionado para o extrato (pode ser diferente do caixa logado)
+  const [caixaExtrato, setCaixaExtrato] = useState<string>("");
+  
   // Estado para capturar erros
   const [erroRenderizacao, setErroRenderizacao] = useState<string | null>(null);
 
@@ -194,11 +197,14 @@ export default function Financeiro() {
     }
   };
 
+  // Usar caixaExtrato se definido, senão usar caixaSelecionado
+  const caixaParaExtrato = caixaExtrato || caixaSelecionado;
+
   // Buscar caixa atual
   const caixaAtual = useMemo(() => {
-    if (!caixaSelecionado || !caixas) return null;
-    return caixas.find(c => c.nome === caixaSelecionado) || null;
-  }, [caixaSelecionado, caixas]);
+    if (!caixaParaExtrato || !caixas) return null;
+    return caixas.find(c => c.nome === caixaParaExtrato) || null;
+  }, [caixaParaExtrato, caixas]);
 
   // Buscar saldo inicial (do fechamento do dia anterior)
   const { data: saldoInicialData } = useSaldoInicial(
@@ -219,7 +225,7 @@ export default function Financeiro() {
       console.log("🧮 [CÁLCULO] Iniciando...");
 
       // Sem caixa selecionado
-      if (!caixaSelecionado || !caixaAtual) {
+      if (!caixaParaExtrato || !caixaAtual) {
         return {
           caixaAtual: null,
           movimentacoes: [],
@@ -235,7 +241,7 @@ export default function Financeiro() {
         const movs = movimentacoes?.filter(mov => {
           const origemNome = mov.caixa_origem?.[0]?.nome;
           const destinoNome = mov.caixa_destino?.[0]?.nome;
-          return origemNome === caixaSelecionado || destinoNome === caixaSelecionado;
+          return origemNome === caixaParaExtrato || destinoNome === caixaParaExtrato;
         }).slice(0, 20) || [];
 
         return {
@@ -579,8 +585,22 @@ export default function Financeiro() {
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <CardTitle>Extrato do Caixa: {caixaSelecionado || "Nenhum selecionado"}</CardTitle>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <CardTitle>Extrato do Caixa:</CardTitle>
+                  <Select value={caixaExtrato || caixaSelecionado || ""} onValueChange={setCaixaExtrato}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Selecione o caixa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {caixas?.map((c) => (
+                        <SelectItem key={c.id} value={c.nome}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {extratoCalculado.caixaAtual && (
                   <div className="text-sm font-normal text-muted-foreground">
                     Saldo Atual: <span className="font-bold text-purple-600">R$ {extratoCalculado.saldoFinal.toFixed(2)}</span>
@@ -589,7 +609,7 @@ export default function Financeiro() {
               </div>
               
               {/* Filtros de Data */}
-              {caixaSelecionado && (
+              {caixaParaExtrato && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg flex-wrap">
                     <div className="flex items-center gap-2">
