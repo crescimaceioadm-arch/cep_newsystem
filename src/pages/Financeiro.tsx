@@ -294,20 +294,15 @@ export default function Financeiro() {
         console.log(`   Destino ID: ${destinoId || 'N/A'}`);
         console.log(`   Caixa Atual ID: ${caixaIdAtual}`);
 
-        // 💰 VENDAS = ENTRADA (destino recebeu dinheiro)
-        if (tipo === 'venda') {
+        // 💰 VENDAS e PAGAMENTOS = ENTRADA (positivo) 
+        // Vendas têm destino_id = caixa que recebeu
+        if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
+          // Se o destino é o caixa selecionado, é uma ENTRADA
           if (destinoId === caixaIdAtual) {
             totalEntradas += mov.valor;
-            console.log(`   ✅ CLASSIFICAÇÃO: ENTRADA - Venda (+${mov.valor})`);
+            console.log(`   ✅ CLASSIFICAÇÃO: ENTRADA - Venda/Pagamento (+${mov.valor})`);
           }
-        }
-        // 💸 PAGAMENTO AVALIAÇÃO = SAÍDA do caixa Avaliação (origem enviou dinheiro ao cliente)
-        else if (tipo === 'pagamento_avaliacao') {
-          if (origemId === caixaIdAtual) {
-            totalSaidas += mov.valor;
-            console.log(`   ❌ CLASSIFICAÇÃO: SAÍDA - Pagamento Avaliação (-${mov.valor})`);
-          }
-        }
+        } 
         // 📥 ENTRADAS MANUAIS = ENTRADA (positivo)
         else if (tipo === 'entrada') {
           totalEntradas += mov.valor;
