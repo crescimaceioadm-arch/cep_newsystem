@@ -275,9 +275,14 @@ export function useSaldoFinalHoje(caixaId: string | null) {
         const destinoId = mov.caixa_destino_id;
         const origemId = mov.caixa_origem_id;
         
-        if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
+        if (tipo === 'venda') {
           if (destinoId === caixaId) {
             totalEntradas += mov.valor;
+          }
+        } else if (tipo === 'pagamento_avaliacao') {
+          // Pagamento de avaliação é SAÍDA do caixa Avaliação (origem)
+          if (origemId === caixaId) {
+            totalSaidas += mov.valor;
           }
         } else if (tipo === 'entrada') {
           totalEntradas += mov.valor;
