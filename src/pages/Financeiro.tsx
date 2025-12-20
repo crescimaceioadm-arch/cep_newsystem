@@ -28,6 +28,7 @@ import {
   useMovimentacaoManual,
   useSaldoInicial,
   useMovimentacoesDinheiro,
+  useSaldoFinalHoje,
   Caixa,
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
@@ -35,6 +36,63 @@ import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, Trend
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
+// Componente para Card de Caixa com saldo final calculado
+function CaixaCard({ 
+  caixa, 
+  onFechamento 
+}: { 
+  caixa: Caixa; 
+  onFechamento: (caixa: Caixa) => void;
+}) {
+  const { data: saldoData, isLoading } = useSaldoFinalHoje(caixa.id);
+  
+  const getCaixaCardClass = (nome: string) => {
+    if (nome === "Avaliação") {
+      return "bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30";
+    }
+    return "bg-card";
+  };
+
+  const getCaixaIconClass = (nome: string) => {
+    if (nome === "Avaliação") {
+      return "text-green-600";
+    }
+    return "text-primary";
+  };
+
+  const saldoFinal = saldoData?.saldoFinal ?? caixa.saldo_atual;
+
+  return (
+    <Card className={getCaixaCardClass(caixa.nome)}>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2">
+          <Wallet className={`h-5 w-5 ${getCaixaIconClass(caixa.nome)}`} />
+          {caixa.nome}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pb-3">
+        <p className="text-4xl font-bold">
+          {isLoading ? "..." : `R$ ${saldoFinal.toFixed(2)}`}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Saldo Final Hoje
+        </p>
+      </CardContent>
+      <div className="px-6 pb-4">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
+          onClick={() => onFechamento(caixa)}
+        >
+          <Lock className="h-4 w-4 mr-2" />
+          Realizar Fechamento
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 export default function Financeiro() {
   const { caixaSelecionado } = useCaixa();
@@ -112,19 +170,6 @@ export default function Financeiro() {
     setModalFechamento(true);
   };
 
-  const getCaixaCardClass = (nome: string) => {
-    if (nome === "Avaliação") {
-      return "bg-gradient-to-br from-green-500/20 to-green-600/10 border-green-500/30";
-    }
-    return "bg-card";
-  };
-
-  const getCaixaIconClass = (nome: string) => {
-    if (nome === "Avaliação") {
-      return "text-green-600";
-    }
-    return "text-primary";
-  };
 
   // 🛡️ Handlers seguros para mudança de data
   const handleDataInicioChange = (novaData: string) => {
@@ -338,33 +383,11 @@ export default function Financeiro() {
             <p className="text-muted-foreground col-span-3">Carregando caixas...</p>
           ) : (
             caixas?.map((caixa) => (
-              <Card key={caixa.id} className={getCaixaCardClass(caixa.nome)}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2">
-                    <Wallet className={`h-5 w-5 ${getCaixaIconClass(caixa.nome)}`} />
-                    {caixa.nome}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pb-3">
-                  <p className="text-4xl font-bold">
-                    R$ {caixa.saldo_atual.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Atualizado: {caixa.updated_at ? format(new Date(caixa.updated_at), "dd/MM HH:mm", { locale: ptBR }) : "-"}
-                  </p>
-                </CardContent>
-                <div className="px-6 pb-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
-                    onClick={() => openFechamento(caixa)}
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    Realizar Fechamento
-                  </Button>
-                </div>
-              </Card>
+              <CaixaCard 
+                key={caixa.id} 
+                caixa={caixa} 
+                onFechamento={openFechamento} 
+              />
             ))
           )}
         </div>

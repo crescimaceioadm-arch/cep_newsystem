@@ -34,8 +34,14 @@ export interface FechamentoCaixa {
 }
 
 /**
- * 🛡️ HOOK BLINDADO: Busca o saldo inicial do dia anterior
- * Com tratamento de erros e fallbacks seguros
+ * 🛡️ HOOK BLINDADO: Busca o saldo inicial
+ * PRIORIDADE:
+ * 1. Valor do fechamento físico (valor_contado) do dia anterior
+ * 2. Fechamento mais recente anterior
+ * 3. Zero como fallback
+ * 
+ * NOTA: O saldo_atual do caixa (configurações) é usado como fonte primária
+ * apenas quando NÃO há fechamentos registrados.
  */
 export function useSaldoInicial(caixaId: string | null, dataInicio: string | null) {
   return useQuery({
@@ -67,8 +73,7 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
 
         console.log("✅ [SALDO INICIAL] Dia anterior:", diaAnterior);
 
-        // Buscar fechamento do dia anterior
-        // 🔥 CORREÇÃO: created_at NÃO EXISTE! Removendo .order()
+        // PRIORIDADE 1: Buscar fechamento FÍSICO do dia anterior (valor_contado)
         const { data, error } = await supabase
           .from("fechamentos_caixa")
           .select("*")
@@ -83,15 +88,16 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
         }
 
         if (data) {
-          console.log("✅ [SALDO INICIAL] Fechamento encontrado:", data.valor_sistema);
+          // Usar valor_contado (fechamento físico) como saldo inicial
+          console.log("✅ [SALDO INICIAL] Fechamento físico do dia anterior:", data.valor_contado);
           return { 
-            valor: data.valor_sistema || 0, 
-            fonte: "fechamento", 
+            valor: data.valor_contado || 0, 
+            fonte: "fechamento_fisico", 
             data_fechamento: data.data_fechamento 
           };
         }
 
-        // Fallback: buscar o fechamento mais recente antes da data
+        // PRIORIDADE 2: Buscar fechamento mais recente antes da data
         const { data: dataFallback, error: errorFallback } = await supabase
           .from("fechamentos_caixa")
           .select("*")
@@ -102,11 +108,28 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
           .maybeSingle();
 
         if (dataFallback && !errorFallback) {
-          console.log("✅ [SALDO INICIAL] Fechamento anterior encontrado:", dataFallback.valor_sistema);
+          // Usar valor_contado do fechamento anterior mais próximo
+          console.log("✅ [SALDO INICIAL] Fechamento anterior encontrado:", dataFallback.valor_contado);
           return { 
-            valor: dataFallback.valor_sistema || 0, 
+            valor: dataFallback.valor_contado || 0, 
             fonte: "fechamento_anterior",
             data_fechamento: dataFallback.data_fechamento 
+          };
+        }
+
+        // PRIORIDADE 3: Se não há fechamentos, buscar saldo_atual do caixa (definido nas configurações)
+        const { data: caixaData, error: caixaError } = await supabase
+          .from("caixas")
+          .select("saldo_atual")
+          .eq("id", caixaId)
+          .single();
+
+        if (caixaData && !caixaError) {
+          console.log("✅ [SALDO INICIAL] Usando saldo das configurações:", caixaData.saldo_atual);
+          return { 
+            valor: caixaData.saldo_atual || 0, 
+            fonte: "configuracao",
+            data_fechamento: null 
           };
         }
 
@@ -223,6 +246,61 @@ export function useCaixas() {
 
       if (error) throw error;
       return data as Caixa[];
+    },
+  });
+}
+
+/**
+ * Hook para calcular o saldo final de um caixa específico para o dia de hoje
+ * Usa a mesma lógica do extrato: saldo_inicial + entradas - saídas
+ */
+export function useSaldoFinalHoje(caixaId: string | null) {
+  const hoje = new Date().toISOString().split('T')[0];
+  
+  const { data: saldoInicialData } = useSaldoInicial(caixaId, hoje);
+  const { data: movimentacoesPeriodo } = useMovimentacoesDinheiro(caixaId, hoje, hoje);
+
+  return useQuery({
+    queryKey: ["saldo_final_hoje", caixaId, saldoInicialData, movimentacoesPeriodo],
+    enabled: !!caixaId,
+    queryFn: async () => {
+      const saldoInicial = saldoInicialData?.valor || 0;
+      const movs = movimentacoesPeriodo || [];
+      
+      let totalEntradas = 0;
+      let totalSaidas = 0;
+
+      movs.forEach((mov) => {
+        const tipo = mov.tipo;
+        const destinoId = mov.caixa_destino_id;
+        const origemId = mov.caixa_origem_id;
+        
+        if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
+          if (destinoId === caixaId) {
+            totalEntradas += mov.valor;
+          }
+        } else if (tipo === 'entrada') {
+          totalEntradas += mov.valor;
+        } else if (tipo === 'saida') {
+          totalSaidas += mov.valor;
+        } else if (tipo === 'transferencia_entre_caixas') {
+          if (destinoId === caixaId) {
+            totalEntradas += mov.valor;
+          } else if (origemId === caixaId) {
+            totalSaidas += mov.valor;
+          }
+        }
+      });
+
+      const saldoFinal = saldoInicial + totalEntradas - totalSaidas;
+
+      return {
+        saldoInicial,
+        totalEntradas,
+        totalSaidas,
+        saldoFinal,
+        fonte: saldoInicialData?.fonte || "sem_dados"
+      };
     },
   });
 }

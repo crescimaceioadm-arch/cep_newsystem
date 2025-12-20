@@ -109,6 +109,7 @@ export function useFinalizarAtendimento() {
     }) => {
       console.log("[useFinalizarAtendimento] Payload enviado:", pagamento);
       
+      // 1. Atualizar o atendimento
       const { data, error } = await supabase
         .from("atendimentos")
         .update({
@@ -123,10 +124,73 @@ export function useFinalizarAtendimento() {
         console.error("[useFinalizarAtendimento] Erro Supabase:", error);
         throw error;
       }
+
+      // 2. Calcular valor em DINHEIRO para registrar no caixa de Avaliação
+      let valorDinheiro = 0;
+      
+      if (pagamento.pagamento_1_metodo?.toLowerCase() === 'dinheiro') {
+        valorDinheiro += pagamento.pagamento_1_valor || 0;
+      }
+      if (pagamento.pagamento_2_metodo?.toLowerCase() === 'dinheiro') {
+        valorDinheiro += pagamento.pagamento_2_valor || 0;
+      }
+      if (pagamento.pagamento_3_metodo?.toLowerCase() === 'dinheiro') {
+        valorDinheiro += pagamento.pagamento_3_valor || 0;
+      }
+
+      // 3. Se houve pagamento em dinheiro, registrar na movimentação do caixa "Avaliação"
+      if (valorDinheiro > 0) {
+        console.log("[useFinalizarAtendimento] Registrando R$", valorDinheiro, "em dinheiro no caixa Avaliação");
+
+        // Buscar o caixa de Avaliação
+        const { data: caixaAvaliacao, error: caixaError } = await supabase
+          .from("caixas")
+          .select("id, saldo_atual")
+          .eq("nome", "Avaliação")
+          .single();
+
+        if (caixaError) {
+          console.error("[useFinalizarAtendimento] Erro ao buscar caixa Avaliação:", caixaError);
+          // Não lançar erro para não impedir a finalização do atendimento
+        } else if (caixaAvaliacao) {
+          // Atualizar saldo do caixa
+          const novoSaldo = caixaAvaliacao.saldo_atual + valorDinheiro;
+          
+          const { error: updateError } = await supabase
+            .from("caixas")
+            .update({ saldo_atual: novoSaldo })
+            .eq("id", caixaAvaliacao.id);
+
+          if (updateError) {
+            console.error("[useFinalizarAtendimento] Erro ao atualizar saldo:", updateError);
+          }
+
+          // Registrar movimentação
+          const { error: movError } = await supabase
+            .from("movimentacoes_caixa")
+            .insert({
+              caixa_destino_id: caixaAvaliacao.id,
+              caixa_origem_id: null,
+              tipo: 'pagamento_avaliacao',
+              valor: valorDinheiro,
+              motivo: `Pagamento avaliação - ${data.nome_cliente || 'Cliente'}`,
+            });
+
+          if (movError) {
+            console.error("[useFinalizarAtendimento] Erro ao registrar movimentação:", movError);
+          } else {
+            console.log("[useFinalizarAtendimento] ✅ Movimentação registrada com sucesso no caixa Avaliação");
+          }
+        }
+      }
+
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
+      queryClient.invalidateQueries({ queryKey: ["caixas"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
     },
   });
 }
