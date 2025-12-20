@@ -153,8 +153,8 @@ export function useFinalizarAtendimento() {
           console.error("[useFinalizarAtendimento] Erro ao buscar caixa Avaliação:", caixaError);
           // Não lançar erro para não impedir a finalização do atendimento
         } else if (caixaAvaliacao) {
-          // Atualizar saldo do caixa
-          const novoSaldo = caixaAvaliacao.saldo_atual + valorDinheiro;
+          // Subtrair do saldo do caixa (pagamento = dinheiro saindo)
+          const novoSaldo = caixaAvaliacao.saldo_atual - valorDinheiro;
           
           const { error: updateError } = await supabase
             .from("caixas")
@@ -165,15 +165,15 @@ export function useFinalizarAtendimento() {
             console.error("[useFinalizarAtendimento] Erro ao atualizar saldo:", updateError);
           }
 
-          // Registrar movimentação
+          // Registrar movimentação (origem = caixa avaliação, pois dinheiro está saindo)
           const { error: movError } = await supabase
             .from("movimentacoes_caixa")
             .insert({
-              caixa_destino_id: caixaAvaliacao.id,
-              caixa_origem_id: null,
+              caixa_origem_id: caixaAvaliacao.id,
+              caixa_destino_id: null,
               tipo: 'pagamento_avaliacao',
               valor: valorDinheiro,
-              motivo: `Pagamento avaliação - ${data.nome_cliente || 'Cliente'}`,
+              motivo: `Pagamento Atendimento: ${data.nome_cliente || 'Cliente'}`,
             });
 
           if (movError) {
