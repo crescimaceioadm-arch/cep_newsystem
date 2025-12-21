@@ -976,43 +976,6 @@ export default function Financeiro() {
                   </Card>
                 )}
 
-                {/* 🐛 DEBUG VISUAL - Dados Brutos do Banco */}
-                {movimentacoes && (
-                  <Card className="mb-4 bg-yellow-50 border-yellow-300">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-yellow-900 flex items-center gap-2">
-                        <span className="text-lg">🐛</span>
-                        DEBUG: Dados do Banco (Total: {movimentacoes.length} registros)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="bg-white p-3 rounded border border-yellow-200">
-                        <p className="font-bold text-sm mb-2">📊 Resumo dos Dados:</p>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="font-semibold">Total de registros:</span> {movimentacoes.length}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Tipos encontrados:</span>{" "}
-                            {Array.from(new Set(movimentacoes.map(m => m.tipo))).join(", ")}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {movimentacoes.length > 0 && (
-                        <details className="bg-white p-3 rounded border border-yellow-200">
-                          <summary className="cursor-pointer font-semibold text-sm text-yellow-800 hover:text-yellow-900">
-                            👁️ Clique para ver os primeiros 3 registros RAW
-                          </summary>
-                          <pre className="mt-2 text-xs overflow-auto p-2 bg-gray-50 rounded max-h-60">
-                            {JSON.stringify(movimentacoes.slice(0, 3), null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-
                 {/* 📋 TABELA ESTILO EXTRATO BANCÁRIO */}
                 <Card>
                   <CardHeader>
