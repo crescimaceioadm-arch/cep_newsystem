@@ -842,10 +842,16 @@ export default function Financeiro() {
                                 let descricao = '';
                                 
                                 // Classificar a movimentação
-                                if (tipo === 'venda' || tipo === 'pagamento_avaliacao') {
+                                if (tipo === 'venda') {
                                   if (destinoId === caixaIdAtual) {
                                     isEntrada = true;
-                                    descricao = tipo === 'venda' ? 'Venda' : 'Avaliação';
+                                    descricao = 'Venda';
+                                  }
+                                } else if (tipo === 'pagamento_avaliacao') {
+                                  // Pagamento de avaliação é SAÍDA (origem é o caixa)
+                                  if (origemId === caixaIdAtual) {
+                                    isSaida = true;
+                                    descricao = 'Avaliação';
                                   }
                                 } else if (tipo === 'entrada') {
                                   isEntrada = true;
@@ -1026,10 +1032,10 @@ export default function Financeiro() {
                                   descricao = "💰 Venda";
                                 }
                               }
-                              // 🎯 PAGAMENTO DE AVALIAÇÃO = ENTRADA (positivo)
+                              // 🎯 PAGAMENTO DE AVALIAÇÃO = SAÍDA (negativo) - origem é o caixa
                               else if (tipo === 'pagamento_avaliacao') {
-                                if (destinoId === caixaIdAtual) {
-                                  isEntrada = true;
+                                if (origemId === caixaIdAtual) {
+                                  isSaida = true;
                                   descricao = "🎯 Avaliação";
                                 }
                               }

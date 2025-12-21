@@ -367,12 +367,12 @@ export function useDeleteAtendimento() {
               .update({ saldo_atual: novoSaldo })
               .eq("id", caixaAvaliacao.id);
 
-            // Deletar a movimentação associada
+            // Deletar a movimentação associada (motivo do frontend: "Pagamento avaliação - ...")
             await supabase
               .from("movimentacoes_caixa")
               .delete()
               .eq("tipo", "pagamento_avaliacao")
-              .ilike("motivo", `%${atendimento.nome_cliente}%`);
+              .ilike("motivo", `Pagamento avaliação - %${atendimento.nome_cliente}%`);
               
             console.log("[useDeleteAtendimento] ✅ Valor revertido ao caixa Avaliação:", valorDinheiro);
           }
