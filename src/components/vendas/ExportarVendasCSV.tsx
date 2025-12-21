@@ -21,6 +21,22 @@ import { Download, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+const MESES = [
+  { value: "all", label: "Todos os meses" },
+  { value: "01", label: "Janeiro" },
+  { value: "02", label: "Fevereiro" },
+  { value: "03", label: "Março" },
+  { value: "04", label: "Abril" },
+  { value: "05", label: "Maio" },
+  { value: "06", label: "Junho" },
+  { value: "07", label: "Julho" },
+  { value: "08", label: "Agosto" },
+  { value: "09", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+];
+
 // Gerar anos disponíveis (ano atual e 2 anos anteriores)
 const getAnos = () => {
   const anoAtual = new Date().getFullYear();
@@ -58,6 +74,7 @@ interface TotaisPorMes {
 
 export function ExportarVendasCSV() {
   const [open, setOpen] = useState(false);
+  const [mes, setMes] = useState<string>("all");
   const [ano, setAno] = useState<string>(new Date().getFullYear().toString());
   const [carregando, setCarregando] = useState(false);
 
@@ -70,9 +87,18 @@ export function ExportarVendasCSV() {
     setCarregando(true);
 
     try {
-      // Buscar vendas do ano inteiro
-      const dataInicio = `${ano}-01-01`;
-      const dataFim = `${ano}-12-31T23:59:59`;
+      // Calcular range de datas
+      let dataInicio: string;
+      let dataFim: string;
+
+      if (mes === "all") {
+        dataInicio = `${ano}-01-01`;
+        dataFim = `${ano}-12-31T23:59:59`;
+      } else {
+        const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate();
+        dataInicio = `${ano}-${mes}-01`;
+        dataFim = `${ano}-${mes}-${ultimoDia.toString().padStart(2, "0")}T23:59:59`;
+      }
 
       const { data: vendas, error } = await supabase
         .from("vendas")
@@ -189,6 +215,22 @@ export function ExportarVendasCSV() {
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="mes">Mês</Label>
+            <Select value={mes} onValueChange={setMes}>
+              <SelectTrigger id="mes">
+                <SelectValue placeholder="Selecione o mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {MESES.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="ano">Ano</Label>
             <Select value={ano} onValueChange={setAno}>
