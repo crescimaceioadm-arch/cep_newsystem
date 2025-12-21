@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useVendasHistorico, useExcluirVenda, Venda } from "@/hooks/useVendasHistorico";
 import { EditarVendaModal } from "@/components/vendas/EditarVendaModal";
+import { ExportarVendasCSV } from "@/components/vendas/ExportarVendasCSV";
 import { History, Search, CalendarIcon, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -81,15 +82,18 @@ export default function VendasHistorico() {
     <MainLayout title="Histórico de Vendas">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Histórico de Vendas</h1>
             <p className="text-muted-foreground">Visualize, edite ou exclua vendas registradas</p>
           </div>
-          <Button variant="outline" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && <ExportarVendasCSV />}
+            <Button variant="outline" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar
+            </Button>
+          </div>
         </div>
 
         {/* Filtros */}
