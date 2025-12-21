@@ -21,21 +21,6 @@ import { Download, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-const MESES = [
-  { value: "01", label: "Janeiro" },
-  { value: "02", label: "Fevereiro" },
-  { value: "03", label: "Março" },
-  { value: "04", label: "Abril" },
-  { value: "05", label: "Maio" },
-  { value: "06", label: "Junho" },
-  { value: "07", label: "Julho" },
-  { value: "08", label: "Agosto" },
-  { value: "09", label: "Setembro" },
-  { value: "10", label: "Outubro" },
-  { value: "11", label: "Novembro" },
-  { value: "12", label: "Dezembro" },
-];
-
 // Gerar anos disponíveis (ano atual e 2 anos anteriores)
 const getAnos = () => {
   const anoAtual = new Date().getFullYear();
@@ -45,38 +30,57 @@ const getAnos = () => {
   }));
 };
 
-interface TotaisPorMetodo {
-  [key: string]: number;
+// Colunas fixas do CSV na ordem correta
+const COLUNAS_PAGAMENTO = [
+  "Crédito à vista",
+  "Crédito 2x",
+  "Crédito 3x",
+  "Crédito 4x",
+  "Crédito 5x",
+  "Crédito 6x",
+  "Débito",
+  "Dinheiro",
+  "Pix",
+  "Gira crédito",
+];
+
+// Formatar valor no padrão brasileiro (1.234,56)
+const formatarValorBR = (valor: number): string => {
+  return valor.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+interface TotaisPorMes {
+  [mes: string]: { [metodo: string]: number };
 }
 
 export function ExportarVendasCSV() {
   const [open, setOpen] = useState(false);
-  const [mes, setMes] = useState<string>("");
   const [ano, setAno] = useState<string>(new Date().getFullYear().toString());
   const [carregando, setCarregando] = useState(false);
 
   const handleExportar = async () => {
-    if (!mes || !ano) {
-      toast.error("Selecione o mês e o ano");
+    if (!ano) {
+      toast.error("Selecione o ano");
       return;
     }
 
     setCarregando(true);
 
     try {
-      // Calcular range de datas do mês selecionado
-      const dataInicio = `${ano}-${mes}-01`;
-      const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate();
-      const dataFim = `${ano}-${mes}-${ultimoDia.toString().padStart(2, "0")}`;
+      // Buscar vendas do ano inteiro
+      const dataInicio = `${ano}-01-01`;
+      const dataFim = `${ano}-12-31T23:59:59`;
 
-      // Buscar vendas do período
       const { data: vendas, error } = await supabase
         .from("vendas")
         .select(
-          "id, data_venda, valor_total_venda, metodo_pagto_1, valor_pagto_1, metodo_pagto_2, valor_pagto_2, metodo_pagto_3, valor_pagto_3"
+          "id, data_venda, metodo_pagto_1, valor_pagto_1, metodo_pagto_2, valor_pagto_2, metodo_pagto_3, valor_pagto_3"
         )
         .gte("data_venda", dataInicio)
-        .lte("data_venda", `${dataFim}T23:59:59`);
+        .lte("data_venda", dataFim);
 
       if (error) throw error;
 
@@ -86,56 +90,57 @@ export function ExportarVendasCSV() {
         return;
       }
 
-      // Calcular totais por método de pagamento
-      const totais: TotaisPorMetodo = {};
+      // Agrupar por mês e método de pagamento
+      const totaisPorMes: TotaisPorMes = {};
 
       vendas.forEach((venda) => {
-        // Método 1
-        if (venda.metodo_pagto_1 && venda.valor_pagto_1) {
-          const metodo = venda.metodo_pagto_1.trim();
-          totais[metodo] = (totais[metodo] || 0) + venda.valor_pagto_1;
+        const dataVenda = new Date(venda.data_venda);
+        const mesKey = `${(dataVenda.getMonth() + 1).toString().padStart(2, "0")}/${ano}`;
+
+        if (!totaisPorMes[mesKey]) {
+          totaisPorMes[mesKey] = {};
+          COLUNAS_PAGAMENTO.forEach((col) => {
+            totaisPorMes[mesKey][col] = 0;
+          });
         }
-        // Método 2
-        if (venda.metodo_pagto_2 && venda.valor_pagto_2) {
-          const metodo = venda.metodo_pagto_2.trim();
-          totais[metodo] = (totais[metodo] || 0) + venda.valor_pagto_2;
-        }
-        // Método 3
-        if (venda.metodo_pagto_3 && venda.valor_pagto_3) {
-          const metodo = venda.metodo_pagto_3.trim();
-          totais[metodo] = (totais[metodo] || 0) + venda.valor_pagto_3;
-        }
+
+        // Processar cada método de pagamento
+        const processarPagamento = (metodo: string | null, valor: number | null) => {
+          if (!metodo || !valor) return;
+          const metodoNormalizado = metodo.trim();
+          if (totaisPorMes[mesKey][metodoNormalizado] !== undefined) {
+            totaisPorMes[mesKey][metodoNormalizado] += valor;
+          }
+        };
+
+        processarPagamento(venda.metodo_pagto_1, venda.valor_pagto_1);
+        processarPagamento(venda.metodo_pagto_2, venda.valor_pagto_2);
+        processarPagamento(venda.metodo_pagto_3, venda.valor_pagto_3);
       });
 
-      // Calcular total geral
-      const totalGeral = Object.values(totais).reduce((acc, val) => acc + val, 0);
-
-      // Montar CSV
-      const mesLabel = MESES.find((m) => m.value === mes)?.label || mes;
-      const linhas = [
-        ["Relatório de Vendas por Forma de Pagamento"],
-        [`Período: ${mesLabel}/${ano}`],
-        [`Total de Vendas: ${vendas.length}`],
-        [""],
-        ["Forma de Pagamento", "Valor Total (R$)"],
-      ];
-
-      // Ordenar métodos alfabeticamente
-      const metodosOrdenados = Object.entries(totais).sort((a, b) =>
-        a[0].localeCompare(b[0])
-      );
-
-      metodosOrdenados.forEach(([metodo, valor]) => {
-        linhas.push([metodo, valor.toFixed(2).replace(".", ",")]);
+      // Ordenar meses do mais recente para o mais antigo
+      const mesesOrdenados = Object.keys(totaisPorMes).sort((a, b) => {
+        const [mesA] = a.split("/");
+        const [mesB] = b.split("/");
+        return parseInt(mesB) - parseInt(mesA);
       });
 
-      // Linha de total
-      linhas.push([""]);
-      linhas.push(["TOTAL GERAL", totalGeral.toFixed(2).replace(".", ",")]);
+      // Montar CSV no formato especificado
+      const header = ["mês", ...COLUNAS_PAGAMENTO];
+      const linhas: string[][] = [header];
 
-      // Converter para CSV
+      mesesOrdenados.forEach((mesKey) => {
+        const [mes] = mesKey.split("/");
+        const dataFormatada = `01/${mes}/${ano}`;
+        const valores = COLUNAS_PAGAMENTO.map((col) =>
+          `"${formatarValorBR(totaisPorMes[mesKey][col] || 0)}"`
+        );
+        linhas.push([dataFormatada, ...valores]);
+      });
+
+      // Converter para CSV (usar vírgula como separador)
       const csvContent = linhas
-        .map((linha) => linha.map((cell) => `"${cell}"`).join(";"))
+        .map((linha) => linha.join(","))
         .join("\n");
 
       // Adicionar BOM para UTF-8 (para Excel reconhecer acentos)
@@ -148,7 +153,7 @@ export function ExportarVendasCSV() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `vendas_${mesLabel.toLowerCase()}_${ano}.csv`;
+      link.download = `Input_Fat_Controle_Financeiro_${ano}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -176,31 +181,14 @@ export function ExportarVendasCSV() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />
-            Exportar Vendas por Período
+            Exportar Faturamento Anual
           </DialogTitle>
           <DialogDescription>
-            Gera um CSV com o total de vendas por forma de pagamento no período
-            selecionado.
+            Gera um CSV com o total de vendas por forma de pagamento para cada mês do ano selecionado.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="mes">Mês</Label>
-            <Select value={mes} onValueChange={setMes}>
-              <SelectTrigger id="mes">
-                <SelectValue placeholder="Selecione o mês" />
-              </SelectTrigger>
-              <SelectContent>
-                {MESES.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           <div className="grid gap-2">
             <Label htmlFor="ano">Ano</Label>
             <Select value={ano} onValueChange={setAno}>
@@ -222,7 +210,7 @@ export function ExportarVendasCSV() {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancelar
           </Button>
-          <Button onClick={handleExportar} disabled={carregando || !mes}>
+          <Button onClick={handleExportar} disabled={carregando}>
             {carregando ? "Exportando..." : "Exportar CSV"}
           </Button>
         </DialogFooter>
