@@ -17,17 +17,35 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAtendimentos } from "@/hooks/useAtendimentos";
-import { ClipboardList, CalendarIcon, RefreshCw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useAtendimentos, useDeleteAtendimento } from "@/hooks/useAtendimentos";
+import { useUser } from "@/contexts/UserContext";
+import { ClipboardList, CalendarIcon, RefreshCw, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type StatusAtendimento = 'aguardando' | 'em_avaliacao' | 'aguardando_pagamento' | 'finalizado' | 'recusado';
 
 export default function HistoricoAtendimentos() {
   const [filtroData, setFiltroData] = useState<Date>(new Date());
+  const [atendimentoParaExcluir, setAtendimentoParaExcluir] = useState<any>(null);
+  const [deletando, setDeletando] = useState(false);
+  
   const { data: atendimentos, isLoading, refetch } = useAtendimentos();
+  const deleteAtendimento = useDeleteAtendimento();
+  const { cargo } = useUser();
+  const isAdmin = cargo === 'admin';
 
   // Filtrar atendimentos pela data selecionada
   const atendimentosFiltrados = atendimentos?.filter((atendimento) => {
@@ -80,6 +98,20 @@ export default function HistoricoAtendimentos() {
 
   const getPagamento = (atendimento: any) => {
     return atendimento.pagamento_1_metodo || atendimento.tipo_pagamento || "-";
+  };
+
+  const handleConfirmarExclusao = async () => {
+    if (!atendimentoParaExcluir) return;
+    setDeletando(true);
+    try {
+      await deleteAtendimento.mutateAsync(atendimentoParaExcluir.id);
+      toast.success("Atendimento excluído com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao excluir atendimento");
+    } finally {
+      setDeletando(false);
+      setAtendimentoParaExcluir(null);
+    }
   };
 
   return (
@@ -165,6 +197,7 @@ export default function HistoricoAtendimentos() {
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Avaliadora</TableHead>
+                    {isAdmin && <TableHead className="text-center">Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -182,11 +215,23 @@ export default function HistoricoAtendimentos() {
                       </TableCell>
                       <TableCell>{getPagamento(atendimento)}</TableCell>
                       <TableCell>{(atendimento as any).avaliadora_nome || "-"}</TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setAtendimentoParaExcluir(atendimento)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {(!atendimentosFiltrados || atendimentosFiltrados.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-muted-foreground py-8">
                         Nenhum atendimento encontrado para esta data
                       </TableCell>
                     </TableRow>
@@ -197,6 +242,33 @@ export default function HistoricoAtendimentos() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={!!atendimentoParaExcluir} onOpenChange={(open) => !open && setAtendimentoParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o atendimento de{" "}
+              <strong>{atendimentoParaExcluir?.nome_cliente}</strong>?
+              <br /><br />
+              <span className="text-destructive font-medium">
+                Esta ação irá reverter os valores financeiros associados e não pode ser desfeita.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmarExclusao}
+              disabled={deletando}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletando ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
