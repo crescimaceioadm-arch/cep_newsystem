@@ -646,8 +646,122 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
         totalDebito,
         totalCredito,
         totalGiraCredito,
-        totalGeral: totalDinheiro + totalPix + totalDebito + totalCredito + totalGiraCredito,
+      totalGeral: totalDinheiro + totalPix + totalDebito + totalCredito + totalGiraCredito,
       };
+    },
+  });
+}
+
+/**
+ * Hook para excluir uma movimentação manual (entrada, saída ou transferência)
+ * Reverte o saldo do caixa e remove a movimentação
+ */
+export function useDeleteMovimentacao() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (movimentacao: MovimentacaoCaixa) => {
+      const { tipo, valor, caixa_origem_id, caixa_destino_id } = movimentacao;
+
+      // Apenas tipos permitidos para exclusão manual
+      const tiposPermitidos = ['entrada', 'saida', 'transferencia_entre_caixas'];
+      if (!tiposPermitidos.includes(tipo)) {
+        throw new Error(`Tipo "${tipo}" não pode ser excluído manualmente`);
+      }
+
+      // Reverter saldo baseado no tipo
+      if (tipo === 'entrada' && caixa_destino_id) {
+        // Entrada foi adicionada ao caixa destino, reverter subtraindo
+        const { data: caixa, error: caixaError } = await supabase
+          .from("caixas")
+          .select("saldo_atual")
+          .eq("id", caixa_destino_id)
+          .single();
+
+        if (caixaError) throw caixaError;
+
+        const novoSaldo = caixa.saldo_atual - valor;
+        const { error: updateError } = await supabase
+          .from("caixas")
+          .update({ saldo_atual: novoSaldo })
+          .eq("id", caixa_destino_id);
+
+        if (updateError) throw updateError;
+      } 
+      else if (tipo === 'saida' && caixa_origem_id) {
+        // Saída foi removida do caixa origem, reverter adicionando
+        const { data: caixa, error: caixaError } = await supabase
+          .from("caixas")
+          .select("saldo_atual")
+          .eq("id", caixa_origem_id)
+          .single();
+
+        if (caixaError) throw caixaError;
+
+        const novoSaldo = caixa.saldo_atual + valor;
+        const { error: updateError } = await supabase
+          .from("caixas")
+          .update({ saldo_atual: novoSaldo })
+          .eq("id", caixa_origem_id);
+
+        if (updateError) throw updateError;
+      }
+      else if (tipo === 'transferencia_entre_caixas') {
+        // Transferência: reverter ambos os caixas
+        if (caixa_origem_id) {
+          const { data: caixaOrigem, error: erroOrigem } = await supabase
+            .from("caixas")
+            .select("saldo_atual")
+            .eq("id", caixa_origem_id)
+            .single();
+
+          if (erroOrigem) throw erroOrigem;
+
+          // Devolver o valor ao caixa de origem
+          const { error: updateOrigem } = await supabase
+            .from("caixas")
+            .update({ saldo_atual: caixaOrigem.saldo_atual + valor })
+            .eq("id", caixa_origem_id);
+
+          if (updateOrigem) throw updateOrigem;
+        }
+
+        if (caixa_destino_id) {
+          const { data: caixaDestino, error: erroDestino } = await supabase
+            .from("caixas")
+            .select("saldo_atual")
+            .eq("id", caixa_destino_id)
+            .single();
+
+          if (erroDestino) throw erroDestino;
+
+          // Remover o valor do caixa de destino
+          const { error: updateDestino } = await supabase
+            .from("caixas")
+            .update({ saldo_atual: caixaDestino.saldo_atual - valor })
+            .eq("id", caixa_destino_id);
+
+          if (updateDestino) throw updateDestino;
+        }
+      }
+
+      // Deletar a movimentação
+      const { error: deleteError } = await supabase
+        .from("movimentacoes_caixa")
+        .delete()
+        .eq("id", movimentacao.id);
+
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["caixas"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
+      toast.success("Movimentação excluída com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao excluir: " + error.message);
     },
   });
 }
