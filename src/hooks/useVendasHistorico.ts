@@ -224,6 +224,82 @@ export function useExcluirVenda() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // 1. Buscar a venda antes de deletar
+      const { data: venda, error: fetchError } = await supabase
+        .from("vendas")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (fetchError || !venda) {
+        throw new Error("Venda não encontrada");
+      }
+
+      // 2. Calcular o valor total em dinheiro
+      let valorDinheiro = 0;
+      if (venda.metodo_pagto_1?.toLowerCase() === 'dinheiro') {
+        valorDinheiro += venda.valor_pagto_1 || 0;
+      }
+      if (venda.metodo_pagto_2?.toLowerCase() === 'dinheiro') {
+        valorDinheiro += venda.valor_pagto_2 || 0;
+      }
+      if (venda.metodo_pagto_3?.toLowerCase() === 'dinheiro') {
+        valorDinheiro += venda.valor_pagto_3 || 0;
+      }
+
+      // 3. Se houve dinheiro, reverter o saldo e deletar a movimentação
+      if (valorDinheiro > 0 && venda.caixa_origem) {
+        const { data: caixa } = await supabase
+          .from("caixas")
+          .select("id, saldo_atual")
+          .eq("nome", venda.caixa_origem)
+          .maybeSingle();
+
+        if (caixa) {
+          // Subtrair do saldo
+          await supabase
+            .from("caixas")
+            .update({ saldo_atual: (caixa.saldo_atual || 0) - valorDinheiro })
+            .eq("id", caixa.id);
+
+          // Deletar movimentação associada
+          await supabase
+            .from("movimentacoes_caixa")
+            .delete()
+            .eq("tipo", "venda")
+            .ilike("motivo", `%${id}%`);
+        }
+      }
+
+      // 4. Devolver itens ao estoque
+      const categoriasParaRestaurar = [
+        { categoria: 'Roupas Baby', quantidade: venda.qtd_baby_vendida || 0 },
+        { categoria: 'Roupas 1 a 16', quantidade: venda.qtd_1_a_16_vendida || 0 },
+        { categoria: 'Calçados', quantidade: venda.qtd_calcados_vendida || 0 },
+        { categoria: 'Brinquedos', quantidade: venda.qtd_brinquedos_vendida || 0 },
+        { categoria: 'Itens Médios', quantidade: venda.qtd_itens_medios_vendida || 0 },
+        { categoria: 'Itens Grandes', quantidade: venda.qtd_itens_grandes_vendida || 0 },
+      ];
+
+      for (const item of categoriasParaRestaurar) {
+        if (item.quantidade > 0) {
+          // Buscar estoque atual
+          const { data: estoque } = await supabase
+            .from("estoque")
+            .select("id, quantidade_atual")
+            .eq("categoria", item.categoria)
+            .maybeSingle();
+
+          if (estoque) {
+            await supabase
+              .from("estoque")
+              .update({ quantidade_atual: (estoque.quantidade_atual || 0) + item.quantidade })
+              .eq("id", estoque.id);
+          }
+        }
+      }
+
+      // 5. Deletar a venda
       const { error } = await supabase
         .from("vendas")
         .delete()
@@ -234,7 +310,9 @@ export function useExcluirVenda() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vendas"] });
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
-      toast.success("Venda excluída com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes"] });
+      queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      toast.success("Venda excluída com sucesso! Saldo e estoque revertidos.");
     },
     onError: (error) => {
       console.error("Erro ao excluir venda:", error);
