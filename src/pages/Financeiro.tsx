@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCaixa } from "@/contexts/CaixaContext";
+import { useUser } from "@/contexts/UserContext";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useCaixas,
@@ -29,10 +40,12 @@ import {
   useSaldoInicial,
   useMovimentacoesDinheiro,
   useSaldoFinalHoje,
+  useDeleteMovimentacao,
   Caixa,
+  MovimentacaoCaixa,
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
-import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
+import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -96,10 +109,14 @@ function CaixaCard({
 
 export default function Financeiro() {
   const { caixaSelecionado } = useCaixa();
+  const { cargo } = useUser();
+  const isAdmin = cargo === 'admin';
+  
   const { data: caixas, isLoading: loadingCaixas, refetch } = useCaixas();
   const { data: movimentacoes, isLoading: loadingMov } = useMovimentacoesCaixa();
   const { mutate: transferir, isPending: transferindo } = useTransferenciaCaixa();
   const { mutate: movimentar, isPending: movimentando } = useMovimentacaoManual();
+  const deleteMovimentacao = useDeleteMovimentacao();
 
   // Transferência
   const [origem, setOrigem] = useState("");
@@ -126,6 +143,26 @@ export default function Financeiro() {
   
   // Estado para capturar erros
   const [erroRenderizacao, setErroRenderizacao] = useState<string | null>(null);
+
+  // Estado para exclusão de movimentação
+  const [movimentacaoParaExcluir, setMovimentacaoParaExcluir] = useState<MovimentacaoCaixa | null>(null);
+  const [deletandoMov, setDeletandoMov] = useState(false);
+
+  const handleConfirmarExclusaoMov = async () => {
+    if (!movimentacaoParaExcluir) return;
+    setDeletandoMov(true);
+    try {
+      await deleteMovimentacao.mutateAsync(movimentacaoParaExcluir);
+    } finally {
+      setDeletandoMov(false);
+      setMovimentacaoParaExcluir(null);
+    }
+  };
+
+  // Função para verificar se movimentação pode ser excluída
+  const podeExcluir = (tipo: string) => {
+    return ['entrada', 'saida', 'transferencia_entre_caixas'].includes(tipo);
+  };
 
   const handleTransferencia = () => {
     if (!origem || !destino || !valorTransf || origem === destino) return;
@@ -991,18 +1028,20 @@ export default function Financeiro() {
                           <TableHead className="text-right">Entrada (+)</TableHead>
                           <TableHead className="text-right">Saída (-)</TableHead>
                           <TableHead className="text-right font-bold">Saldo</TableHead>
+                          {isAdmin && <TableHead className="text-center">Ações</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {/* Primeira Linha: SALDO INICIAL */}
                         {dataInicio && dataFim && (
                           <TableRow className="bg-blue-50 font-bold border-b-2">
-                            <TableCell colSpan={5} className="text-right text-blue-900">
+                            <TableCell colSpan={isAdmin ? 6 : 5} className="text-right text-blue-900">
                               📊 SALDO INICIAL:
                             </TableCell>
                             <TableCell className="text-right text-blue-700 text-lg">
                               R$ {extratoCalculado.saldoInicial.toFixed(2)}
                             </TableCell>
+                            {isAdmin && <TableCell />}
                           </TableRow>
                         )}
 
@@ -1098,6 +1137,22 @@ export default function Financeiro() {
                                   <TableCell className="text-right font-bold bg-gray-50">
                                     R$ {saldoAcumulado.toFixed(2)}
                                   </TableCell>
+                                  {isAdmin && (
+                                    <TableCell className="text-center">
+                                      {podeExcluir(tipo) ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                          onClick={() => setMovimentacaoParaExcluir(mov)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">-</span>
+                                      )}
+                                    </TableCell>
+                                  )}
                                 </TableRow>
                               );
                             });
@@ -1111,19 +1166,20 @@ export default function Financeiro() {
                         {/* Última Linha: SALDO FINAL */}
                         {dataInicio && dataFim && extratoCalculado.movimentacoes.length > 0 && (
                           <TableRow className="bg-purple-50 font-bold border-t-2">
-                            <TableCell colSpan={5} className="text-right text-purple-900">
+                            <TableCell colSpan={isAdmin ? 6 : 5} className="text-right text-purple-900">
                               🎯 SALDO FINAL:
                             </TableCell>
                             <TableCell className="text-right text-purple-700 text-lg">
                               R$ {extratoCalculado.saldoFinal.toFixed(2)}
                             </TableCell>
+                            {isAdmin && <TableCell />}
                           </TableRow>
                         )}
 
                         {/* Sem movimentações */}
                         {extratoCalculado.movimentacoes.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-8">
+                            <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
                               <div className="space-y-4">
                                 <p className="text-muted-foreground">
                                   Nenhuma movimentação encontrada para o período
@@ -1161,6 +1217,38 @@ export default function Financeiro() {
         onOpenChange={setModalFechamento}
         caixa={caixaFechamento}
       />
+
+      {/* Dialog de confirmação de exclusão de movimentação */}
+      <AlertDialog open={!!movimentacaoParaExcluir} onOpenChange={(open) => !open && setMovimentacaoParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta movimentação?
+              <br /><br />
+              <strong>Tipo:</strong> {movimentacaoParaExcluir?.tipo === 'transferencia_entre_caixas' ? 'Transferência' : movimentacaoParaExcluir?.tipo === 'entrada' ? 'Entrada' : 'Saída'}
+              <br />
+              <strong>Valor:</strong> R$ {movimentacaoParaExcluir?.valor?.toFixed(2)}
+              <br />
+              <strong>Motivo:</strong> {movimentacaoParaExcluir?.motivo || '-'}
+              <br /><br />
+              <span className="text-destructive font-medium">
+                Os saldos dos caixas envolvidos serão revertidos automaticamente.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletandoMov}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmarExclusaoMov}
+              disabled={deletandoMov}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletandoMov ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
