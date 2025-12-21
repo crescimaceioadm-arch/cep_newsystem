@@ -9,7 +9,9 @@ import { useEstoque } from "@/hooks/useEstoque";
 import { useFinalizarVenda } from "@/hooks/useVendas";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { useCaixa } from "@/contexts/CaixaContext";
+import { useUser } from "@/contexts/UserContext";
 import { PagamentoInput } from "@/components/vendas/PagamentoInput";
+import { ExportarVendasCSV } from "@/components/vendas/ExportarVendasCSV";
 import { ShoppingCart, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
 // CORREÇÃO 1: Usando o hook padrão do projeto em vez do Sonner (evita crash de Provider)
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +51,7 @@ interface Pagamento {
 
 export default function Vendas() {
   const { toast } = useToast(); // Hook correto
+  const { isAdmin } = useUser();
   const { caixaSelecionado } = useCaixa();
   
   // CORREÇÃO 2: Proteção contra dados undefined/null do banco
@@ -151,6 +154,11 @@ export default function Vendas() {
 
   return (
     <MainLayout title="Vendas / Caixa">
+      {isAdmin && (
+        <div className="flex justify-end mb-4">
+          <ExportarVendasCSV />
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CARD PAGAMENTO */}
