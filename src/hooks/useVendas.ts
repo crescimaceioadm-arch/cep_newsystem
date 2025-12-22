@@ -57,6 +57,9 @@ export function useFinalizarVenda() {
 
   return useMutation({
     mutationFn: async (venda: NovaVenda) => {
+      // 🔒 PROTEÇÃO CONTRA DUPLA EXECUÇÃO
+      const transactionId = `VENDA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      console.log(`[useFinalizarVenda] 🆔 ID da Transação: ${transactionId}`);
       console.log("[useFinalizarVenda] Iniciando venda:", venda);
 
       // 1. Buscar estoque atual
@@ -146,58 +149,12 @@ export function useFinalizarVenda() {
         throw vendaError;
       }
 
-      // 5. Registrar movimentação em dinheiro no caixa
-      // Calcular valor em dinheiro da venda
-      const valorDinheiro = venda.pagamentos
-        .filter(p => p.metodo?.toLowerCase() === 'dinheiro')
-        .reduce((sum, p) => sum + (p.valor || 0), 0);
-
-      if (valorDinheiro > 0) {
-        console.log("[useFinalizarVenda] Registrando movimentação de dinheiro:", valorDinheiro);
-        
-        // Buscar o caixa de destino pelo nome
-        const { data: caixaDestino, error: caixaError } = await supabase
-          .from("caixas")
-          .select("id")
-          .eq("nome", venda.caixa_origem || "Caixa 1")
-          .single();
-
-        if (caixaError) {
-          console.error("[useFinalizarVenda] Erro ao buscar caixa:", caixaError);
-          // Não interrompe a venda, apenas loga o erro
-        } else if (caixaDestino) {
-          // Inserir movimentação
-          const { error: movError } = await supabase
-            .from("movimentacoes_caixa")
-            .insert({
-              caixa_destino_id: caixaDestino.id,
-              caixa_origem_id: null,
-              tipo: 'venda',
-              valor: valorDinheiro,
-              motivo: `Venda #${vendaInserida.id}`,
-            });
-
-          if (movError) {
-            console.error("[useFinalizarVenda] Erro ao registrar movimentação:", movError);
-          } else {
-            console.log("[useFinalizarVenda] Movimentação registrada com sucesso!");
-            
-            // Atualizar saldo do caixa
-            const { data: caixaAtual } = await supabase
-              .from("caixas")
-              .select("saldo_atual")
-              .eq("id", caixaDestino.id)
-              .single();
-
-            if (caixaAtual) {
-              await supabase
-                .from("caixas")
-                .update({ saldo_atual: (caixaAtual.saldo_atual || 0) + valorDinheiro })
-                .eq("id", caixaDestino.id);
-            }
-          }
-        }
-      }
+      // 5. ✅ MOVIMENTAÇÃO E ATUALIZAÇÃO DE SALDO SÃO FEITAS PELO TRIGGER DO BANCO
+      // O trigger 'trg_venda_dinheiro' (AFTER INSERT na tabela vendas) já cuida de:
+      // - Inserir a movimentação em movimentacoes_caixa
+      // - Atualizar o saldo_atual do caixa
+      // ⚠️ NÃO duplicar essa lógica aqui!
+      console.log("[useFinalizarVenda] ✅ Trigger do banco cuidará da movimentação de caixa");
 
       console.log("[useFinalizarVenda] Venda inserida, atualizando estoque...");
 

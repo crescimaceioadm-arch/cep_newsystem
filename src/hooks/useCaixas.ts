@@ -218,9 +218,18 @@ export function useMovimentacoesDinheiro(
         console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         console.log("📊 Total de registros:", data?.length || 0);
         console.log("📋 Tipos encontrados:", data?.map(m => m.tipo).join(', ') || 'nenhum');
+        
+        // 🔍 DETECTAR IDs DUPLICADOS
+        const ids = data?.map(m => m.id) || [];
+        const idsUnicos = new Set(ids);
+        console.log("🆔 IDs únicos:", idsUnicos.size, "de", ids.length, "registros");
+        if (idsUnicos.size < ids.length) {
+          console.error("🚨 ATENÇÃO: Há IDs DUPLICADOS na query!");
+        }
+        
         console.log("🔍 ANÁLISE DETALHADA:");
         data?.forEach((mov, i) => {
-          console.log(`  [${i+1}] tipo="${mov.tipo}" | valor=${mov.valor} | origem_id=${mov.caixa_origem_id || 'NULL'} | destino_id=${mov.caixa_destino_id || 'NULL'} | origem_nome=${mov.caixa_origem?.[0]?.nome || 'NULL'} | destino_nome=${mov.caixa_destino?.[0]?.nome || 'NULL'}`);
+          console.log(`  [${i+1}] ID=${mov.id?.substring(0,8)} | tipo="${mov.tipo}" | valor=${mov.valor} | origem_id=${mov.caixa_origem_id || 'NULL'} | destino_id=${mov.caixa_destino_id || 'NULL'} | origem_nome=${mov.caixa_origem?.[0]?.nome || 'NULL'} | destino_nome=${mov.caixa_destino?.[0]?.nome || 'NULL'}`);
         });
         console.log("📦 DADOS BRUTOS:", data);
         console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
