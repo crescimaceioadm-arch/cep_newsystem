@@ -38,6 +38,15 @@ interface PagamentoInputProps {
 }
 
 export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
+  // Normaliza entrada monetária e evita ruído de ponto flutuante
+  const sanitizeMoney = (value: string) => value.replace(/[^0-9.,-]/g, "").replace(",", ".");
+  const roundToCents = (value: string) => {
+    const num = Number.parseFloat(sanitizeMoney(value));
+    if (Number.isNaN(num)) return "";
+    const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+    return rounded.toFixed(2);
+  };
+
   const adicionarPagamento = () => {
     if (pagamentos.length < 3) {
       onChange([...pagamentos, { metodo: "PIX", valor: "", bandeira: undefined }]);
@@ -64,12 +73,9 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
   };
 
   const handleBlurValor = (index: number, valorStr: string) => {
-    if (valorStr) {
-      const num = parseFloat(valorStr);
-      if (!isNaN(num)) {
-        atualizarPagamento(index, "valor", num.toFixed(2));
-      }
-    }
+    if (!valorStr) return;
+    const rounded = roundToCents(valorStr);
+    atualizarPagamento(index, "valor", rounded);
   };
 
   const totalPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
@@ -111,11 +117,10 @@ export function PagamentoInput({ pagamentos, onChange }: PagamentoInputProps) {
           <div className="relative flex-1 min-w-[100px]">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
             <Input
-              type="number"
-              step="0.01"
-              min="0"
+              type="text"
+              inputMode="decimal"
               value={pagamento.valor}
-              onChange={(e) => atualizarPagamento(index, "valor", e.target.value)}
+              onChange={(e) => atualizarPagamento(index, "valor", sanitizeMoney(e.target.value))}
               onBlur={(e) => handleBlurValor(index, e.target.value)}
               className="pl-10"
               placeholder="0.00"

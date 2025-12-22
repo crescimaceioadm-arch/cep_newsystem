@@ -38,6 +38,12 @@ export function FechamentoCaixaModal({
   }, [open, refetch]);
 
   const valorSistema = caixa?.saldo_atual || 0;
+  const roundToCents = (value: string) => {
+    const num = Number.parseFloat(value.replace(/[^0-9.,-]/g, "").replace(",", "."));
+    if (Number.isNaN(num)) return "";
+    const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+    return rounded.toFixed(2);
+  };
   const valorContadoNum = parseFloat(valorContado) || 0;
   const diferenca = valorContadoNum - valorSistema;
   const temDiferenca = Math.abs(diferenca) >= 0.01;
@@ -174,16 +180,15 @@ export function FechamentoCaixaModal({
             </Label>
             <Input
               id="valorContado"
-              type="number"
-              min={0}
-              step={0.01}
+              type="text"
+              inputMode="decimal"
               placeholder="0.00"
               className="text-lg"
               value={valorContado}
-              onChange={(e) => setValorContado(e.target.value)}
+              onChange={(e) => setValorContado(e.target.value.replace(/[^0-9.,-]/g, "").replace(",", "."))}
               onBlur={(e) => {
                 if (e.target.value) {
-                  setValorContado(parseFloat(e.target.value).toFixed(2));
+                  setValorContado(roundToCents(e.target.value));
                 }
               }}
             />

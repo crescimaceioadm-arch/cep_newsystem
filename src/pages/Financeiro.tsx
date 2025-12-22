@@ -148,6 +148,14 @@ export default function Financeiro() {
   const [movimentacaoParaExcluir, setMovimentacaoParaExcluir] = useState<MovimentacaoCaixa | null>(null);
   const [deletandoMov, setDeletandoMov] = useState(false);
 
+  const sanitizeMoney = (value: string) => value.replace(/[^0-9.,-]/g, "").replace(",", ".");
+  const roundToCents = (value: string) => {
+    const num = Number.parseFloat(sanitizeMoney(value));
+    if (Number.isNaN(num)) return "";
+    const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+    return rounded.toFixed(2);
+  };
+
   const handleConfirmarExclusaoMov = async () => {
     if (!movimentacaoParaExcluir) return;
     setDeletandoMov(true);
@@ -494,15 +502,14 @@ export default function Financeiro() {
                   <div className="space-y-2">
                     <Label>Valor (R$)</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={valorTransf}
-                      onChange={(e) => setValorTransf(e.target.value)}
+                      onChange={(e) => setValorTransf(sanitizeMoney(e.target.value))}
                       onBlur={(e) => {
                         if (e.target.value) {
-                          setValorTransf(parseFloat(e.target.value).toFixed(2));
+                          setValorTransf(roundToCents(e.target.value));
                         }
                       }}
                     />
@@ -580,15 +587,14 @@ export default function Financeiro() {
                   <div className="space-y-2">
                     <Label>Valor (R$)</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={valorMov}
-                      onChange={(e) => setValorMov(e.target.value)}
+                      onChange={(e) => setValorMov(sanitizeMoney(e.target.value))}
                       onBlur={(e) => {
                         if (e.target.value) {
-                          setValorMov(parseFloat(e.target.value).toFixed(2));
+                          setValorMov(roundToCents(e.target.value));
                         }
                       }}
                     />
