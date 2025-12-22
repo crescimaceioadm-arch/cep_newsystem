@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useFechamentoCaixa, useResumoVendasPorCaixa, Caixa } from "@/hooks/useCaixas";
+import { useFechamentoCaixa, useResumoVendasPorCaixa, useSaldoFinalHoje, Caixa } from "@/hooks/useCaixas";
 import { Banknote, CreditCard, Smartphone, Wallet, RefreshCcw } from "lucide-react";
 
 interface FechamentoCaixaModalProps {
@@ -26,18 +26,21 @@ export function FechamentoCaixaModal({
   const [valorContado, setValorContado] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const { data: resumo, isLoading, refetch } = useResumoVendasPorCaixa(caixa?.nome || null);
+  const { data: saldoData, refetch: refetchSaldo } = useSaldoFinalHoje(caixa?.id || null);
   const { mutate: fecharCaixa, isPending } = useFechamentoCaixa();
 
-  // Reset ao abrir
+  // Reset ao abrir - também atualiza o saldo do caixa
   useEffect(() => {
     if (open) {
       setValorContado("");
       setJustificativa("");
       refetch();
+      refetchSaldo();
     }
-  }, [open, refetch]);
+  }, [open, refetch, refetchSaldo]);
 
-  const valorSistema = caixa?.saldo_atual || 0;
+  // Usa o valor ao vivo do hook em vez do objeto estático das props
+  const valorSistema = saldoData?.saldoFinal ?? caixa?.saldo_atual ?? 0;
   const roundToCents = (value: string) => {
     const num = Number.parseFloat(value.replace(/[^0-9.,-]/g, "").replace(",", "."));
     if (Number.isNaN(num)) return "";
