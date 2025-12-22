@@ -41,10 +41,19 @@ export function useCreateAtendimento() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (nomeCliente: string) => {
+    mutationFn: async ({
+      nomeCliente,
+      origemAvaliacao = "presencial",
+    }: {
+      nomeCliente: string;
+      origemAvaliacao?: "presencial" | "whatsapp" | null;
+    }) => {
       const { data, error } = await supabase
         .from("atendimentos")
-        .insert({ nome_cliente: nomeCliente })
+        .insert({ 
+          nome_cliente: nomeCliente,
+          origem_avaliacao: origemAvaliacao ?? null,
+        })
         .select()
         .single();
       
@@ -207,6 +216,7 @@ interface AvaliacaoData {
   valor_total_itens_grandes?: number;
   descricao_itens_extra: string;
   avaliadora_nome?: string;
+  origem_avaliacao?: "presencial" | "whatsapp" | null;
 }
 
 export function useSaveAvaliacao() {
@@ -230,6 +240,7 @@ export function useSaveAvaliacao() {
           valor_total_itens_grandes: data.valor_total_itens_grandes || 0,
           descricao_itens_extra: data.descricao_itens_extra,
           avaliadora_nome: data.avaliadora_nome || null,
+          origem_avaliacao: data.origem_avaliacao ?? null,
           status: "aguardando_pagamento" as StatusAtendimento,
         })
         .eq("id", data.id);

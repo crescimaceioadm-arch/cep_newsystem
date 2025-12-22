@@ -3,6 +3,7 @@ import { useCreateAtendimento } from "@/hooks/useAtendimentos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ interface NovoAtendimentoModalProps {
 
 export function NovoAtendimentoModal({ open, onOpenChange }: NovoAtendimentoModalProps) {
   const [nomeCliente, setNomeCliente] = useState("");
+  const [isWhatsapp, setIsWhatsapp] = useState(false);
   const { toast } = useToast();
   const createAtendimento = useCreateAtendimento();
 
@@ -36,12 +38,16 @@ export function NovoAtendimentoModal({ open, onOpenChange }: NovoAtendimentoModa
     }
 
     try {
-      await createAtendimento.mutateAsync(nomeCliente.trim());
+      await createAtendimento.mutateAsync({
+        nomeCliente: nomeCliente.trim(),
+        origemAvaliacao: isWhatsapp ? "whatsapp" : "presencial",
+      });
       toast({
         title: "Sucesso!",
         description: "Atendimento registrado com sucesso.",
       });
       setNomeCliente("");
+      setIsWhatsapp(false);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -72,6 +78,27 @@ export function NovoAtendimentoModal({ open, onOpenChange }: NovoAtendimentoModa
                 placeholder="Digite o nome do cliente..."
                 autoFocus
               />
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-semibold text-green-900">Atendimento via WhatsApp?</Label>
+                <p className="text-xs text-green-700">
+                  {isWhatsapp ? "WhatsApp (não conta tempo)" : "Presencial (conta tempo)"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${!isWhatsapp ? "text-green-600" : "text-gray-400"}`}>
+                  Presencial
+                </span>
+                <Switch
+                  checked={isWhatsapp}
+                  onCheckedChange={(checked) => setIsWhatsapp(!!checked)}
+                />
+                <span className={`text-xs font-medium ${isWhatsapp ? "text-green-600" : "text-gray-400"}`}>
+                  WhatsApp
+                </span>
+              </div>
             </div>
           </div>
           <DialogFooter>

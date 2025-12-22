@@ -22,6 +22,7 @@ export interface Atendimento {
   valor_pagto_2: number | null;
   metodo_pagto_3: string | null;
   valor_pagto_3: number | null;
+  origem_avaliacao?: string | null; // presencial | whatsapp
   created_at: string;
   updated_at: string;
 }
