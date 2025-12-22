@@ -27,9 +27,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useAtendimentos, useDeleteAtendimento } from "@/hooks/useAtendimentos";
 import { useUser } from "@/contexts/UserContext";
-import { ClipboardList, CalendarIcon, RefreshCw, Trash2 } from "lucide-react";
+import { ClipboardList, CalendarIcon, RefreshCw, Trash2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -41,6 +48,7 @@ export default function HistoricoAtendimentos() {
   const [filtroData, setFiltroData] = useState<Date>(new Date());
   const [atendimentoParaExcluir, setAtendimentoParaExcluir] = useState<any>(null);
   const [deletando, setDeletando] = useState(false);
+  const [detalhesAtendimento, setDetalhesAtendimento] = useState<any>(null);
   
   const { data: atendimentos, isLoading, refetch } = useAtendimentos();
   const deleteAtendimento = useDeleteAtendimento();
@@ -98,6 +106,43 @@ export default function HistoricoAtendimentos() {
 
   const getPagamento = (atendimento: any) => {
     return atendimento.pagamento_1_metodo || atendimento.tipo_pagamento || "-";
+  };
+
+  const getPagamentosDetalhes = (atendimento: any) => {
+    const pagamentos = [
+      {
+        metodo: atendimento.metodo_pagto_1 || atendimento.pagamento_1_metodo,
+        valor: atendimento.valor_pagto_1 ?? atendimento.pagamento_1_valor,
+      },
+      {
+        metodo: atendimento.metodo_pagto_2 || atendimento.pagamento_2_metodo,
+        valor: atendimento.valor_pagto_2 ?? atendimento.pagamento_2_valor,
+      },
+      {
+        metodo: atendimento.metodo_pagto_3 || atendimento.pagamento_3_metodo,
+        valor: atendimento.valor_pagto_3 ?? atendimento.pagamento_3_valor,
+      },
+    ];
+
+    return pagamentos
+      .filter((p) => (p.metodo || "").trim() || (p.valor ?? 0) > 0)
+      .map((p, idx) => ({
+        label: p.metodo || `Pagamento ${idx + 1}`,
+        valor: p.valor ?? 0,
+      }));
+  };
+
+  const getItensDetalhes = (atendimento: any) => {
+    const itens = [
+      { label: "Roupas Baby", qtd: atendimento.qtd_baby },
+      { label: "Roupas 1 a 16", qtd: atendimento.qtd_1_a_16 },
+      { label: "Calçados", qtd: atendimento.qtd_calcados },
+      { label: "Brinquedos", qtd: atendimento.qtd_brinquedos },
+      { label: "Itens Médios", qtd: atendimento.qtd_itens_medios },
+      { label: "Itens Grandes", qtd: atendimento.qtd_itens_grandes },
+    ];
+
+    return itens.filter((i) => (i.qtd ?? 0) > 0);
   };
 
   const handleConfirmarExclusao = async () => {
@@ -197,6 +242,7 @@ export default function HistoricoAtendimentos() {
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Avaliadora</TableHead>
+                    <TableHead className="text-center">Detalhes</TableHead>
                     {isAdmin && <TableHead className="text-center">Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
@@ -215,6 +261,17 @@ export default function HistoricoAtendimentos() {
                       </TableCell>
                       <TableCell>{getPagamento(atendimento)}</TableCell>
                       <TableCell>{(atendimento as any).avaliadora_nome || "-"}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setDetalhesAtendimento(atendimento)}
+                          aria-label="Ver detalhes da avaliação"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                       {isAdmin && (
                         <TableCell className="text-center">
                           <Button
@@ -231,7 +288,7 @@ export default function HistoricoAtendimentos() {
                   ))}
                   {(!atendimentosFiltrados || atendimentosFiltrados.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-muted-foreground py-8">
                         Nenhum atendimento encontrado para esta data
                       </TableCell>
                     </TableRow>
@@ -242,6 +299,80 @@ export default function HistoricoAtendimentos() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de detalhes da avaliação */}
+      <Dialog open={!!detalhesAtendimento} onOpenChange={(open) => !open && setDetalhesAtendimento(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Avaliação</DialogTitle>
+            <DialogDescription>
+              Peças negociadas, pagamentos e observações desta avaliação.
+            </DialogDescription>
+          </DialogHeader>
+
+          {detalhesAtendimento && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Cliente</p>
+                  <p className="font-semibold">{detalhesAtendimento.nome_cliente || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Hora</p>
+                  <p className="font-mono">{formatHora(detalhesAtendimento?.hora_chegada || detalhesAtendimento?.created_at)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Valor negociado</p>
+                  <p className="font-semibold">{formatValor(detalhesAtendimento?.valor_total_negociado)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Avaliadora</p>
+                  <p className="font-semibold">{detalhesAtendimento.avaliadora_nome || "-"}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm">Peças avaliadas</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {getItensDetalhes(detalhesAtendimento).map((item) => (
+                    <div key={item.label} className="flex justify-between rounded-md border px-3 py-2">
+                      <span>{item.label}</span>
+                      <span className="font-mono font-semibold">{item.qtd}</span>
+                    </div>
+                  ))}
+                  {getItensDetalhes(detalhesAtendimento).length === 0 && (
+                    <p className="text-muted-foreground">Nenhuma quantidade registrada.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm">Pagamentos</h4>
+                <div className="space-y-1 text-sm">
+                  {getPagamentosDetalhes(detalhesAtendimento).map((p, idx) => (
+                    <div key={`${p.label}-${idx}`} className="flex justify-between rounded-md border px-3 py-2">
+                      <span>{p.label}</span>
+                      <span className="font-mono font-semibold">{formatValor(p.valor)}</span>
+                    </div>
+                  ))}
+                  {getPagamentosDetalhes(detalhesAtendimento).length === 0 && (
+                    <p className="text-muted-foreground">Nenhum pagamento informado.</p>
+                  )}
+                </div>
+              </div>
+
+              {detalhesAtendimento.descricao_itens_extra && (
+                <div className="space-y-1 text-sm">
+                  <h4 className="font-semibold text-sm">Observações</h4>
+                  <p className="text-muted-foreground whitespace-pre-wrap">
+                    {detalhesAtendimento.descricao_itens_extra}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de confirmação de exclusão */}
       <AlertDialog open={!!atendimentoParaExcluir} onOpenChange={(open) => !open && setAtendimentoParaExcluir(null)}>
