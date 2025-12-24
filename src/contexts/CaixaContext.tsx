@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { UserRole } from "./UserContext";
 
 const STORAGE_KEY = "caixa_selecionado";
 
@@ -10,6 +11,7 @@ interface CaixaContextType {
   limparCaixa: () => void;
   showModal: boolean;
   setShowModal: (show: boolean) => void;
+  initializeCaixaForRole: (cargo: UserRole | null, userId: string | null) => void;
 }
 
 // Default values for when context is not yet available
@@ -19,6 +21,7 @@ const defaultContextValue: CaixaContextType = {
   limparCaixa: () => {},
   showModal: false,
   setShowModal: () => {},
+  initializeCaixaForRole: () => {},
 };
 
 const CaixaContext = createContext<CaixaContextType>(defaultContextValue);
@@ -47,6 +50,15 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
   };
 
+  const initializeCaixaForRole = (cargo: UserRole | null, userId: string | null) => {
+    // Auto-atribuir Caixa 1 para admin ao fazer login
+    if (cargo === 'admin' && userId && !caixaSelecionado) {
+      const caixa: CaixaOption = "Caixa 1";
+      setCaixaState(caixa);
+      localStorage.setItem(STORAGE_KEY, caixa);
+    }
+  };
+
   return (
     <CaixaContext.Provider
       value={{
@@ -55,6 +67,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
         limparCaixa,
         showModal,
         setShowModal,
+        initializeCaixaForRole,
       }}
     >
       {children}

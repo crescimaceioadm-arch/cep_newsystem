@@ -247,28 +247,14 @@ export function useExcluirVenda() {
         valorDinheiro += venda.valor_pagto_3 || 0;
       }
 
-      // 3. Se houve dinheiro, reverter o saldo e deletar a movimentação
+      // 3. Se houve dinheiro, deletar a movimentação
       if (valorDinheiro > 0 && venda.caixa_origem) {
-        const { data: caixa } = await supabase
-          .from("caixas")
-          .select("id, saldo_atual")
-          .eq("nome", venda.caixa_origem)
-          .maybeSingle();
-
-        if (caixa) {
-          // Subtrair do saldo
-          await supabase
-            .from("caixas")
-            .update({ saldo_atual: (caixa.saldo_atual || 0) - valorDinheiro })
-            .eq("id", caixa.id);
-
-          // Deletar movimentação associada
-          await supabase
-            .from("movimentacoes_caixa")
-            .delete()
-            .eq("tipo", "venda")
-            .ilike("motivo", `%${id}%`);
-        }
+        // Deletar movimentação associada
+        await supabase
+          .from("movimentacoes_caixa")
+          .delete()
+          .eq("tipo", "venda")
+          .ilike("motivo", `%${id}%`);
       }
 
       // 4. Devolver itens ao estoque

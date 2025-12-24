@@ -25,6 +25,7 @@ export function FechamentoCaixaModal({
 }: FechamentoCaixaModalProps) {
   const [valorContado, setValorContado] = useState("");
   const [justificativa, setJustificativa] = useState("");
+  const [dataFechamento, setDataFechamento] = useState("");
   const { data: resumo, isLoading, refetch } = useResumoVendasPorCaixa(caixa?.nome || null);
   const { data: saldoData, refetch: refetchSaldo } = useSaldoFinalHoje(caixa?.id || null);
   const { mutate: fecharCaixa, isPending } = useFechamentoCaixa();
@@ -34,6 +35,8 @@ export function FechamentoCaixaModal({
     if (open) {
       setValorContado("");
       setJustificativa("");
+      const hoje = new Date().toISOString().split("T")[0];
+      setDataFechamento(hoje);
       refetch();
       refetchSaldo();
     }
@@ -62,6 +65,7 @@ export function FechamentoCaixaModal({
         valorSistema: valorSistema,
         valorContado: valorContadoNum,
         justificativa: justificativa.trim() || null,
+        dataFechamento: dataFechamento,
         detalhesPagamentos: resumo ? {
           dinheiro: resumo.totalDinheiro,
           pix: resumo.totalPix,
@@ -74,6 +78,7 @@ export function FechamentoCaixaModal({
         onSuccess: () => {
           setValorContado("");
           setJustificativa("");
+          setDataFechamento("");
           onOpenChange(false);
         },
       }
@@ -174,6 +179,22 @@ export function FechamentoCaixaModal({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Input Data de Fechamento */}
+          <div className="space-y-2">
+            <Label htmlFor="dataFechamento" className="text-base font-medium">
+              Data do Fechamento *
+            </Label>
+            <Input
+              id="dataFechamento"
+              type="date"
+              value={dataFechamento}
+              onChange={(e) => setDataFechamento(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Data para registrar o fechamento. Permite datas anteriores.
+            </p>
           </div>
 
           {/* Input Valor Contado */}

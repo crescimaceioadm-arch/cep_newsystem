@@ -9,14 +9,21 @@ import { SelecionarCaixaModal } from "@/components/layout/SelecionarCaixaModal";
  * when user is authenticated but hasn't selected a cash register
  */
 export function CaixaGuard() {
-  const { user, loading, cargo } = useUser();
-  const { caixaSelecionado, setShowModal } = useCaixa();
+  const { user, loading, cargo, profile } = useUser();
+  const { caixaSelecionado, setShowModal, initializeCaixaForRole } = useCaixa();
   const location = useLocation();
+
+  // Auto-inicializar caixa para admin
+  useEffect(() => {
+    if (!loading && user && profile) {
+      initializeCaixaForRole(cargo, user.id);
+    }
+  }, [user, loading, cargo, profile, initializeCaixaForRole]);
 
   useEffect(() => {
     // Only show modal if:
     // 1. User is authenticated (not loading and has user)
-    // 2. User has a role that uses cash registers (admin, caixa, geral)
+    // 2. User has a role that uses cash registers (caixa, geral) - admin is auto-assigned
     // 3. No cash register is selected
     // 4. Not on auth page
     const needsCaixa = cargo === "caixa" || cargo === "geral";

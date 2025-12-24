@@ -74,7 +74,7 @@ function CaixaCard({
     return "text-primary";
   };
 
-  const saldoFinal = saldoData?.saldoFinal ?? caixa.saldo_atual;
+  const saldoFinal = saldoData?.saldoFinal ?? 0;
 
   return (
     <Card className={getCaixaCardClass(caixa.nome)}>

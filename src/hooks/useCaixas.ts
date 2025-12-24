@@ -266,15 +266,19 @@ export function useCaixas() {
 export function useSaldoFinalHoje(caixaId: string | null) {
   const hoje = new Date().toISOString().split('T')[0];
   
-  const { data: saldoInicialData } = useSaldoInicial(caixaId, hoje);
-  const { data: movimentacoesPeriodo } = useMovimentacoesDinheiro(caixaId, hoje, hoje);
+  const { data: saldoInicialData, isLoading: loadingSaldoInicial } = useSaldoInicial(caixaId, hoje);
+  const { data: movimentacoesPeriodo, isLoading: loadingMovimentacoes } = useMovimentacoesDinheiro(caixaId, hoje, hoje);
 
   return useQuery({
     queryKey: ["saldo_final_hoje", caixaId, saldoInicialData, movimentacoesPeriodo],
-    enabled: !!caixaId,
+    enabled: !!caixaId && !loadingSaldoInicial && !loadingMovimentacoes,
     queryFn: async () => {
       const saldoInicial = saldoInicialData?.valor || 0;
       const movs = movimentacoesPeriodo || [];
+      
+      console.log("🔢 [SALDO FINAL HOJE] Calculando para caixa:", caixaId);
+      console.log("  💰 Saldo Inicial:", saldoInicial, "(fonte:", saldoInicialData?.fonte, ")");
+      console.log("  📊 Movimentações:", movs.length);
       
       let totalEntradas = 0;
       let totalSaidas = 0;
@@ -287,26 +291,42 @@ export function useSaldoFinalHoje(caixaId: string | null) {
         if (tipo === 'venda') {
           if (destinoId === caixaId) {
             totalEntradas += mov.valor;
+            console.log("  ➕ Venda:", mov.valor);
           }
         } else if (tipo === 'pagamento_avaliacao') {
           // Pagamento de avaliação é SAÍDA do caixa Avaliação (origem)
           if (origemId === caixaId) {
             totalSaidas += mov.valor;
+            console.log("  ➖ Pagamento Avaliação:", mov.valor);
           }
         } else if (tipo === 'entrada') {
-          totalEntradas += mov.valor;
+          // Entrada: destino é o caixa que recebeu
+          if (destinoId === caixaId) {
+            totalEntradas += mov.valor;
+            console.log("  ➕ Entrada Manual:", mov.valor);
+          }
         } else if (tipo === 'saida') {
-          totalSaidas += mov.valor;
+          // Saída: origem é o caixa que perdeu
+          if (origemId === caixaId) {
+            totalSaidas += mov.valor;
+            console.log("  ➖ Saída Manual:", mov.valor);
+          }
         } else if (tipo === 'transferencia_entre_caixas') {
           if (destinoId === caixaId) {
             totalEntradas += mov.valor;
+            console.log("  ➕ Transferência Recebida:", mov.valor);
           } else if (origemId === caixaId) {
             totalSaidas += mov.valor;
+            console.log("  ➖ Transferência Enviada:", mov.valor);
           }
         }
       });
 
       const saldoFinal = saldoInicial + totalEntradas - totalSaidas;
+      
+      console.log("  📈 Total Entradas:", totalEntradas);
+      console.log("  📉 Total Saídas:", totalSaidas);
+      console.log("  ✅ Saldo Final:", saldoFinal);
 
       return {
         saldoInicial,
@@ -417,28 +437,11 @@ export function useMovimentacaoManual() {
       // Buscar o caixa pelo nome
       const { data: caixa, error: caixaError } = await supabase
         .from("caixas")
-        .select("id, saldo_atual")
+        .select("id")
         .eq("nome", caixaNome)
         .single();
 
       if (caixaError) throw caixaError;
-
-      const novoSaldo =
-        tipo === "entrada"
-          ? caixa.saldo_atual + valor
-          : caixa.saldo_atual - valor;
-
-      if (novoSaldo < 0) {
-        throw new Error("Saldo insuficiente para esta operação");
-      }
-
-      // Atualizar saldo
-      const { error: updateError } = await supabase
-        .from("caixas")
-        .update({ saldo_atual: novoSaldo })
-        .eq("id", caixa.id);
-
-      if (updateError) throw updateError;
 
       // Registrar movimentação
       // Para ENTRADA: destino é o caixa que recebeu
@@ -493,19 +496,22 @@ export function useFechamentoCaixa() {
       valorSistema,
       valorContado,
       justificativa,
+      dataFechamento,
       detalhesPagamentos,
     }: {
       caixaId: string;
       valorSistema: number;
       valorContado: number;
       justificativa?: string | null;
+      dataFechamento?: string;
       detalhesPagamentos?: DetalhesPagamentosFechamento;
     }) => {
       const diferenca = valorSistema - valorContado;
+      const dataParaSalvar = dataFechamento || new Date().toISOString().split("T")[0];
 
       const { error } = await supabase.from("fechamentos_caixa").insert({
         caixa_id: caixaId,
-        data_fechamento: new Date().toISOString().split("T")[0],
+        data_fechamento: dataParaSalvar,
         valor_sistema: valorSistema,
         valor_contado: valorContado,
         diferenca: diferenca,
