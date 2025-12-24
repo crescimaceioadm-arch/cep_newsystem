@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import { useCaixa } from "@/contexts/CaixaContext";
 import { useUser } from "@/contexts/UserContext";
 import {
@@ -31,6 +32,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useCaixas,
@@ -41,11 +50,12 @@ import {
   useMovimentacoesDinheiro,
   useSaldoFinalHoje,
   useDeleteMovimentacao,
+  useEditarMovimentacao,
   Caixa,
   MovimentacaoCaixa,
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
-import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2 } from "lucide-react";
+import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -117,6 +127,7 @@ export default function Financeiro() {
   const { mutate: transferir, isPending: transferindo } = useTransferenciaCaixa();
   const { mutate: movimentar, isPending: movimentando } = useMovimentacaoManual();
   const deleteMovimentacao = useDeleteMovimentacao();
+  const { mutateAsync: editarMovimentacao, isPending: editandoMov } = useEditarMovimentacao();
 
   // Transferência
   const [origem, setOrigem] = useState("");
@@ -147,6 +158,11 @@ export default function Financeiro() {
   // Estado para exclusão de movimentação
   const [movimentacaoParaExcluir, setMovimentacaoParaExcluir] = useState<MovimentacaoCaixa | null>(null);
   const [deletandoMov, setDeletandoMov] = useState(false);
+
+  // Estado para edição de movimentação
+  const [movimentacaoParaEditar, setMovimentacaoParaEditar] = useState<MovimentacaoCaixa | null>(null);
+  const [valorEditar, setValorEditar] = useState("");
+  const [motivoEditar, setMotivoEditar] = useState("");
 
   const sanitizeMoney = (value: string) => value.replace(/[^0-9.,-]/g, "").replace(",", ".");
   const roundToCents = (value: string) => {
@@ -415,6 +431,41 @@ export default function Financeiro() {
       };
     }
   }, [caixaSelecionado, caixaAtual, movimentacoes, movimentacoesPeriodo, saldoInicialData, dataInicio, dataFim]);
+
+  const handleOpenEditar = (mov: MovimentacaoCaixa) => {
+    setMovimentacaoParaEditar(mov);
+    setValorEditar(mov.valor.toFixed(2));
+    setMotivoEditar(mov.motivo || "");
+  };
+
+  const resetEditarState = () => {
+    setMovimentacaoParaEditar(null);
+    setValorEditar("");
+    setMotivoEditar("");
+  };
+
+  const handleConfirmarEdicaoMov = async () => {
+    if (!movimentacaoParaEditar) return;
+
+    const valorNormalizado = roundToCents(valorEditar);
+    const valorNumber = valorNormalizado ? parseFloat(valorNormalizado) : NaN;
+
+    if (!Number.isFinite(valorNumber) || valorNumber <= 0) {
+      toast.error("Informe um valor válido");
+      return;
+    }
+
+    try {
+      await editarMovimentacao({
+        movimentacao: movimentacaoParaEditar,
+        novoValor: valorNumber,
+        novoMotivo: motivoEditar.trim(),
+      });
+      resetEditarState();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao editar movimentação");
+    }
+  };
 
   return (
     <MainLayout title="Financeiro / Caixas">
@@ -1109,14 +1160,24 @@ export default function Financeiro() {
                                   {isAdmin && (
                                     <TableCell className="text-center">
                                       {podeExcluir(tipo) ? (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                          onClick={() => setMovimentacaoParaExcluir(mov)}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                            onClick={() => handleOpenEditar(mov)}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                            onClick={() => setMovimentacaoParaExcluir(mov)}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
                                       ) : (
                                         <span className="text-xs text-muted-foreground">-</span>
                                       )}
@@ -1186,6 +1247,57 @@ export default function Financeiro() {
         onOpenChange={setModalFechamento}
         caixa={caixaFechamento}
       />
+
+      {/* Dialog de edição de movimentação */}
+      <Dialog open={!!movimentacaoParaEditar} onOpenChange={(open) => !open && resetEditarState()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar movimentação</DialogTitle>
+            <DialogDescription>
+              Ajuste valor ou motivo. O saldo dos caixas envolvidos será recalculado automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Valor (R$)</Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={valorEditar}
+                onChange={(e) => setValorEditar(sanitizeMoney(e.target.value))}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    setValorEditar(roundToCents(e.target.value));
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo</Label>
+              <Input
+                value={motivoEditar}
+                onChange={(e) => setMotivoEditar(e.target.value)}
+                placeholder="Descreva o motivo"
+              />
+            </div>
+            {movimentacaoParaEditar && (
+              <p className="text-xs text-muted-foreground">
+                Tipo: {movimentacaoParaEditar.tipo === 'transferencia_entre_caixas' ? 'Transferência' : movimentacaoParaEditar.tipo === 'entrada' ? 'Entrada' : 'Saída'}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={resetEditarState} disabled={editandoMov}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmarEdicaoMov} disabled={editandoMov}>
+              {editandoMov ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de confirmação de exclusão de movimentação */}
       <AlertDialog open={!!movimentacaoParaExcluir} onOpenChange={(open) => !open && setMovimentacaoParaExcluir(null)}>

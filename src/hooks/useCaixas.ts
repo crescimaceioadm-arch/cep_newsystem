@@ -780,3 +780,89 @@ export function useDeleteMovimentacao() {
     },
   });
 }
+
+/**
+ * Edita uma movimentação manual (entrada, saída ou transferência)
+ * Regra: extorna o efeito antigo e aplica o novo valor, ajustando saldos
+ */
+export function useEditarMovimentacao() {
+  const queryClient = useQueryClient();
+
+  const atualizarSaldo = async (caixaId: string, delta: number) => {
+    const { data: caixa, error: caixaError } = await supabase
+      .from("caixas")
+      .select("saldo_atual")
+      .eq("id", caixaId)
+      .single();
+
+    if (caixaError) throw caixaError;
+
+    const { error: updateError } = await supabase
+      .from("caixas")
+      .update({ saldo_atual: caixa.saldo_atual + delta })
+      .eq("id", caixaId);
+
+    if (updateError) throw updateError;
+  };
+
+  return useMutation({
+    mutationFn: async ({
+      movimentacao,
+      novoValor,
+      novoMotivo,
+    }: {
+      movimentacao: MovimentacaoCaixa;
+      novoValor: number;
+      novoMotivo: string;
+    }) => {
+      const { tipo, valor: valorAntigo, caixa_origem_id, caixa_destino_id } = movimentacao;
+
+      const tiposPermitidos = ['entrada', 'saida', 'transferencia_entre_caixas'];
+      if (!tiposPermitidos.includes(tipo)) {
+        throw new Error(`Tipo "${tipo}" não pode ser editado manualmente`);
+      }
+
+      if (!Number.isFinite(novoValor) || novoValor <= 0) {
+        throw new Error("Valor inválido para edição");
+      }
+
+      // 1) Extornar efeito antigo
+      if (tipo === 'entrada' && caixa_destino_id) {
+        await atualizarSaldo(caixa_destino_id, -valorAntigo);
+      } else if (tipo === 'saida' && caixa_origem_id) {
+        await atualizarSaldo(caixa_origem_id, valorAntigo);
+      } else if (tipo === 'transferencia_entre_caixas') {
+        if (caixa_origem_id) await atualizarSaldo(caixa_origem_id, valorAntigo);
+        if (caixa_destino_id) await atualizarSaldo(caixa_destino_id, -valorAntigo);
+      }
+
+      // 2) Aplicar novo valor
+      if (tipo === 'entrada' && caixa_destino_id) {
+        await atualizarSaldo(caixa_destino_id, novoValor);
+      } else if (tipo === 'saida' && caixa_origem_id) {
+        await atualizarSaldo(caixa_origem_id, -novoValor);
+      } else if (tipo === 'transferencia_entre_caixas') {
+        if (caixa_origem_id) await atualizarSaldo(caixa_origem_id, -novoValor);
+        if (caixa_destino_id) await atualizarSaldo(caixa_destino_id, novoValor);
+      }
+
+      // 3) Atualizar registro
+      const { error: updateMovError } = await supabase
+        .from("movimentacoes_caixa")
+        .update({ valor: novoValor, motivo: novoMotivo || null })
+        .eq("id", movimentacao.id);
+
+      if (updateMovError) throw updateMovError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["caixas"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
+      toast.success("Movimentação editada com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao editar: " + error.message);
+    },
+  });
+}
