@@ -45,9 +45,21 @@ export function useVendasHistorico() {
 export interface AtualizacaoVenda {
   vendedora_nome?: string | null;
   cliente_nome?: string | null;
-  metodo_pagto_1?: string | null;
-  valor_total_venda?: number;
   caixa_origem?: string | null;
+  metodo_pagto_1?: string | null;
+  valor_pagto_1?: number | null;
+  metodo_pagto_2?: string | null;
+  valor_pagto_2?: number | null;
+  metodo_pagto_3?: string | null;
+  valor_pagto_3?: number | null;
+  qtd_baby_vendida?: number | null;
+  qtd_1_a_16_vendida?: number | null;
+  qtd_calcados_vendida?: number | null;
+  qtd_brinquedos_vendida?: number | null;
+  qtd_itens_medios_vendida?: number | null;
+  qtd_itens_grandes_vendida?: number | null;
+  qtd_total_itens?: number;
+  valor_total_venda?: number;
 }
 
 export function useAtualizarVenda() {
