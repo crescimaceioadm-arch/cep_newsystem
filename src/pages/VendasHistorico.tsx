@@ -2,8 +2,14 @@ import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -38,7 +44,7 @@ import { useUser } from "@/contexts/UserContext";
 
 export default function VendasHistorico() {
   const { isAdmin } = useUser();
-  const [filtroTexto, setFiltroTexto] = useState("");
+  const [filtroCaixa, setFiltroCaixa] = useState("");
   const [filtroData, setFiltroData] = useState<Date | undefined>(undefined);
   const { data: vendas, isLoading, refetch } = useVendasHistorico();
   const { mutate: excluirVenda, isPending: excluindo } = useExcluirVenda();
@@ -49,18 +55,16 @@ export default function VendasHistorico() {
 
   // Filtrar vendas
   const vendasFiltradas = vendas?.filter((venda) => {
-    // Filtro de texto (cliente ou ID)
-    const matchTexto =
-      !filtroTexto ||
-      venda.cliente_nome?.toLowerCase().includes(filtroTexto.toLowerCase()) ||
-      venda.id.toLowerCase().includes(filtroTexto.toLowerCase());
+    // Filtro por caixa de origem (exato)
+    const matchCaixa =
+      !filtroCaixa || venda.caixa_origem === filtroCaixa;
 
     // Filtro de data
     const matchData =
       !filtroData ||
       venda.data_venda?.startsWith(format(filtroData, "yyyy-MM-dd"));
 
-    return matchTexto && matchData;
+    return matchCaixa && matchData;
   });
 
   const handleConfirmarExclusao = () => {
@@ -106,14 +110,18 @@ export default function VendasHistorico() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-4">
-              {/* Busca por texto */}
-              <div className="flex-1 min-w-[200px]">
-                <Input
-                  placeholder="Buscar por cliente ou ID..."
-                  value={filtroTexto}
-                  onChange={(e) => setFiltroTexto(e.target.value)}
-                  className="w-full"
-                />
+              {/* Filtro por caixa */}
+              <div className="w-[200px]">
+                <Select value={filtroCaixa || "todos"} onValueChange={(value) => setFiltroCaixa(value === "todos" ? "" : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar caixa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os caixas</SelectItem>
+                    <SelectItem value="Caixa 1">Caixa 1</SelectItem>
+                    <SelectItem value="Caixa 2">Caixa 2</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Seletor de Data */}
@@ -142,11 +150,11 @@ export default function VendasHistorico() {
               </Popover>
 
               {/* Limpar filtros */}
-              {(filtroTexto || filtroData) && (
+              {(filtroCaixa || filtroData) && (
                 <Button
                   variant="ghost"
                   onClick={() => {
-                    setFiltroTexto("");
+                    setFiltroCaixa("");
                     setFiltroData(undefined);
                   }}
                 >

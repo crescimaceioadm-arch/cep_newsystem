@@ -18,6 +18,7 @@ const METODOS_PAGAMENTO = [
   "Crédito 8x",
   "Crédito 9x",
   "Crédito 10x",
+  "Vale Presente",
 ];
 
 const BANDEIRAS_CARTAO = ["Visa", "Master", "Hipercard", "Elo", "Amex"];
