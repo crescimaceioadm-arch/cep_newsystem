@@ -8,6 +8,12 @@ import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard,
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoque } from "@/hooks/useEstoque";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { ptBR as dayPickerPtBR } from "date-fns/locale";
+import type { DateRange } from "react-day-picker";
 
 // --- UTILITÁRIOS ---
 const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
@@ -60,31 +66,36 @@ export default function Dashboard() {
   const inicioMes = startOfMonth(hoje);
   const fimMes = endOfMonth(hoje);
 
+    // Seletor de período (mês atual por padrão)
+    const [periodo, setPeriodo] = useState<DateRange>({ from: inicioMes, to: fimMes });
+
   // --- FETCH DE DADOS (JUNTOS MAS SEPARADOS) ---
-  useEffect(() => {
+    useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      
+            const inicio = periodo?.from ? periodo.from : inicioMes;
+            const fim = periodo?.to ? periodo.to : fimMes;
+
       // 1. Busca Atendimentos (Seu código original)
       const { data: atendimentos } = await supabase
         .from("atendimentos")
         .select("*")
-        .gte("created_at", inicioMes.toISOString())
-        .lte("created_at", endOfDay(hoje).toISOString());
+                .gte("created_at", inicio.toISOString())
+                .lte("created_at", endOfDay(fim).toISOString());
 
       // 2. Busca Vendas (Novo código)
       const { data: vendas } = await supabase
         .from("vendas")
         .select("*")
-        .gte("created_at", inicioMes.toISOString())
-        .lte("created_at", endOfDay(hoje).toISOString());
+                .gte("created_at", inicio.toISOString())
+                .lte("created_at", endOfDay(fim).toISOString());
 
       setAllAtendimentos(atendimentos || []);
       setAllVendas(vendas || []);
       setLoading(false);
     }
     fetchData();
-  }, []);
+    }, [periodo]);
 
   // ==================================================================================
   // LÓGICA 1: COMPRAS E AVALIAÇÕES (SEU CÓDIGO ORIGINAL INTACTO)
@@ -316,6 +327,76 @@ export default function Dashboard() {
     };
   }, [allVendas, hoje]);
 
+    // === Gráfico de barras: dias do mês (vendas vs gastos em dinheiro de avaliações) ===
+    const barDiasMesData = useMemo(() => {
+        const diasNoMes = fimMes.getDate();
+        const data: { dia: string; vendido: number; gasto: number }[] = [];
+
+        for (let d = 1; d <= diasNoMes; d++) {
+            const dataDia = new Date(inicioMes.getFullYear(), inicioMes.getMonth(), d);
+
+            const vendido = allVendas
+                .filter((v) => isSameDay(parseISO(v.created_at), dataDia))
+                .reduce((acc, v) => acc + Number(v.valor_total_venda || 0), 0);
+
+            const gasto = allAtendimentos
+                .filter((a) => a.status === "finalizado" && isSameDay(parseISO(a.created_at), dataDia))
+                .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
+
+            data.push({ dia: String(d).padStart(2, "0"), vendido, gasto });
+        }
+
+        return data;
+    }, [allVendas, allAtendimentos, inicioMes, fimMes]);
+
+    // Totais do mês para o donut: vendas vs gastos em dinheiro (avaliações)
+    const donutResumoMes = useMemo(() => {
+        const totalVendasMes = salesMetrics.totalVendidoMes;
+        const totalGastosDinheiroMes = allAtendimentos
+            .filter((a) => a.status === "finalizado")
+            .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
+
+        const percentual = totalVendasMes > 0 ? (totalGastosDinheiroMes / totalVendasMes) * 100 : 0;
+
+        const data = [
+            { name: "Gastos em dinheiro", value: totalGastosDinheiroMes, color: "#ef4444" },
+            { name: "Demais vendas", value: Math.max(totalVendasMes - totalGastosDinheiroMes, 0), color: "#22c55e" },
+        ];
+
+        return { totalVendasMes, totalGastosDinheiroMes, percentual, data };
+    }, [salesMetrics.totalVendidoMes, allAtendimentos]);
+
+    // Tabela de gasto em dinheiro por grupos de avaliações (com base no período selecionado)
+    const tabelaGastos = useMemo(() => {
+        const finalizadosPeriodo = allAtendimentos.filter((a) => a.status === "finalizado");
+
+        const ehDinheiro = (a: any) => classificarPagamento(a) === "dinheiro";
+
+        const grupoGrandes = finalizadosPeriodo.filter((a) => (a.qtd_itens_grandes || 0) > 0);
+        const grupoMediosOuBrinquedos = finalizadosPeriodo.filter(
+            (a) => (a.qtd_itens_grandes || 0) === 0 && ((a.qtd_itens_medios || 0) > 0 || (a.qtd_brinquedos || 0) > 0)
+        );
+        const grupoRoupasESapatos = finalizadosPeriodo.filter((a) => {
+            const grandes = (a.qtd_itens_grandes || 0) > 0;
+            const medios = (a.qtd_itens_medios || 0) > 0;
+            const brinquedos = (a.qtd_brinquedos || 0) > 0;
+            const roupasOuSapatos = ((a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0)) > 0;
+            return !grandes && !medios && !brinquedos && roupasOuSapatos;
+        });
+
+        const totalGrupo = (lista: any[]) =>
+            lista.filter(ehDinheiro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
+
+        const rows = [
+            { categoria: "Com itens grandes", total: totalGrupo(grupoGrandes), quantidade: grupoGrandes.filter(ehDinheiro).length },
+            { categoria: "Sem grandes, com médios ou brinquedos", total: totalGrupo(grupoMediosOuBrinquedos), quantidade: grupoMediosOuBrinquedos.filter(ehDinheiro).length },
+            { categoria: "Só roupas/sapatos", total: totalGrupo(grupoRoupasESapatos), quantidade: grupoRoupasESapatos.filter(ehDinheiro).length },
+        ];
+
+        const totalGeral = rows.reduce((acc, r) => acc + r.total, 0);
+        return { rows, totalGeral };
+    }, [allAtendimentos]);
+
 
   // ==================================================================================
   // RENDERIZAÇÃO (TABS)
@@ -323,6 +404,62 @@ export default function Dashboard() {
   return (
     <MainLayout title="Dashboard Estratégico">
       <div className="space-y-8 pb-10">
+                {/* Gráficos no topo: à esquerda o donut de resumo; à direita barras por dia */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr items-stretch">
+                    {/* Donut de resumo mensal */}
+                    <Card className="h-full">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Resumo do mês: Vendas vs Gastos em dinheiro</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex flex-col md:flex-row items-center md:items-stretch gap-6 h-full">
+                                <div className="w-full max-w-[260px] h-[260px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={donutResumoMes.data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}>
+                                                {donutResumoMes.data.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip content={<CustomTooltip type="currency" />} />
+                                            <Legend />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="space-y-2 flex-1">
+                                    <div className="text-sm text-muted-foreground">Total de vendas no mês</div>
+                                    <div className="text-2xl font-bold">{formatCurrency(donutResumoMes.totalVendasMes)}</div>
+                                    <div className="text-sm text-muted-foreground">Gastos em dinheiro (avaliações)</div>
+                                    <div className="text-lg font-semibold text-red-600">{formatCurrency(donutResumoMes.totalGastosDinheiroMes)}</div>
+                                    <div className="text-sm text-muted-foreground">Percentual dos gastos sobre vendas</div>
+                                    <div className="text-lg font-semibold">{donutResumoMes.percentual.toFixed(1)}%</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Gráfico mensal de Vendas vs Gastos (barras por dia) */}
+                    <Card className="h-full">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Vendas (verde) vs Gastos em dinheiro (vermelho) - Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="h-[320px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={barDiasMesData} margin={{ left: 8, right: 8 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="dia" />
+                                        <YAxis />
+                                        <Tooltip content={<CustomTooltip type="currency" />} />
+                                        <Legend />
+                                        <Bar dataKey="vendido" name="Vendido" fill="#22c55e" />
+                                        <Bar dataKey="gasto" name="Gastos (avaliações)" fill="#ef4444" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -330,6 +467,60 @@ export default function Dashboard() {
             <p className="text-muted-foreground">{format(hoje, "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
           </div>
         </div>
+
+                {/* Seletor de período + Tabela de gastos por tipo de avaliação */}
+                <Card>
+                    <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
+                                    {periodo?.from && periodo?.to
+                                        ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
+                                        : "Selecionar período"}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="end">
+                                <Calendar
+                                    mode="range"
+                                    selected={periodo as any}
+                                    onSelect={(range) => setPeriodo(range as DateRange)}
+                                    defaultMonth={periodo?.from || inicioMes}
+                                    locale={ptBR}
+                                    numberOfMonths={2}
+                                    initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Categoria</TableHead>
+                                        <TableHead className="text-right">Total em dinheiro</TableHead>
+                                        <TableHead className="text-right">Nº avaliações</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {tabelaGastos.rows.map((row) => (
+                                        <TableRow key={row.categoria}>
+                                            <TableCell>{row.categoria}</TableCell>
+                                            <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
+                                            <TableCell className="text-right">{row.quantidade}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow>
+                                        <TableCell className="font-medium">Total</TableCell>
+                                        <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeral)}</TableCell>
+                                        <TableCell className="text-right">{tabelaGastos.rows.reduce((a, r) => a + r.quantidade, 0)}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
 
         {/* --- AQUI COMEÇA O SISTEMA DE ABAS --- */}
         <Tabs defaultValue="vendas" className="w-full">
