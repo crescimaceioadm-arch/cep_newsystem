@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useAtendimentos, useDeleteAtendimento } from "@/hooks/useAtendimentos";
+import { useAtendimentos, useDeleteAtendimento, useUpdateAtendimento } from "@/hooks/useAtendimentos";
 import { useUser } from "@/contexts/UserContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,11 +22,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/recepcao/StatusBadge";
 import { TempoEspera } from "@/components/recepcao/TempoEspera";
 import { NovoAtendimentoModal } from "@/components/recepcao/NovoAtendimentoModal";
 import { FinalizarAtendimentoModal } from "@/components/recepcao/FinalizarAtendimentoModal";
-import { UserPlus, CheckCircle, Loader2, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { UserPlus, CheckCircle, Loader2, Trash2, MessageCircle, User } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -36,6 +43,7 @@ export default function Recepcao() {
   const { isAdmin } = useUser();
   const { data: atendimentos, isLoading, error } = useAtendimentos();
   const { mutate: deleteAtendimento, isPending: deletando } = useDeleteAtendimento();
+  const updateAtendimento = useUpdateAtendimento();
   const [novoModalOpen, setNovoModalOpen] = useState(false);
   const [finalizarModalOpen, setFinalizarModalOpen] = useState(false);
   const [atendimentoSelecionado, setAtendimentoSelecionado] = useState<Atendimento | null>(null);
@@ -61,8 +69,71 @@ export default function Recepcao() {
     });
   };
 
+  const handleAlterarOrigem = (atendimento: Atendimento, novaOrigem: "presencial" | "whatsapp") => {
+    updateAtendimento.mutate(
+      {
+        id: atendimento.id,
+        updates: { origem_avaliacao: novaOrigem }
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Origem alterada para ${novaOrigem === "whatsapp" ? "WhatsApp" : "Presencial"}`);
+        },
+        onError: () => {
+          toast.error("Erro ao alterar origem");
+        }
+      }
+    );
+  };
+
   const formatHora = (dateString: string) => {
     return format(new Date(dateString), "HH:mm", { locale: ptBR });
+  };
+
+  const getOrigemBadge = (origem: string | null | undefined) => {
+    if (!origem || origem === "presencial") {
+      return (
+        <Badge variant="outline" className="gap-1">
+          <User className="h-3 w-3" />
+          Presencial
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="gap-1 bg-green-100 text-green-800 border-green-200">
+        <MessageCircle className="h-3 w-3" />
+        WhatsApp
+      </Badge>
+    );
+  };
+
+  const getOrigemEditavel = (atendimento: Atendimento) => {
+    const origem = atendimento.origem_avaliacao || "presencial";
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <div className="cursor-pointer">
+            {getOrigemBadge(origem)}
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem
+            onClick={() => handleAlterarOrigem(atendimento, "presencial")}
+            disabled={origem === "presencial"}
+          >
+            <User className="h-3.5 w-3.5 mr-2" />
+            Presencial
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleAlterarOrigem(atendimento, "whatsapp")}
+            disabled={origem === "whatsapp"}
+          >
+            <MessageCircle className="h-3.5 w-3.5 mr-2" />
+            WhatsApp
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
   };
 
   return (
@@ -99,6 +170,7 @@ export default function Recepcao() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Chegada</TableHead>
                     <TableHead>Tempo de Espera</TableHead>
                     <TableHead>Status</TableHead>
@@ -110,6 +182,9 @@ export default function Recepcao() {
                     <TableRow key={atendimento.id}>
                       <TableCell className="font-medium">
                         {atendimento.nome_cliente}
+                      </TableCell>
+                      <TableCell>
+                        {getOrigemEditavel(atendimento)}
                       </TableCell>
                       <TableCell>{formatHora(atendimento.hora_chegada)}</TableCell>
                       <TableCell>
@@ -163,7 +238,7 @@ export default function Recepcao() {
       {/* Modais */}
       <NovoAtendimentoModal 
         open={novoModalOpen} 
-        onOpenChange={setNovoModalOpen} 
+        onOpenChange={setNovoModalOpen}
       />
       <FinalizarAtendimentoModal
         open={finalizarModalOpen}
