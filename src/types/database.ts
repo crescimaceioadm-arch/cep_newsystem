@@ -7,6 +7,7 @@ export interface Atendimento {
   id: string;
   nome_cliente: string;
   hora_chegada: string;
+  hora_encerramento?: string | null;
   status: StatusAtendimento;
   qtd_baby: number | null;
   qtd_1_a_16: number | null;

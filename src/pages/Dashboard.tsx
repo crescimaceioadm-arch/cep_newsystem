@@ -76,10 +76,29 @@ export default function Dashboard() {
             const inicio = periodo?.from ? periodo.from : inicioMes;
             const fim = periodo?.to ? periodo.to : fimMes;
 
-      // 1. Busca Atendimentos (Seu código original)
-      const { data: atendimentos } = await supabase
-        .from("atendimentos")
-        .select("*")
+            // 1. Busca Atendimentos
+            // 1a. Finalizados usando a data de fechamento/encerramento dentro do período
+            const { data: atendFinalizados } = await supabase
+                .from("atendimentos")
+                .select("*")
+                .eq("status", "finalizado")
+                .gte("hora_encerramento", inicio.toISOString())
+                .lte("hora_encerramento", endOfDay(fim).toISOString());
+
+            // 1b. Recusados usando a data de fechamento/encerramento dentro do período
+            const { data: atendRecusados } = await supabase
+                .from("atendimentos")
+                .select("*")
+                .eq("status", "recusado")
+                .gte("hora_encerramento", inicio.toISOString())
+                .lte("hora_encerramento", endOfDay(fim).toISOString());
+
+            // 1c. Demais atendimentos (não-finalizados e não-recusados) usando a data de criação dentro do período
+            const { data: atendOutros } = await supabase
+                .from("atendimentos")
+                .select("*")
+                .neq("status", "finalizado")
+                .neq("status", "recusado")
                 .gte("created_at", inicio.toISOString())
                 .lte("created_at", endOfDay(fim).toISOString());
 
@@ -90,7 +109,7 @@ export default function Dashboard() {
                 .gte("created_at", inicio.toISOString())
                 .lte("created_at", endOfDay(fim).toISOString());
 
-      setAllAtendimentos(atendimentos || []);
+    setAllAtendimentos([...(atendFinalizados || []), ...(atendRecusados || []), ...(atendOutros || [])]);
       setAllVendas(vendas || []);
       setLoading(false);
     }
@@ -120,8 +139,11 @@ export default function Dashboard() {
   };
 
   const metrics = useMemo(() => {
-    const finalizadosMes = allAtendimentos.filter(a => a.status === "finalizado");
-    const finalizadosHoje = finalizadosMes.filter(a => isToday(new Date(a.created_at)));
+        const finalizadosMes = allAtendimentos.filter(a => a.status === "finalizado");
+        const finalizadosHoje = finalizadosMes.filter(a => {
+            const dataFechamento = a.hora_encerramento || a.created_at;
+            return dataFechamento ? isToday(new Date(dataFechamento)) : false;
+        });
     const recusadosMes = allAtendimentos.filter(a => a.status === "recusado");
 
     const calcularTotais = (lista: any[]) => {
@@ -339,9 +361,13 @@ export default function Dashboard() {
                 .filter((v) => isSameDay(parseISO(v.created_at), dataDia))
                 .reduce((acc, v) => acc + Number(v.valor_total_venda || 0), 0);
 
-            const gasto = allAtendimentos
-                .filter((a) => a.status === "finalizado" && isSameDay(parseISO(a.created_at), dataDia))
-                .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
+                        const gasto = allAtendimentos
+                                .filter((a) => {
+                                    if (a.status !== "finalizado") return false;
+                                    const dataRef = a.hora_encerramento || a.created_at;
+                                    return dataRef ? isSameDay(parseISO(dataRef), dataDia) : false;
+                                })
+                                .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
 
             data.push({ dia: String(d).padStart(2, "0"), vendido, gasto });
         }

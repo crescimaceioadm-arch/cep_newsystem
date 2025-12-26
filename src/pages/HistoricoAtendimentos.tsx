@@ -55,13 +55,12 @@ export default function HistoricoAtendimentos() {
   const { cargo } = useUser();
   const isAdmin = cargo === 'admin';
 
-  // Filtrar atendimentos pela data selecionada
+  // Filtrar atendimentos pela data selecionada (abertura OU encerramento no dia)
   const atendimentosFiltrados = atendimentos?.filter((atendimento) => {
-    const dataAtendimento = atendimento.hora_chegada || atendimento.created_at;
-    if (!dataAtendimento) return false;
-    
     const dataFormatada = format(filtroData, "yyyy-MM-dd");
-    return dataAtendimento.startsWith(dataFormatada);
+    const chegouNoDia = atendimento.hora_chegada?.startsWith(dataFormatada) || atendimento.created_at?.startsWith(dataFormatada);
+    const encerrouNoDia = atendimento.hora_encerramento?.startsWith(dataFormatada);
+    return chegouNoDia || encerrouNoDia;
   });
 
   const getStatusBadge = (status: StatusAtendimento) => {
@@ -94,6 +93,15 @@ export default function HistoricoAtendimentos() {
     if (!dataHora) return "-";
     try {
       return format(new Date(dataHora), "HH:mm", { locale: ptBR });
+    } catch {
+      return "-";
+    }
+  };
+
+  const formatDataHora = (dataHora: string | null | undefined) => {
+    if (!dataHora) return "-";
+    try {
+      return format(new Date(dataHora), "dd/MM HH:mm", { locale: ptBR });
     } catch {
       return "-";
     }
@@ -236,7 +244,8 @@ export default function HistoricoAtendimentos() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Hora</TableHead>
+                    <TableHead>Abertura</TableHead>
+                    <TableHead>Fechamento</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
@@ -250,7 +259,10 @@ export default function HistoricoAtendimentos() {
                   {atendimentosFiltrados?.map((atendimento) => (
                     <TableRow key={atendimento.id}>
                       <TableCell className="font-mono">
-                        {formatHora(atendimento.hora_chegada)}
+                        {formatDataHora(atendimento.hora_chegada || atendimento.created_at)}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {formatDataHora((atendimento as any).hora_encerramento)}
                       </TableCell>
                       <TableCell>{atendimento.nome_cliente || "-"}</TableCell>
                       <TableCell>
@@ -288,7 +300,7 @@ export default function HistoricoAtendimentos() {
                   ))}
                   {(!atendimentosFiltrados || atendimentosFiltrados.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={isAdmin ? 9 : 8} className="text-center text-muted-foreground py-8">
                         Nenhum atendimento encontrado para esta data
                       </TableCell>
                     </TableRow>
@@ -318,8 +330,12 @@ export default function HistoricoAtendimentos() {
                   <p className="font-semibold">{detalhesAtendimento.nome_cliente || "-"}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Hora</p>
-                  <p className="font-mono">{formatHora(detalhesAtendimento?.hora_chegada || detalhesAtendimento?.created_at)}</p>
+                  <p className="text-muted-foreground">Abertura</p>
+                  <p className="font-mono">{formatDataHora(detalhesAtendimento?.hora_chegada || detalhesAtendimento?.created_at)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Fechamento</p>
+                  <p className="font-mono">{formatDataHora(detalhesAtendimento?.hora_encerramento)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Valor negociado</p>
