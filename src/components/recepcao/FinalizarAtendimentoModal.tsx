@@ -75,8 +75,10 @@ export function FinalizarAtendimentoModal({
 
   const somaPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
   const valorTotalNum = parseFloat(valorTotal) || 0;
+  const descontoNum = parseFloat(desconto) || 0;
+  const valorComDesconto = valorTotalNum - descontoNum;
   // Aumentei a tolerância para 0.05 para evitar erros de arredondamento chatos
-  const pagamentoBalanceado = Math.abs(somaPagamentos - valorTotalNum) < 0.05;
+  const pagamentoBalanceado = Math.abs(somaPagamentos - valorComDesconto) < 0.05;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,13 +98,12 @@ export function FinalizarAtendimentoModal({
       toast({
         variant: "destructive",
         title: "Erro",
-        description: `A soma dos pagamentos (R$ ${somaPagamentos.toFixed(2)}) deve ser igual ao valor total (R$ ${valorTotalNum.toFixed(2)}).`,
+        description: `A soma dos pagamentos (R$ ${somaPagamentos.toFixed(2)}) deve ser igual ao valor com desconto (R$ ${valorComDesconto.toFixed(2)}).`,
       });
       return;
     }
 
     try {
-      const descontoNum = parseFloat(desconto) || 0;
       
       // CORREÇÃO CRÍTICA AQUI:
       // Adicionado status: 'finalizado' e hora_encerramento
@@ -276,18 +277,34 @@ export function FinalizarAtendimentoModal({
                   </div>
                 ))}
 
-                <div className="flex justify-between items-center p-3 bg-slate-100 rounded-lg border mt-4">
-                  <span className="text-sm font-medium">Soma dos Pagamentos:</span>
-                  <div className="text-right">
-                    <span className={`block font-bold text-lg ${pagamentoBalanceado ? 'text-green-600' : 'text-red-600'}`}>
+                <div className="space-y-2 p-3 bg-slate-50 rounded-lg border mt-4">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Valor Total:</span>
+                    <span className="font-semibold">R$ {valorTotalNum.toFixed(2)}</span>
+                  </div>
+                  {descontoNum > 0 && (
+                    <div className="flex justify-between items-center text-sm text-red-600 border-t pt-2">
+                      <span className="font-medium">- Desconto:</span>
+                      <span className="font-semibold">R$ {descontoNum.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className={`flex justify-between items-center p-2 rounded border-t-2 ${pagamentoBalanceado ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <span className="text-sm font-bold">Valor a Pagar:</span>
+                    <span className={`font-bold text-lg ${pagamentoBalanceado ? 'text-green-600' : 'text-red-600'}`}>
+                      R$ {valorComDesconto.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t">
+                    <span className="text-sm font-medium">Soma dos Pagamentos:</span>
+                    <span className={`font-bold text-lg ${pagamentoBalanceado ? 'text-green-600' : 'text-red-600'}`}>
                       R$ {somaPagamentos.toFixed(2)}
                     </span>
-                    {!pagamentoBalanceado && (
-                      <span className="text-xs text-red-500">
-                        Faltam R$ {Math.abs(valorTotalNum - somaPagamentos).toFixed(2)}
-                      </span>
-                    )}
                   </div>
+                  {!pagamentoBalanceado && (
+                    <span className="text-xs text-red-600 font-medium block text-center pt-1">
+                      Diferença: R$ {Math.abs(valorComDesconto - somaPagamentos).toFixed(2)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

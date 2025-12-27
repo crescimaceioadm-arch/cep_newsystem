@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFechamentoCaixa, useResumoVendasPorCaixa, useSaldoFinalHoje, Caixa } from "@/hooks/useCaixas";
+import { useUser } from "@/contexts/UserContext";
 import { Banknote, CreditCard, Smartphone, Wallet, RefreshCcw } from "lucide-react";
 
 interface FechamentoCaixaModalProps {
@@ -23,6 +24,8 @@ export function FechamentoCaixaModal({
   onOpenChange,
   caixa,
 }: FechamentoCaixaModalProps) {
+  const { cargo } = useUser();
+  const isAdmin = cargo === 'admin';
   const [valorContado, setValorContado] = useState("");
   const [justificativa, setJustificativa] = useState("");
   const [dataFechamento, setDataFechamento] = useState("");
@@ -181,21 +184,36 @@ export function FechamentoCaixaModal({
             )}
           </div>
 
-          {/* Input Data de Fechamento */}
-          <div className="space-y-2">
-            <Label htmlFor="dataFechamento" className="text-base font-medium">
-              Data do Fechamento *
-            </Label>
-            <Input
-              id="dataFechamento"
-              type="date"
-              value={dataFechamento}
-              onChange={(e) => setDataFechamento(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Data para registrar o fechamento. Permite datas anteriores.
+          {/* Fechamento em Dinheiro - Informativo Compacto */}
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-amber-900 font-medium">💰 Dinheiro Esperado:</span>
+              <span className="font-bold text-amber-700">
+                R$ {((saldoData?.saldoInicial || 0) + (resumo?.totalDinheiro || 0)).toFixed(2)}
+              </span>
+            </div>
+            <p className="text-xs text-amber-700 mt-1">
+              Inicial R$ {(saldoData?.saldoInicial || 0).toFixed(2)} + Vendas R$ {(resumo?.totalDinheiro || 0).toFixed(2)}
             </p>
           </div>
+
+          {/* Input Data de Fechamento - Apenas para Admin */}
+          {isAdmin && (
+            <div className="space-y-2">
+              <Label htmlFor="dataFechamento" className="text-base font-medium">
+                Data do Fechamento *
+              </Label>
+              <Input
+                id="dataFechamento"
+                type="date"
+                value={dataFechamento}
+                onChange={(e) => setDataFechamento(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Data para registrar o fechamento. Permite datas anteriores.
+              </p>
+            </div>
+          )}
 
           {/* Input Valor Contado */}
           <div className="space-y-2">

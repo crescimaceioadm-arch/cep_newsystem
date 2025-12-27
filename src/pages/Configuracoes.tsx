@@ -7,11 +7,19 @@ import { Label } from "@/components/ui/label";
 import { useColaboradoresByFuncao, useAddColaborador, useDeleteColaborador } from "@/hooks/useColaboradores";
 import { useCaixas } from "@/hooks/useCaixas";
 import { supabase } from "@/integrations/supabase/client";
-import { Trash2, Plus, Users, Wallet, Save, Shield } from "lucide-react";
+import { Trash2, Plus, Users, Wallet, Save, Shield, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
+import { useCaixa } from "@/contexts/CaixaContext";
 import { GestaoUsuariosCard } from "@/components/configuracoes/GestaoUsuariosCard";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function EquipeCard({ 
   titulo, 
@@ -194,12 +202,88 @@ function SaldosCaixasCard() {
   );
 }
 
+function TrocarCaixaCard() {
+  const { data: caixas, isLoading } = useCaixas();
+  const { caixaSelecionado, setCaixaSelecionado } = useCaixa();
+
+  const handleTrocarCaixa = (caixaNome: string) => {
+    setCaixaSelecionado(caixaNome as "Caixa 1" | "Caixa 2" | "Caixa 3");
+    toast.success(`Caixa alterado para "${caixaNome}"`);
+  };
+
+  return (
+    <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <LogOut className="h-5 w-5 text-blue-600" />
+          Trocar de Caixa
+        </CardTitle>
+        <p className="text-sm text-muted-foreground mt-2">
+          Altere o caixa ativo sem precisar fazer login novamente
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando caixas...</p>
+        ) : caixas?.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum caixa disponível</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Caixa Atual</Label>
+              <div className="p-3 bg-white rounded-lg border border-blue-200">
+                <p className="font-semibold text-blue-900">
+                  {caixaSelecionado || "Nenhum caixa selecionado"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="caixa-select">Selecione outro caixa:</Label>
+              <Select onValueChange={handleTrocarCaixa} value={caixaSelecionado || ""}>
+                <SelectTrigger id="caixa-select">
+                  <SelectValue placeholder="Escolha um caixa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {caixas?.map((caixa) => (
+                    <SelectItem key={caixa.id} value={caixa.nome}>
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4" />
+                        {caixa.nome}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="pt-2 text-xs text-blue-700 bg-blue-50 p-2 rounded">
+              <p>✓ Caixa será salvo e mantido mesmo se você sair da sessão</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Configuracoes() {
   const { isAdmin } = useUser();
 
   return (
     <MainLayout title="Configurações">
       <div className="space-y-6">
+        {/* Seção: Trocar Caixa (para Admin) */}
+        {isAdmin && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-blue-600" />
+              <h2 className="text-xl font-semibold">Gerenciar Caixa</h2>
+            </div>
+            <TrocarCaixaCard />
+          </div>
+        )}
+
         {/* Seção: Controle de Acesso (Apenas Admin) */}
         {isAdmin && (
           <div className="space-y-4">
