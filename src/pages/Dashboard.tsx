@@ -231,6 +231,10 @@ export default function Dashboard() {
     const comprasPorCat = {
         baby: finalizadosMes.reduce((acc, a) => acc + (a.qtd_baby || 0), 0),
         infantil: finalizadosMes.reduce((acc, a) => acc + (a.qtd_1_a_16 || 0), 0),
+        calcados: finalizadosMes.reduce((acc, a) => acc + (a.qtd_calcados || 0), 0),
+        brinquedos: finalizadosMes.reduce((acc, a) => acc + (a.qtd_brinquedos || 0), 0),
+        itens_medios: finalizadosMes.reduce((acc, a) => acc + (a.qtd_itens_medios || 0), 0),
+        itens_grandes: finalizadosMes.reduce((acc, a) => acc + (a.qtd_itens_grandes || 0), 0),
     };
 
     return { metricasHoje, metricasMes, performanceData, rainha, comprasPorCat, pieData };
@@ -327,14 +331,14 @@ export default function Dashboard() {
       const ehHoje = isSameDay(parseISO(venda.created_at), hoje);
       let valorGiraVenda = 0;
       
-      // Verificar nos 3 métodos de pagamento
+      // Verificar nos 3 métodos de pagamento - apenas "gira" é contabilizado
       [
         { metodo: venda.metodo_pagto_1, valor: venda.valor_pagto_1 },
         { metodo: venda.metodo_pagto_2, valor: venda.valor_pagto_2 },
         { metodo: venda.metodo_pagto_3, valor: venda.valor_pagto_3 },
       ].forEach(pag => {
         const metodo = (pag.metodo || "").toLowerCase();
-        if (metodo.includes("gira") || metodo.includes("crédito") || metodo.includes("credito")) {
+        if (metodo.includes("gira")) {
           valorGiraVenda += Number(pag.valor || 0);
         }
       });
@@ -379,32 +383,6 @@ export default function Dashboard() {
       picosHorarios
     };
   }, [allVendas, hoje]);
-
-    // === Gráfico de barras: dias do mês (vendas vs gastos em dinheiro de avaliações) ===
-    const barDiasMesData = useMemo(() => {
-        const diasNoMes = fimMes.getDate();
-        const data: { dia: string; vendido: number; gasto: number }[] = [];
-
-        for (let d = 1; d <= diasNoMes; d++) {
-            const dataDia = new Date(inicioMes.getFullYear(), inicioMes.getMonth(), d);
-
-            const vendido = allVendas
-                .filter((v) => isSameDay(parseISO(v.created_at), dataDia))
-                .reduce((acc, v) => acc + Number(v.valor_total_venda || 0), 0);
-
-                        const gasto = allAtendimentos
-                                .filter((a) => {
-                                    if (a.status !== "finalizado") return false;
-                                    const dataRef = a.hora_encerramento || a.created_at;
-                                    return dataRef ? isSameDay(parseISO(dataRef), dataDia) : false;
-                                })
-                                .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
-
-            data.push({ dia: String(d).padStart(2, "0"), vendido, gasto });
-        }
-
-        return data;
-    }, [allVendas, allAtendimentos, inicioMes, fimMes]);
 
     // Totais do mês para o donut: vendas vs gastos em dinheiro (avaliações)
     const donutResumoMes = useMemo(() => {
@@ -489,7 +467,7 @@ export default function Dashboard() {
   return (
     <MainLayout title="Dashboard Estratégico">
       <div className="space-y-8 pb-10">
-                {/* Gráficos no topo: à esquerda o donut de resumo; à direita barras por dia */}
+                {/* Resumo: Donut + Tabela de gastos em dinheiro */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr items-stretch">
                     {/* Donut de resumo mensal */}
                     <Card className="h-full">
@@ -523,24 +501,150 @@ export default function Dashboard() {
                         </CardContent>
                     </Card>
 
-                    {/* Gráfico mensal de Vendas vs Gastos (barras por dia) */}
+                    {/* Tabela de gastos em dinheiro por tipo de avaliação */}
                     <Card className="h-full">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Vendas (verde) vs Gastos em dinheiro (vermelho) - Mês</CardTitle>
+                        <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div className="flex flex-col gap-2">
+                                <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant={isQuickRangeActive("hoje") ? "default" : "outline"}
+                                        onClick={() => applyQuickRange("hoje")}
+                                    >
+                                        Hoje
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant={isQuickRangeActive("semana") ? "default" : "outline"}
+                                        onClick={() => applyQuickRange("semana")}
+                                    >
+                                        Semana
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant={isQuickRangeActive("mes") ? "default" : "outline"}
+                                        onClick={() => applyQuickRange("mes")}
+                                    >
+                                        Mês
+                                    </Button>
+                                </div>
+                            </div>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
+                                        {periodo?.from && periodo?.to
+                                            ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
+                                            : "Selecionar período"}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="end">
+                                    <Calendar
+                                        mode="range"
+                                        selected={periodo as any}
+                                        onSelect={(range) => setPeriodo(range as DateRange)}
+                                        defaultMonth={periodo?.from || inicioMes}
+                                        locale={ptBR}
+                                        numberOfMonths={2}
+                                        initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </CardHeader>
-                        <CardContent>
-                            <div className="h-[320px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={barDiasMesData} margin={{ left: 8, right: 8 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="dia" />
-                                        <YAxis />
-                                        <Tooltip content={<CustomTooltip type="currency" />} />
-                                        <Legend />
-                                        <Bar dataKey="vendido" name="Vendido" fill="#22c55e" />
-                                        <Bar dataKey="gasto" name="Gastos (avaliações)" fill="#ef4444" />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                        <CardContent className="max-h-[420px] overflow-auto">
+                            <div className="min-w-full">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Categoria</TableHead>
+                                            <TableHead className="text-right">Total em dinheiro</TableHead>
+                                            <TableHead className="text-right">Nº avaliações</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {tabelaGastos.rows.map((row) => {
+                                            const isExpanded = expandedCategories.has(row.categoria);
+                                            const toggleExpanded = () => {
+                                                const newExpanded = new Set(expandedCategories);
+                                                if (newExpanded.has(row.categoria)) {
+                                                    newExpanded.delete(row.categoria);
+                                                } else {
+                                                    newExpanded.add(row.categoria);
+                                                }
+                                                setExpandedCategories(newExpanded);
+                                            };
+
+                                            return (
+                                                <>
+                                                    <TableRow key={row.categoria} className="cursor-pointer hover:bg-gray-50" onClick={toggleExpanded}>
+                                                        <TableCell className="flex items-center gap-2">
+                                                            <ChevronDown 
+                                                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                                            />
+                                                            {row.categoria}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
+                                                        <TableCell className="text-right">{row.quantidade}</TableCell>
+                                                    </TableRow>
+                                                    {isExpanded && row.detalhes && row.detalhes.length > 0 && (
+                                                        <TableRow className="bg-gray-50/50">
+                                                            <TableCell colSpan={3} className="p-4">
+                                                                <div className="space-y-3">
+                                                                    <h4 className="font-semibold text-sm text-gray-700">Avaliações nesta categoria:</h4>
+                                                                    <div className="overflow-x-auto">
+                                                                        <Table className="text-sm">
+                                                                            <TableHeader>
+                                                                                <TableRow className="bg-white border-b border-gray-200">
+                                                                                    <TableHead className="text-xs">Cliente</TableHead>
+                                                                                    <TableHead className="text-xs">Data</TableHead>
+                                                                                    <TableHead className="text-xs">Métodos de Pagamento</TableHead>
+                                                                                    <TableHead className="text-xs text-right">Valor</TableHead>
+                                                                                </TableRow>
+                                                                            </TableHeader>
+                                                                            <TableBody>
+                                                                                {row.detalhes.map((detalhe, idx) => (
+                                                                                    <TableRow key={idx} className="border-b border-gray-100 hover:bg-gray-100/50">
+                                                                                        <TableCell className="text-xs text-gray-700">{detalhe.cliente}</TableCell>
+                                                                                        <TableCell className="text-xs text-gray-700">{detalhe.data}</TableCell>
+                                                                                        <TableCell className="text-xs text-gray-700">
+                                                                                            <div className="space-y-1">
+                                                                                                {detalhe.pagamento_1_metodo && <div>1: {detalhe.pagamento_1_metodo}</div>}
+                                                                                                {detalhe.pagamento_2_metodo && <div>2: {detalhe.pagamento_2_metodo}</div>}
+                                                                                                {detalhe.pagamento_3_metodo && <div>3: {detalhe.pagamento_3_metodo}</div>}
+                                                                                                {detalhe.pagamento_4_metodo && <div>4: {detalhe.pagamento_4_metodo}</div>}
+                                                                                            </div>
+                                                                                        </TableCell>
+                                                                                        <TableCell className="text-xs text-right font-medium text-gray-800">{formatCurrency(detalhe.valor)}</TableCell>
+                                                                                    </TableRow>
+                                                                                ))}
+                                                                                <TableRow className="bg-gray-100 font-semibold">
+                                                                                    <TableCell colSpan={3} className="text-xs">Subtotal da categoria</TableCell>
+                                                                                    <TableCell className="text-xs text-right">{formatCurrency(row.total)}</TableCell>
+                                                                                </TableRow>
+                                                                            </TableBody>
+                                                                        </Table>
+                                                                    </div>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                    {isExpanded && (!row.detalhes || row.detalhes.length === 0) && (
+                                                        <TableRow className="bg-gray-50/50">
+                                                            <TableCell colSpan={3} className="p-4 text-center text-sm text-gray-500">
+                                                                Nenhuma avaliação em dinheiro nesta categoria no período selecionado.
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </>
+                                            );
+                                        })}
+                                        <TableRow>
+                                            <TableCell className="font-medium">Total</TableCell>
+                                            <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeral)}</TableCell>
+                                            <TableCell className="text-right">{tabelaGastos.rows.reduce((a, r) => a + r.quantidade, 0)}</TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
                             </div>
                         </CardContent>
                     </Card>
@@ -553,154 +657,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-                {/* Seletor de período + Tabela de gastos por tipo de avaliação */}
-                <Card>
-                    <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div className="flex flex-col gap-2">
-                            <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    size="sm"
-                                    variant={isQuickRangeActive("hoje") ? "default" : "outline"}
-                                    onClick={() => applyQuickRange("hoje")}
-                                >
-                                    Hoje
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant={isQuickRangeActive("semana") ? "default" : "outline"}
-                                    onClick={() => applyQuickRange("semana")}
-                                >
-                                    Semana
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant={isQuickRangeActive("mes") ? "default" : "outline"}
-                                    onClick={() => applyQuickRange("mes")}
-                                >
-                                    Mês
-                                </Button>
-                            </div>
-                        </div>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
-                                    {periodo?.from && periodo?.to
-                                        ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
-                                        : "Selecionar período"}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="end">
-                                <Calendar
-                                    mode="range"
-                                    selected={periodo as any}
-                                    onSelect={(range) => setPeriodo(range as DateRange)}
-                                    defaultMonth={periodo?.from || inicioMes}
-                                    locale={ptBR}
-                                    numberOfMonths={2}
-                                    initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Categoria</TableHead>
-                                        <TableHead className="text-right">Total em dinheiro</TableHead>
-                                        <TableHead className="text-right">Nº avaliações</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {tabelaGastos.rows.map((row) => {
-                                        const isExpanded = expandedCategories.has(row.categoria);
-                                        const toggleExpanded = () => {
-                                            const newExpanded = new Set(expandedCategories);
-                                            if (newExpanded.has(row.categoria)) {
-                                                newExpanded.delete(row.categoria);
-                                            } else {
-                                                newExpanded.add(row.categoria);
-                                            }
-                                            setExpandedCategories(newExpanded);
-                                        };
-
-                                        return (
-                                            <>
-                                                <TableRow key={row.categoria} className="cursor-pointer hover:bg-gray-50" onClick={toggleExpanded}>
-                                                    <TableCell className="flex items-center gap-2">
-                                                        <ChevronDown 
-                                                            className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                                        />
-                                                        {row.categoria}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
-                                                    <TableCell className="text-right">{row.quantidade}</TableCell>
-                                                </TableRow>
-                                                {isExpanded && row.detalhes && row.detalhes.length > 0 && (
-                                                    <TableRow className="bg-gray-50/50">
-                                                        <TableCell colSpan={3} className="p-4">
-                                                            <div className="space-y-3">
-                                                                <h4 className="font-semibold text-sm text-gray-700">Avaliações nesta categoria:</h4>
-                                                                <div className="overflow-x-auto">
-                                                                    <Table className="text-sm">
-                                                                        <TableHeader>
-                                                                            <TableRow className="bg-white border-b border-gray-200">
-                                                                                <TableHead className="text-xs">Cliente</TableHead>
-                                                                                <TableHead className="text-xs">Data</TableHead>
-                                                                                <TableHead className="text-xs">Métodos de Pagamento</TableHead>
-                                                                                <TableHead className="text-xs text-right">Valor</TableHead>
-                                                                            </TableRow>
-                                                                        </TableHeader>
-                                                                        <TableBody>
-                                                                            {row.detalhes.map((detalhe, idx) => (
-                                                                                <TableRow key={idx} className="border-b border-gray-100 hover:bg-gray-100/50">
-                                                                                    <TableCell className="text-xs text-gray-700">{detalhe.cliente}</TableCell>
-                                                                                    <TableCell className="text-xs text-gray-700">{detalhe.data}</TableCell>
-                                                                                    <TableCell className="text-xs text-gray-700">
-                                                                                        <div className="space-y-1">
-                                                                                            {detalhe.pagamento_1_metodo && <div>1: {detalhe.pagamento_1_metodo}</div>}
-                                                                                            {detalhe.pagamento_2_metodo && <div>2: {detalhe.pagamento_2_metodo}</div>}
-                                                                                            {detalhe.pagamento_3_metodo && <div>3: {detalhe.pagamento_3_metodo}</div>}
-                                                                                            {detalhe.pagamento_4_metodo && <div>4: {detalhe.pagamento_4_metodo}</div>}
-                                                                                        </div>
-                                                                                    </TableCell>
-                                                                                    <TableCell className="text-xs text-right font-medium text-gray-800">{formatCurrency(detalhe.valor)}</TableCell>
-                                                                                </TableRow>
-                                                                            ))}
-                                                                            <TableRow className="bg-gray-100 font-semibold">
-                                                                                <TableCell colSpan={3} className="text-xs">Subtotal da categoria</TableCell>
-                                                                                <TableCell className="text-xs text-right">{formatCurrency(row.total)}</TableCell>
-                                                                            </TableRow>
-                                                                        </TableBody>
-                                                                    </Table>
-                                                                </div>
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                                {isExpanded && (!row.detalhes || row.detalhes.length === 0) && (
-                                                    <TableRow className="bg-gray-50/50">
-                                                        <TableCell colSpan={3} className="p-4 text-center text-sm text-gray-500">
-                                                            Nenhuma avaliação em dinheiro nesta categoria no período selecionado.
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </>
-                                        );
-                                    })}
-                                    <TableRow>
-                                        <TableCell className="font-medium">Total</TableCell>
-                                        <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeral)}</TableCell>
-                                        <TableCell className="text-right">{tabelaGastos.rows.reduce((a, r) => a + r.quantidade, 0)}</TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-
         {/* --- AQUI COMEÇA O SISTEMA DE ABAS --- */}
         <Tabs defaultValue="vendas" className="w-full">
             <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mb-6">
@@ -712,7 +668,7 @@ export default function Dashboard() {
             <TabsContent value="vendas" className="space-y-6 animate-in fade-in-50">
                 
                 {/* === RESUMO GERAL NO TOPO === */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card className="border-blue-200 bg-blue-50">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-blue-700">💰 Valor Total - Mês</CardTitle>
@@ -732,24 +688,14 @@ export default function Dashboard() {
                             <p className="text-xs text-green-600 mt-1">{salesMetrics.qtdVendasHoje} vendas hoje</p>
                         </CardContent>
                     </Card>
-                    
-                    <Card className="border-purple-200 bg-purple-50">
+
+                    <Card className="border-teal-200 bg-teal-50">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-purple-700">📦 Peças Vendidas - Mês</CardTitle>
+                            <CardTitle className="text-sm font-medium text-teal-700">🎯 Ticket Médio Geral (Mês)</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-purple-900">{salesMetrics.totalPecasMes}</div>
-                            <p className="text-xs text-purple-600 mt-1">peças em {salesMetrics.qtdVendasMes} vendas</p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card className="border-orange-200 bg-orange-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-orange-700">🎯 Peças Vendidas - Hoje</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-orange-900">{salesMetrics.totalPecasHoje}</div>
-                            <p className="text-xs text-orange-600 mt-1">peças em {salesMetrics.qtdVendasHoje} vendas</p>
+                            <div className="text-3xl font-bold text-teal-900">{formatCurrency(salesMetrics.ticketMedioGeral)}</div>
+                            <p className="text-xs text-teal-600 mt-1">Valor médio por venda no mês</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -760,7 +706,10 @@ export default function Dashboard() {
                     <Card className="border-blue-200">
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span>Proporção de Pagamentos - Mês</span>
+                                <span className="flex flex-col">
+                                    <span>Proporção de Pagamentos - Mês</span>
+                                    <span className="text-[11px] text-muted-foreground">Base: vendas (recebimentos)</span>
+                                </span>
                                 <span className="text-xs text-gray-500">{formatCurrency(salesMetrics.totalVendidoMes)}</span>
                             </CardTitle>
                         </CardHeader>
@@ -801,7 +750,10 @@ export default function Dashboard() {
                     <Card className="border-green-200">
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span>Proporção de Pagamentos - Hoje</span>
+                                <span className="flex flex-col">
+                                    <span>Proporção de Pagamentos - Hoje</span>
+                                    <span className="text-[11px] text-muted-foreground">Base: vendas (recebimentos)</span>
+                                </span>
                                 <span className="text-xs text-gray-500">{formatCurrency(salesMetrics.totalVendidoHoje)}</span>
                             </CardTitle>
                         </CardHeader>
@@ -839,43 +791,30 @@ export default function Dashboard() {
                     </Card>
                 </div>
 
-                {/* === PEÇAS POR CATEGORIA (GRÁFICO) === */}
+                {/* === VENDAS x COMPRAS POR CATEGORIA (MÊS) === */}
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex gap-2 items-center"><Package className="w-5"/> Peças Vendidas por Categoria</CardTitle>
+                        <CardTitle className="flex gap-2 items-center"><Package className="w-5"/> Vendas x Compras por Categoria (Mês)</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={[
-                                { categoria: 'Baby', Mês: salesMetrics.pecasMes.baby, Hoje: salesMetrics.pecasHoje.baby },
-                                { categoria: 'Infantil', Mês: salesMetrics.pecasMes.infantil, Hoje: salesMetrics.pecasHoje.infantil },
-                                { categoria: 'Calçados', Mês: salesMetrics.pecasMes.calcados, Hoje: salesMetrics.pecasHoje.calcados },
-                                { categoria: 'Brinquedos', Mês: salesMetrics.pecasMes.brinquedos, Hoje: salesMetrics.pecasHoje.brinquedos },
-                                { categoria: 'Itens Médios', Mês: salesMetrics.pecasMes.itens_medios, Hoje: salesMetrics.pecasHoje.itens_medios },
-                                { categoria: 'Itens Grandes', Mês: salesMetrics.pecasMes.itens_grandes, Hoje: salesMetrics.pecasHoje.itens_grandes },
+                                { categoria: 'Baby', Vendas: salesMetrics.pecasMes.baby, Compras: metrics.comprasPorCat.baby },
+                                { categoria: 'Infantil', Vendas: salesMetrics.pecasMes.infantil, Compras: metrics.comprasPorCat.infantil },
+                                { categoria: 'Calçados', Vendas: salesMetrics.pecasMes.calcados, Compras: metrics.comprasPorCat.calcados },
+                                { categoria: 'Brinquedos', Vendas: salesMetrics.pecasMes.brinquedos, Compras: metrics.comprasPorCat.brinquedos },
+                                { categoria: 'Itens Médios', Vendas: salesMetrics.pecasMes.itens_medios, Compras: metrics.comprasPorCat.itens_medios },
+                                { categoria: 'Itens Grandes', Vendas: salesMetrics.pecasMes.itens_grandes, Compras: metrics.comprasPorCat.itens_grandes },
                             ]}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="categoria" angle={-15} textAnchor="end" height={80} />
                                 <YAxis />
                                 <Tooltip content={<CustomTooltip type="number" />} />
                                 <Legend />
-                                <Bar dataKey="Mês" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="Hoje" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="Vendas" name="Vendas (mês)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="Compras" name="Compras (mês)" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                {/* === TICKET MÉDIO === */}
-                <Card className="border-teal-200 bg-teal-50">
-                    <CardHeader>
-                        <CardTitle className="flex gap-2 items-center text-teal-800">
-                            <DollarSign className="w-5"/> Ticket Médio Geral
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-4xl font-bold text-teal-900">{formatCurrency(salesMetrics.ticketMedioGeral)}</div>
-                        <p className="text-sm text-teal-700 mt-2">Valor médio por venda no mês</p>
                     </CardContent>
                 </Card>
 
@@ -990,7 +929,10 @@ export default function Dashboard() {
                     <Card className="border-blue-200">
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span>Proporção de Pagamentos - Mês</span>
+                                <span className="flex flex-col">
+                                    <span>Proporção de Pagamentos - Mês</span>
+                                    <span className="text-[11px] text-muted-foreground">Base: compras/avaliações</span>
+                                </span>
                                 <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasMes.total)}</span>
                             </CardTitle>
                         </CardHeader>
@@ -1037,7 +979,10 @@ export default function Dashboard() {
                     <Card className="border-green-200">
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span>Proporção de Pagamentos - Hoje</span>
+                                <span className="flex flex-col">
+                                    <span>Proporção de Pagamentos - Hoje</span>
+                                    <span className="text-[11px] text-muted-foreground">Base: compras/avaliações</span>
+                                </span>
                                 <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasHoje.total)}</span>
                             </CardTitle>
                         </CardHeader>
