@@ -87,7 +87,10 @@ export default function Recepcao() {
   };
 
   const formatHora = (dateString: string) => {
-    return format(new Date(dateString), "HH:mm", { locale: ptBR });
+    if (!dateString) return "--:--";
+    const parsed = new Date(dateString);
+    if (Number.isNaN(parsed.getTime())) return "--:--";
+    return format(parsed, "HH:mm", { locale: ptBR });
   };
 
   const getOrigemBadge = (origem: string | null | undefined) => {

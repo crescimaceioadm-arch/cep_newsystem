@@ -48,11 +48,14 @@ export function useCreateAtendimento() {
       nomeCliente: string;
       origemAvaliacao?: "presencial" | "whatsapp" | null;
     }) => {
+      const horaChegada = new Date().toISOString();
       const { data, error } = await supabase
         .from("atendimentos")
         .insert({ 
           nome_cliente: nomeCliente,
           origem_avaliacao: origemAvaliacao ?? null,
+          hora_chegada: horaChegada,
+          status: "aguardando_avaliacao" as StatusAtendimento,
         })
         .select()
         .single();

@@ -8,6 +8,7 @@ import {
   Wallet,
   History,
   ClipboardList,
+  Megaphone,
   LogOut
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -37,6 +38,7 @@ const allMenuItems = [
   { title: "Histórico Avaliações", url: "/atendimentos/historico", icon: ClipboardList },
   { title: "Histórico Vendas", url: "/vendas/historico", icon: History },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
+  { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Estoque", url: "/estoque", icon: Box },
   { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
   { title: "Configurações", url: "/configuracoes", icon: Settings },

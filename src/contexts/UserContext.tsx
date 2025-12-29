@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 
-export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral';
+export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral' | 'social_media';
 
 interface UserProfile {
   id: string;
@@ -29,7 +29,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: [
     '/', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
-    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth'
+    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing'
   ],
   caixa: [
     '/', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/auth'
@@ -38,7 +38,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     '/avaliacao', '/atendimentos/historico', '/auth'
   ],
   geral: [
-    '/', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth'
+    '/', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing'
+  ],
+  social_media: [
+    '/marketing', '/auth'
   ],
 };
 
@@ -48,6 +51,7 @@ export const DEFAULT_ROUTE: Record<UserRole, string> = {
   caixa: '/vendas',
   avaliadora: '/avaliacao',
   geral: '/vendas',
+  social_media: '/marketing',
 };
 
 export function UserProvider({ children }: { children: ReactNode }) {

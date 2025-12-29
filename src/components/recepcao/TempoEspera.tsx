@@ -6,7 +6,9 @@ interface TempoEsperaProps {
 }
 
 function calcularTempoEspera(horaChegada: string): string {
+  if (!horaChegada) return "--";
   const chegada = new Date(horaChegada);
+  if (Number.isNaN(chegada.getTime())) return "--";
   const agora = new Date();
   const diffMs = agora.getTime() - chegada.getTime();
   
