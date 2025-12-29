@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { startOfMonth, endOfMonth, endOfDay, isToday, format, isSameDay, parseISO } from "date-fns";
+import { startOfMonth, endOfMonth, endOfDay, isToday, format, isSameDay, parseISO, startOfWeek, endOfWeek, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard, BarChart3 } from "lucide-react";
+import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard, BarChart3, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoque } from "@/hooks/useEstoque";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
@@ -66,8 +66,39 @@ export default function Dashboard() {
   const inicioMes = startOfMonth(hoje);
   const fimMes = endOfMonth(hoje);
 
-    // Seletor de período (mês atual por padrão)
-    const [periodo, setPeriodo] = useState<DateRange>({ from: inicioMes, to: fimMes });
+  // Seletor de período (mês atual por padrão)
+  const [periodo, setPeriodo] = useState<DateRange>({ from: inicioMes, to: fimMes });
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+    // Faixas rápidas: hoje, semana, mês
+    const quickRanges = {
+        hoje: {
+            from: startOfDay(hoje),
+            to: startOfDay(hoje)
+        },
+        semana: {
+            from: startOfWeek(hoje, { weekStartsOn: 1 }),
+            to: endOfWeek(hoje, { weekStartsOn: 1 })
+        },
+        mes: {
+            from: inicioMes,
+            to: fimMes
+        }
+    } as const;
+
+    const applyQuickRange = (key: keyof typeof quickRanges) => {
+        const range = quickRanges[key];
+        setPeriodo({ from: range.from, to: range.to });
+    };
+
+    const isQuickRangeActive = (key: keyof typeof quickRanges) => {
+        const range = quickRanges[key];
+        return (
+            periodo?.from && periodo?.to &&
+            isSameDay(periodo.from, range.from) &&
+            isSameDay(periodo.to, range.to)
+        );
+    };
 
   // --- FETCH DE DADOS (JUNTOS MAS SEPARADOS) ---
     useEffect(() => {
@@ -121,21 +152,21 @@ export default function Dashboard() {
   // ==================================================================================
   
   const classificarPagamento = (item: any): "dinheiro" | "gira" => {
-    const textoBusca = [
+    // Verifica cada método de pagamento individualmente
+    const metodos = [
       item.pagamento_1_metodo, 
       item.pagamento_2_metodo, 
       item.pagamento_3_metodo, 
-      item.pagamento_4_metodo,
-      item.tipo_pagamento, 
-      item.observacao
-    ].join(" ").toLowerCase();
+      item.pagamento_4_metodo
+    ].map(m => (m || "").toLowerCase());
     
-    const termosGira = ["gira", "crédito", "credito", "troca", "voucher", "permuta"];
-    
-    if (termosGira.some(termo => textoBusca.includes(termo))) {
-      return "gira";
+    // Se QUALQUER método contiver "dinheiro" ou "pix", classifica como dinheiro
+    if (metodos.some(metodo => metodo.includes("dinheiro") || metodo.includes("pix"))) {
+      return "dinheiro";
     }
-    return "dinheiro";
+    
+    // Senão, classifica como gira (padrão para outros métodos)
+    return "gira";
   };
 
   const metrics = useMemo(() => {
@@ -413,10 +444,38 @@ export default function Dashboard() {
         const totalGrupo = (lista: any[]) =>
             lista.filter(ehDinheiro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
 
+        const getAvaliacoesPorGrupo = (lista: any[]) => {
+            const resultado = lista.filter(ehDinheiro).map(a => ({
+                cliente: a.cliente_nome || "Sem nome",
+                data: a.hora_encerramento ? format(parseISO(a.hora_encerramento), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
+                valor: Number(a.valor_total_negociado || 0),
+                pagamento_1_metodo: a.pagamento_1_metodo,
+                pagamento_2_metodo: a.pagamento_2_metodo,
+                pagamento_3_metodo: a.pagamento_3_metodo,
+                pagamento_4_metodo: a.pagamento_4_metodo
+            }));
+            return resultado;
+        };
+
         const rows = [
-            { categoria: "Com itens grandes", total: totalGrupo(grupoGrandes), quantidade: grupoGrandes.filter(ehDinheiro).length },
-            { categoria: "Sem grandes, com médios ou brinquedos", total: totalGrupo(grupoMediosOuBrinquedos), quantidade: grupoMediosOuBrinquedos.filter(ehDinheiro).length },
-            { categoria: "Só roupas/sapatos", total: totalGrupo(grupoRoupasESapatos), quantidade: grupoRoupasESapatos.filter(ehDinheiro).length },
+            { 
+                categoria: "Com itens grandes", 
+                total: totalGrupo(grupoGrandes), 
+                quantidade: grupoGrandes.filter(ehDinheiro).length,
+                detalhes: getAvaliacoesPorGrupo(grupoGrandes)
+            },
+            { 
+                categoria: "Sem grandes, com médios ou brinquedos", 
+                total: totalGrupo(grupoMediosOuBrinquedos), 
+                quantidade: grupoMediosOuBrinquedos.filter(ehDinheiro).length,
+                detalhes: getAvaliacoesPorGrupo(grupoMediosOuBrinquedos)
+            },
+            { 
+                categoria: "Só roupas/sapatos", 
+                total: totalGrupo(grupoRoupasESapatos), 
+                quantidade: grupoRoupasESapatos.filter(ehDinheiro).length,
+                detalhes: getAvaliacoesPorGrupo(grupoRoupasESapatos)
+            },
         ];
 
         const totalGeral = rows.reduce((acc, r) => acc + r.total, 0);
@@ -497,7 +556,32 @@ export default function Dashboard() {
                 {/* Seletor de período + Tabela de gastos por tipo de avaliação */}
                 <Card>
                     <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
+                        <div className="flex flex-col gap-2">
+                            <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    size="sm"
+                                    variant={isQuickRangeActive("hoje") ? "default" : "outline"}
+                                    onClick={() => applyQuickRange("hoje")}
+                                >
+                                    Hoje
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant={isQuickRangeActive("semana") ? "default" : "outline"}
+                                    onClick={() => applyQuickRange("semana")}
+                                >
+                                    Semana
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant={isQuickRangeActive("mes") ? "default" : "outline"}
+                                    onClick={() => applyQuickRange("mes")}
+                                >
+                                    Mês
+                                </Button>
+                            </div>
+                        </div>
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
@@ -530,13 +614,82 @@ export default function Dashboard() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {tabelaGastos.rows.map((row) => (
-                                        <TableRow key={row.categoria}>
-                                            <TableCell>{row.categoria}</TableCell>
-                                            <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
-                                            <TableCell className="text-right">{row.quantidade}</TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {tabelaGastos.rows.map((row) => {
+                                        const isExpanded = expandedCategories.has(row.categoria);
+                                        const toggleExpanded = () => {
+                                            const newExpanded = new Set(expandedCategories);
+                                            if (newExpanded.has(row.categoria)) {
+                                                newExpanded.delete(row.categoria);
+                                            } else {
+                                                newExpanded.add(row.categoria);
+                                            }
+                                            setExpandedCategories(newExpanded);
+                                        };
+
+                                        return (
+                                            <>
+                                                <TableRow key={row.categoria} className="cursor-pointer hover:bg-gray-50" onClick={toggleExpanded}>
+                                                    <TableCell className="flex items-center gap-2">
+                                                        <ChevronDown 
+                                                            className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                                        />
+                                                        {row.categoria}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
+                                                    <TableCell className="text-right">{row.quantidade}</TableCell>
+                                                </TableRow>
+                                                {isExpanded && row.detalhes && row.detalhes.length > 0 && (
+                                                    <TableRow className="bg-gray-50/50">
+                                                        <TableCell colSpan={3} className="p-4">
+                                                            <div className="space-y-3">
+                                                                <h4 className="font-semibold text-sm text-gray-700">Avaliações nesta categoria:</h4>
+                                                                <div className="overflow-x-auto">
+                                                                    <Table className="text-sm">
+                                                                        <TableHeader>
+                                                                            <TableRow className="bg-white border-b border-gray-200">
+                                                                                <TableHead className="text-xs">Cliente</TableHead>
+                                                                                <TableHead className="text-xs">Data</TableHead>
+                                                                                <TableHead className="text-xs">Métodos de Pagamento</TableHead>
+                                                                                <TableHead className="text-xs text-right">Valor</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {row.detalhes.map((detalhe, idx) => (
+                                                                                <TableRow key={idx} className="border-b border-gray-100 hover:bg-gray-100/50">
+                                                                                    <TableCell className="text-xs text-gray-700">{detalhe.cliente}</TableCell>
+                                                                                    <TableCell className="text-xs text-gray-700">{detalhe.data}</TableCell>
+                                                                                    <TableCell className="text-xs text-gray-700">
+                                                                                        <div className="space-y-1">
+                                                                                            {detalhe.pagamento_1_metodo && <div>1: {detalhe.pagamento_1_metodo}</div>}
+                                                                                            {detalhe.pagamento_2_metodo && <div>2: {detalhe.pagamento_2_metodo}</div>}
+                                                                                            {detalhe.pagamento_3_metodo && <div>3: {detalhe.pagamento_3_metodo}</div>}
+                                                                                            {detalhe.pagamento_4_metodo && <div>4: {detalhe.pagamento_4_metodo}</div>}
+                                                                                        </div>
+                                                                                    </TableCell>
+                                                                                    <TableCell className="text-xs text-right font-medium text-gray-800">{formatCurrency(detalhe.valor)}</TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                            <TableRow className="bg-gray-100 font-semibold">
+                                                                                <TableCell colSpan={3} className="text-xs">Subtotal da categoria</TableCell>
+                                                                                <TableCell className="text-xs text-right">{formatCurrency(row.total)}</TableCell>
+                                                                            </TableRow>
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                                {isExpanded && (!row.detalhes || row.detalhes.length === 0) && (
+                                                    <TableRow className="bg-gray-50/50">
+                                                        <TableCell colSpan={3} className="p-4 text-center text-sm text-gray-500">
+                                                            Nenhuma avaliação em dinheiro nesta categoria no período selecionado.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </>
+                                        );
+                                    })}
                                     <TableRow>
                                         <TableCell className="font-medium">Total</TableCell>
                                         <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeral)}</TableCell>
