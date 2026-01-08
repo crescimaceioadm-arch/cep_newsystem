@@ -328,7 +328,7 @@ export function FinalizarAtendimentoModal({
                     Finalizando...
                   </>
                 ) : (
-                  "Confirmar Venda"
+                  "Confirmar pagto"
                 )}
               </Button>
             </DialogFooter>

@@ -36,7 +36,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAtendimentos, useDeleteAtendimento } from "@/hooks/useAtendimentos";
 import { useUser } from "@/contexts/UserContext";
-import { ClipboardList, CalendarIcon, RefreshCw, Trash2, Eye } from "lucide-react";
+import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
+import { ClipboardList, CalendarIcon, RefreshCw, Trash2, Eye, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,8 @@ export default function HistoricoAtendimentos() {
   const [atendimentoParaExcluir, setAtendimentoParaExcluir] = useState<any>(null);
   const [deletando, setDeletando] = useState(false);
   const [detalhesAtendimento, setDetalhesAtendimento] = useState<any>(null);
+  const [atendimentoParaEditar, setAtendimentoParaEditar] = useState<any>(null);
+  const [isAvaliacaoModalOpen, setIsAvaliacaoModalOpen] = useState(false);
   
   const { data: atendimentos, isLoading, refetch } = useAtendimentos();
   const deleteAtendimento = useDeleteAtendimento();
@@ -285,7 +288,19 @@ export default function HistoricoAtendimentos() {
                         </Button>
                       </TableCell>
                       {isAdmin && (
-                        <TableCell className="text-center">
+                        <TableCell className="text-center space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => {
+                              setAtendimentoParaEditar(atendimento);
+                              setIsAvaliacaoModalOpen(true);
+                            }}
+                            aria-label="Editar avaliação"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -416,6 +431,20 @@ export default function HistoricoAtendimentos() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de edição de avaliação para admin */}
+      <AvaliacaoModal
+        atendimento={atendimentoParaEditar}
+        open={isAvaliacaoModalOpen}
+        onOpenChange={(open) => {
+          setIsAvaliacaoModalOpen(open);
+          if (!open) {
+            setAtendimentoParaEditar(null);
+            refetch(); // Recarrega os dados após edição
+          }
+        }}
+        isEditing={true}
+      />
     </MainLayout>
   );
 }

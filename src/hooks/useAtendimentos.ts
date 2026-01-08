@@ -208,6 +208,12 @@ interface AvaliacaoData {
   descricao_itens_extra: string;
   avaliadora_nome?: string;
   origem_avaliacao?: "presencial" | "whatsapp" | null;
+  pagamento_1_metodo?: string | null;
+  pagamento_1_valor?: number | null;
+  pagamento_2_metodo?: string | null;
+  pagamento_2_valor?: number | null;
+  pagamento_3_metodo?: string | null;
+  pagamento_3_valor?: number | null;
 }
 
 export function useSaveAvaliacao() {
@@ -216,6 +222,43 @@ export function useSaveAvaliacao() {
   return useMutation({
     mutationFn: async (data: AvaliacaoData) => {
       console.log("[useSaveAvaliacao] Salvando avaliação:", data);
+
+      // Busca valores atuais para calcular ajuste de dinheiro (caso método mude para Dinheiro)
+      const { data: atendimentoAtual, error: atendimentoFetchError } = await supabase
+        .from("atendimentos")
+        .select("nome_cliente, pagamento_1_metodo, pagamento_1_valor, pagamento_2_metodo, pagamento_2_valor, pagamento_3_metodo, pagamento_3_valor")
+        .eq("id", data.id)
+        .maybeSingle();
+
+      if (atendimentoFetchError) {
+        console.error("[useSaveAvaliacao] Erro ao buscar atendimento atual:", atendimentoFetchError);
+        throw atendimentoFetchError;
+      }
+
+      const calcularDinheiro = (p1m?: string | null, p1v?: number | null, p2m?: string | null, p2v?: number | null, p3m?: string | null, p3v?: number | null) => {
+        const isCash = (m?: string | null) => (m || "").toLowerCase() === "dinheiro";
+        return (isCash(p1m) ? p1v || 0 : 0) + (isCash(p2m) ? p2v || 0 : 0) + (isCash(p3m) ? p3v || 0 : 0);
+      };
+
+      const dinheiroAntes = calcularDinheiro(
+        atendimentoAtual?.pagamento_1_metodo,
+        atendimentoAtual?.pagamento_1_valor,
+        atendimentoAtual?.pagamento_2_metodo,
+        atendimentoAtual?.pagamento_2_valor,
+        atendimentoAtual?.pagamento_3_metodo,
+        atendimentoAtual?.pagamento_3_valor
+      );
+
+      const dinheiroDepois = calcularDinheiro(
+        data.pagamento_1_metodo,
+        data.pagamento_1_valor,
+        data.pagamento_2_metodo,
+        data.pagamento_2_valor,
+        data.pagamento_3_metodo,
+        data.pagamento_3_valor
+      );
+
+      const deltaDinheiro = (dinheiroDepois || 0) - (dinheiroAntes || 0);
 
       // 1. Atualiza o atendimento com as quantidades e muda status
       const { error: updateError } = await supabase
@@ -232,6 +275,13 @@ export function useSaveAvaliacao() {
           descricao_itens_extra: data.descricao_itens_extra,
           avaliadora_nome: data.avaliadora_nome || null,
           origem_avaliacao: data.origem_avaliacao ?? null,
+          // Persistência dos campos de pagamento (colunas existentes pagamento_* )
+          pagamento_1_metodo: data.pagamento_1_metodo ?? null,
+          pagamento_1_valor: data.pagamento_1_valor ?? null,
+          pagamento_2_metodo: data.pagamento_2_metodo ?? null,
+          pagamento_2_valor: data.pagamento_2_valor ?? null,
+          pagamento_3_metodo: data.pagamento_3_metodo ?? null,
+          pagamento_3_valor: data.pagamento_3_valor ?? null,
           status: "aguardando_pagamento" as StatusAtendimento,
         })
         .eq("id", data.id);
@@ -239,6 +289,40 @@ export function useSaveAvaliacao() {
       if (updateError) {
         console.error("[useSaveAvaliacao] Erro ao atualizar atendimento:", updateError);
         throw updateError;
+      }
+
+      // 1.1 Ajuste de dinheiro no caixa de Avaliação (se houve mudança para Dinheiro)
+      if (deltaDinheiro !== 0) {
+        try {
+          const { data: caixaAvaliacao, error: caixaError } = await supabase
+            .from("caixas")
+            .select("id")
+            .eq("nome", "Avaliação")
+            .single();
+
+          if (caixaError) {
+            console.error("[useSaveAvaliacao] Erro ao buscar caixa Avaliação:", caixaError);
+          } else if (caixaAvaliacao?.id) {
+            const tipoMov = deltaDinheiro > 0 ? "pagamento_avaliacao" : "estorno_pagamento_avaliacao";
+            const { error: movError } = await supabase
+              .from("movimentacoes_caixa")
+              .insert({
+                caixa_origem_id: caixaAvaliacao.id,
+                caixa_destino_id: null,
+                tipo: tipoMov,
+                valor: Math.abs(deltaDinheiro),
+                motivo: `Ajuste pagamento avaliação - ${atendimentoAtual?.nome_cliente || "Cliente"}`,
+              });
+
+            if (movError) {
+              console.error("[useSaveAvaliacao] Erro ao registrar ajuste no caixa Avaliação:", movError);
+            } else {
+              console.log("[useSaveAvaliacao] Ajuste de caixa registrado. Delta R$", deltaDinheiro);
+            }
+          }
+        } catch (err) {
+          console.error("[useSaveAvaliacao] Exceção ao registrar ajuste de caixa:", err);
+        }
       }
 
       console.log("[useSaveAvaliacao] Atendimento atualizado, atualizando estoque...");

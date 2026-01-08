@@ -59,11 +59,11 @@ export default function Recepcao() {
     
     deleteAtendimento(atendimentoParaExcluir.id, {
       onSuccess: () => {
-        toast.success("Atendimento excluído com sucesso");
+        toast.success("Avaliação excluída com sucesso");
         setAtendimentoParaExcluir(null);
       },
       onError: (error) => {
-        toast.error("Erro ao excluir atendimento");
+        toast.error("Erro ao excluir avaliação");
         console.error(error);
       },
     });
@@ -145,19 +145,19 @@ export default function Recepcao() {
         {/* Header com botão */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-foreground">Fila de Atendimento</h2>
+            <h2 className="text-2xl font-bold text-foreground">Fila de Avaliação</h2>
             <p className="text-muted-foreground">Gerencie a entrada de clientes</p>
           </div>
           <Button onClick={() => setNovoModalOpen(true)} className="gap-2">
             <UserPlus className="h-4 w-4" />
-            Novo Atendimento
+            Nova Avaliação
           </Button>
         </div>
 
-        {/* Tabela de Atendimentos */}
+        {/* Tabela de Avaliações */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Atendimentos do Dia</CardTitle>
+            <CardTitle className="text-lg">Avaliações do Dia</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -166,7 +166,7 @@ export default function Recepcao() {
               </div>
             ) : error ? (
               <div className="text-center py-8 text-destructive">
-                Erro ao carregar atendimentos. Verifique a conexão com o banco de dados.
+                Erro ao carregar avaliações. Verifique a conexão com o banco de dados.
               </div>
             ) : atendimentos && atendimentos.length > 0 ? (
               <Table>
@@ -217,7 +217,7 @@ export default function Recepcao() {
                               variant="ghost"
                               className="text-destructive hover:text-destructive"
                               onClick={() => setAtendimentoParaExcluir(atendimento)}
-                              title="Excluir atendimento"
+                              title="Excluir avaliação"
                               disabled={deletando}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -231,7 +231,7 @@ export default function Recepcao() {
               </Table>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                Nenhum atendimento registrado hoje.
+                Nenhuma avaliação registrada hoje.
               </div>
             )}
           </CardContent>
@@ -258,10 +258,10 @@ export default function Recepcao() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o atendimento de{" "}
+              Tem certeza que deseja excluir a avaliação de{" "}
               <strong>{atendimentoParaExcluir?.nome_cliente}</strong>?
               <br /><br />
-              Isso apagará a avaliação e os dados financeiros associados.
+              Isso apagará todos os dados financeiros associados.
               Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>

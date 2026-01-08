@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as React from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,9 +27,29 @@ interface AvaliacaoModalProps {
   atendimento: Atendimento | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  isEditing?: boolean;
 }
 
-export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoModalProps) {
+// Opções padronizadas para método de pagamento (evita digitação incorreta)
+const PAYMENT_METHODS = [
+  "Dinheiro",
+  "PIX",
+  "Gira crédito",
+  "Débito",
+  "Crédito à vista",
+  "Crédito 2x",
+  "Crédito 3x",
+  "Crédito 4x",
+  "Crédito 5x",
+  "Crédito 6x",
+  "Crédito 7x",
+  "Crédito 8x",
+  "Crédito 9x",
+  "Crédito 10x",
+  "Vale Presente",
+];
+
+export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = false }: AvaliacaoModalProps) {
   const [formData, setFormData] = useState({
     qtd_baby: 0,
     qtd_1_a_16: 0,
@@ -39,10 +60,49 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
     valor_total_itens_medios: 0,
     valor_total_itens_grandes: 0,
     descricao_itens_extra: "",
+    metodo_pagto_1: "",
+    valor_pagto_1: 0,
+    metodo_pagto_2: "",
+    valor_pagto_2: 0,
+    metodo_pagto_3: "",
+    valor_pagto_3: 0,
   });
   const [avaliadoraSelecionada, setAvaliadoraSelecionada] = useState("");
   const [isRecusando, setIsRecusando] = useState(false);
   const [motivoRecusa, setMotivoRecusa] = useState<"loja" | "cliente" | "">("");
+
+  // Quando abrir em modo de edição, carrega os dados da avaliação
+  React.useEffect(() => {
+    if (open && isEditing && atendimento) {
+      const pagamento1Metodo = (atendimento as any).metodo_pagto_1 || (atendimento as any).pagamento_1_metodo || "";
+      const pagamento1Valor = (atendimento as any).valor_pagto_1 ?? (atendimento as any).pagamento_1_valor ?? 0;
+      const pagamento2Metodo = (atendimento as any).metodo_pagto_2 || (atendimento as any).pagamento_2_metodo || "";
+      const pagamento2Valor = (atendimento as any).valor_pagto_2 ?? (atendimento as any).pagamento_2_valor ?? 0;
+      const pagamento3Metodo = (atendimento as any).metodo_pagto_3 || (atendimento as any).pagamento_3_metodo || "";
+      const pagamento3Valor = (atendimento as any).valor_pagto_3 ?? (atendimento as any).pagamento_3_valor ?? 0;
+
+      setFormData({
+        qtd_baby: atendimento.qtd_baby || 0,
+        qtd_1_a_16: atendimento.qtd_1_a_16 || 0,
+        qtd_calcados: atendimento.qtd_calcados || 0,
+        qtd_brinquedos: atendimento.qtd_brinquedos || 0,
+        qtd_itens_medios: atendimento.qtd_itens_medios || 0,
+        qtd_itens_grandes: atendimento.qtd_itens_grandes || 0,
+        valor_total_itens_medios: atendimento.valor_total_itens_medios || 0,
+        valor_total_itens_grandes: atendimento.valor_total_itens_grandes || 0,
+        descricao_itens_extra: atendimento.descricao_itens_extra || "",
+        metodo_pagto_1: pagamento1Metodo,
+        valor_pagto_1: pagamento1Valor,
+        metodo_pagto_2: pagamento2Metodo,
+        valor_pagto_2: pagamento2Valor,
+        metodo_pagto_3: pagamento3Metodo,
+        valor_pagto_3: pagamento3Valor,
+      });
+      setAvaliadoraSelecionada((atendimento as any).avaliadora_nome || "");
+    } else if (open && !isEditing) {
+      resetForm();
+    }
+  }, [open, isEditing, atendimento]);
 
   const saveAvaliacao = useSaveAvaliacao();
   const recusarAvaliacao = useRecusarAvaliacao();
@@ -68,6 +128,12 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
       valor_total_itens_medios: 0,
       valor_total_itens_grandes: 0,
       descricao_itens_extra: "",
+      metodo_pagto_1: "",
+      valor_pagto_1: 0,
+      metodo_pagto_2: "",
+      valor_pagto_2: 0,
+      metodo_pagto_3: "",
+      valor_pagto_3: 0,
     });
     setAvaliadoraSelecionada("");
     setIsRecusando(false);
@@ -89,7 +155,21 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
     saveAvaliacao.mutate(
       { 
         id: atendimento.id, 
-        ...formData,
+        qtd_baby: formData.qtd_baby,
+        qtd_1_a_16: formData.qtd_1_a_16,
+        qtd_calcados: formData.qtd_calcados,
+        qtd_brinquedos: formData.qtd_brinquedos,
+        qtd_itens_medios: formData.qtd_itens_medios,
+        qtd_itens_grandes: formData.qtd_itens_grandes,
+        valor_total_itens_medios: formData.valor_total_itens_medios,
+        valor_total_itens_grandes: formData.valor_total_itens_grandes,
+        descricao_itens_extra: formData.descricao_itens_extra,
+        pagamento_1_metodo: formData.metodo_pagto_1 || null,
+        pagamento_1_valor: formData.valor_pagto_1 || null,
+        pagamento_2_metodo: formData.metodo_pagto_2 || null,
+        pagamento_2_valor: formData.valor_pagto_2 || null,
+        pagamento_3_metodo: formData.metodo_pagto_3 || null,
+        pagamento_3_valor: formData.valor_pagto_3 || null,
         avaliadora_nome: avaliadoraSelecionada || undefined,
       },
       {
@@ -98,10 +178,11 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
           onOpenChange(false);
           resetForm();
         },
-        onError: () => {
+        onError: (error) => {
+          console.error("[AvaliacaoModal] Erro ao salvar avaliação:", error);
           toast({
             title: "Erro ao salvar",
-            description: "Tente novamente.",
+            description: error instanceof Error ? error.message : "Tente novamente.",
             variant: "destructive",
           });
         },
@@ -150,13 +231,13 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg overflow-y-auto max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Avaliar: {atendimento.nome_cliente}</DialogTitle>
+          <DialogTitle>{isEditing ? "Editar Avaliação: " : "Avaliar: "}{atendimento.nome_cliente}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-2 mb-4">
           <Label htmlFor="avaliadora">Avaliadora</Label>
-          <Select value={avaliadoraSelecionada} onValueChange={setAvaliadoraSelecionada}>
-            <SelectTrigger>
+          <Select value={avaliadoraSelecionada} onValueChange={setAvaliadoraSelecionada} disabled={isEditing}>
+            <SelectTrigger disabled={isEditing}>
               <SelectValue placeholder={isLoading ? "Carregando..." : "Selecione a avaliadora"} />
             </SelectTrigger>
             
@@ -286,19 +367,122 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange }: AvaliacaoMod
               </div>
             )}
 
+            {isEditing && (
+              <>
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="font-semibold text-sm mb-3">Informações de Pagamento</h3>
+                  
+                  {/* Pagamento 1 */}
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="metodo_pagto_1">Método Pagamento 1</Label>
+                      <Select
+                        value={formData.metodo_pagto_1}
+                        onValueChange={(v) => handleChange("metodo_pagto_1", v)}
+                      >
+                        <SelectTrigger id="metodo_pagto_1">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="valor_pagto_1">Valor R$</Label>
+                      <Input
+                        id="valor_pagto_1"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={formData.valor_pagto_1}
+                        onChange={(e) => handleChange("valor_pagto_1", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pagamento 2 */}
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="metodo_pagto_2">Método Pagamento 2</Label>
+                      <Select
+                        value={formData.metodo_pagto_2}
+                        onValueChange={(v) => handleChange("metodo_pagto_2", v)}
+                      >
+                        <SelectTrigger id="metodo_pagto_2">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="valor_pagto_2">Valor R$</Label>
+                      <Input
+                        id="valor_pagto_2"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={formData.valor_pagto_2}
+                        onChange={(e) => handleChange("valor_pagto_2", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pagamento 3 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="metodo_pagto_3">Método Pagamento 3</Label>
+                      <Select
+                        value={formData.metodo_pagto_3}
+                        onValueChange={(v) => handleChange("metodo_pagto_3", v)}
+                      >
+                        <SelectTrigger id="metodo_pagto_3">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_METHODS.map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="valor_pagto_3">Valor R$</Label>
+                      <Input
+                        id="valor_pagto_3"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={formData.valor_pagto_3}
+                        onChange={(e) => handleChange("valor_pagto_3", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="flex justify-between gap-2 pt-4">
-              <Button 
-                variant="destructive" 
-                onClick={() => setIsRecusando(true)}
-              >
-                Recusar
-              </Button>
-              <div className="flex gap-2">
+              {!isEditing && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => setIsRecusando(true)}
+                >
+                  Recusar
+                </Button>
+              )}
+              <div className="flex gap-2 ml-auto">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Cancelar
                 </Button>
                 <Button onClick={handleSubmit} disabled={saveAvaliacao.isPending}>
-                  {saveAvaliacao.isPending ? "Salvando..." : "Salvar Avaliação"}
+                  {saveAvaliacao.isPending ? "Salvando..." : isEditing ? "Atualizar Avaliação" : "Salvar Avaliação"}
                 </Button>
               </div>
             </div>
