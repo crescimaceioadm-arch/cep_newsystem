@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Venda, Estoque } from "@/types/database";
 import { toast } from "sonner";
+import { registrarMovimentacaoCaixa } from "@/lib/registrarMovimentacaoCaixa";
 
 export interface NovaVenda {
   qtd_baby_vendida: number;
@@ -149,12 +150,35 @@ export function useFinalizarVenda() {
         throw vendaError;
       }
 
-      // 5. ✅ MOVIMENTAÇÃO E ATUALIZAÇÃO DE SALDO SÃO FEITAS PELO TRIGGER DO BANCO
-      // O trigger 'trg_venda_dinheiro' (AFTER INSERT na tabela vendas) já cuida de:
-      // - Inserir a movimentação em movimentacoes_caixa
-      // - Atualizar o saldo_atual do caixa
-      // ⚠️ NÃO duplicar essa lógica aqui!
-      console.log("[useFinalizarVenda] ✅ Trigger do banco cuidará da movimentação de caixa");
+      // 5. ✅ REGISTRAR MOVIMENTAÇÃO DE CAIXA DE FORMA SEGURA (NÃO DEPENDE APENAS DO TRIGGER)
+      // Esta chamada garante que a movimentação seja registrada mesmo se o trigger falhar
+      console.log("[useFinalizarVenda] Registrando movimentação de caixa...");
+      
+      const resultadoMovimentacao = await registrarMovimentacaoCaixa({
+        vendaId: vendaInserida.id,
+        caixaOrigem: venda.caixa_origem || "Caixa 1",
+        pagamentos: venda.pagamentos,
+        dataHoraVenda: vendaInserida.created_at,
+      });
+
+      if (!resultadoMovimentacao.success) {
+        // ⚠️ IMPORTANTE: Não falhar a venda, mas alertar
+        console.error(
+          `[useFinalizarVenda] ⚠️ Venda ${vendaInserida.id} inserida mas falha ao registrar movimentação:`,
+          resultadoMovimentacao.error
+        );
+        toast.warning(
+          `Venda registrada mas houve problema ao atualizar o caixa. Registre manualmente R$ ${resultadoMovimentacao.valorRegistrado || 0}`
+        );
+      } else if (resultadoMovimentacao.error === "DUPLICADA") {
+        console.log(
+          `[useFinalizarVenda] ℹ️ Movimentação já existia (provavelmente criada pelo trigger)`
+        );
+      } else {
+        console.log(
+          `[useFinalizarVenda] ✅ Movimentação registrada com sucesso: R$ ${resultadoMovimentacao.valorRegistrado}`
+        );
+      }
 
       console.log("[useFinalizarVenda] Venda inserida, atualizando estoque...");
 

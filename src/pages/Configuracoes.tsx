@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
 import { useCaixa } from "@/contexts/CaixaContext";
 import { GestaoUsuariosCard } from "@/components/configuracoes/GestaoUsuariosCard";
+import { ReconciliacaoCaixaCard } from "@/components/financeiro/ReconciliacaoCaixaCard";
 import {
   Select,
   SelectContent,
@@ -292,6 +293,17 @@ export default function Configuracoes() {
               <h2 className="text-xl font-semibold">Controle de Acesso</h2>
             </div>
             <GestaoUsuariosCard />
+          </div>
+        )}
+
+        {/* Seção: Reconciliação de Caixa (Apenas Admin) */}
+        {isAdmin && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-orange-600" />
+              <h2 className="text-xl font-semibold">Manutenção de Caixa</h2>
+            </div>
+            <ReconciliacaoCaixaCard />
           </div>
         )}
 
