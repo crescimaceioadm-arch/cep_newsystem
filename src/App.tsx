@@ -35,7 +35,8 @@ const App = () => (
               <CaixaGuard />
               <Routes>
                 <Route path="/auth" element={<Auth />} />
-                <Route path="/" element={<RequireRole><Recepcao /></RequireRole>} />
+                <Route path="/" element={<RequireRole><Dashboard /></RequireRole>} />
+                <Route path="/recepcao" element={<RequireRole><Recepcao /></RequireRole>} />
                 <Route path="/avaliacao" element={<RequireRole><Avaliacao /></RequireRole>} />
                 <Route path="/atendimentos/historico" element={<RequireRole><HistoricoAtendimentos /></RequireRole>} />
                 <Route path="/vendas" element={<RequireRole><Vendas /></RequireRole>} />

@@ -32,15 +32,15 @@ import { toast } from "sonner";
 import { CaixaIndicator } from "./CaixaIndicator";
 
 const allMenuItems = [
+  { title: "Dashboard", url: "/", icon: BarChart3 },
+  { title: "Cadastro", url: "/recepcao", icon: UserPlus },
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
-  { title: "Cadastro", url: "/", icon: UserPlus },
   { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
   { title: "Histórico Avaliações", url: "/atendimentos/historico", icon: ClipboardList },
   { title: "Histórico Vendas", url: "/vendas/historico", icon: History },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Estoque", url: "/estoque", icon: Box },
-  { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 

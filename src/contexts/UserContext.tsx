@@ -28,17 +28,17 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 // Permissões por cargo
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: [
-    '/', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
+    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
     '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing'
   ],
   caixa: [
-    '/', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/auth'
+    '/', '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/auth'
   ],
   avaliadora: [
-    '/avaliacao', '/atendimentos/historico', '/auth'
+    '/recepcao', '/avaliacao', '/atendimentos/historico', '/auth'
   ],
   geral: [
-    '/', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing'
+    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing'
   ],
   social_media: [
     '/marketing', '/auth'
