@@ -55,6 +55,8 @@ import {
   MovimentacaoCaixa,
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
+import { AprovacaoFechamentosCard } from "@/components/financeiro/AprovacaoFechamentosCard";
+import { RelatorioFechamentosCard } from "@/components/financeiro/RelatorioFechamentosCard";
 import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -499,7 +501,7 @@ export default function Financeiro() {
 
         {/* Painel de Operações */}
         <Tabs defaultValue="transferencia" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-2'}`}>
             <TabsTrigger value="transferencia">
               <ArrowLeftRight className="h-4 w-4 mr-2" />
               Transferência
@@ -508,6 +510,18 @@ export default function Financeiro() {
               <Plus className="h-4 w-4 mr-2" />
               Movimentação Manual
             </TabsTrigger>
+            {isAdmin && (
+              <>
+                <TabsTrigger value="aprovacao">
+                  <Lock className="h-4 w-4 mr-2" />
+                  Aprovações
+                </TabsTrigger>
+                <TabsTrigger value="relatorio">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Relatório
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {/* Aba Transferência */}
@@ -676,6 +690,20 @@ export default function Financeiro() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Aba Aprovações (Admin Only) */}
+          {isAdmin && (
+            <TabsContent value="aprovacao">
+              <AprovacaoFechamentosCard />
+            </TabsContent>
+          )}
+
+          {/* Aba Relatório (Admin Only) */}
+          {isAdmin && (
+            <TabsContent value="relatorio">
+              <RelatorioFechamentosCard />
+            </TabsContent>
+          )}
         </Tabs>
 
         {/* Extrato do Caixa Selecionado */}

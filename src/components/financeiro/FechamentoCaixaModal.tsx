@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFechamentoCaixa, useResumoVendasPorCaixa, useSaldoFinalHoje, Caixa } from "@/hooks/useCaixas";
 import { useUser } from "@/contexts/UserContext";
 import { Banknote, CreditCard, Smartphone, Wallet, RefreshCcw } from "lucide-react";
+import { toast } from "sonner";
 
 interface FechamentoCaixaModalProps {
   open: boolean;
@@ -62,6 +63,9 @@ export function FechamentoCaixaModal({
     if (!caixa) return;
     if (justificativaObrigatoria) return;
 
+    // 🔒 NOVA LÓGICA: Se há diferença, status fica pendente de aprovação
+    const statusFechamento = temDiferenca ? 'pendente_aprovacao' : 'aprovado';
+
     fecharCaixa(
       {
         caixaId: caixa.id,
@@ -69,6 +73,7 @@ export function FechamentoCaixaModal({
         valorContado: valorContadoNum,
         justificativa: justificativa.trim() || null,
         dataFechamento: dataFechamento,
+        status: statusFechamento, // 🆕 Novo campo
         detalhesPagamentos: resumo ? {
           dinheiro: resumo.totalDinheiro,
           pix: resumo.totalPix,
@@ -83,6 +88,11 @@ export function FechamentoCaixaModal({
           setJustificativa("");
           setDataFechamento("");
           onOpenChange(false);
+          
+          // Exibir mensagem apropriada
+          if (temDiferenca) {
+            toast.success("Fechamento registrado! Aguardando aprovação do admin.", { duration: 4000 });
+          }
         },
       }
     );

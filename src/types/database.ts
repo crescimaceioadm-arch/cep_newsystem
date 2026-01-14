@@ -60,3 +60,21 @@ export interface Configuracao {
   valor_brinquedo: number;
   updated_at: string;
 }
+
+export interface FechamentoCaixa {
+  id: string;
+  caixa_id: string;
+  data_fechamento: string;
+  valor_sistema: number;
+  valor_contado: number;
+  diferenca: number;
+  justificativa: string | null;
+  status: 'aprovado' | 'pendente_aprovacao' | 'rejeitado';
+  requer_revisao: boolean;
+  aprovado_por: string | null;
+  data_aprovacao: string | null;
+  motivo_rejeicao: string | null;
+  detalhes_pagamentos: string | null;
+  created_at: string;
+  created_by: string | null;
+}

@@ -497,6 +497,7 @@ export function useFechamentoCaixa() {
       valorContado,
       justificativa,
       dataFechamento,
+      status,
       detalhesPagamentos,
     }: {
       caixaId: string;
@@ -504,6 +505,7 @@ export function useFechamentoCaixa() {
       valorContado: number;
       justificativa?: string | null;
       dataFechamento?: string;
+      status?: string;
       detalhesPagamentos?: DetalhesPagamentosFechamento;
     }) => {
       const diferenca = valorSistema - valorContado;
@@ -516,6 +518,8 @@ export function useFechamentoCaixa() {
         valor_contado: valorContado,
         diferenca: diferenca,
         justificativa: justificativa || null,
+        status: status || 'aprovado', // 🆕 Novo campo
+        requer_revisao: status === 'pendente_aprovacao', // 🆕 Flag de revisão
         detalhes_pagamentos: detalhesPagamentos ? JSON.stringify(detalhesPagamentos) : null,
       });
 
@@ -524,6 +528,9 @@ export function useFechamentoCaixa() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+      queryClient.invalidateQueries({ queryKey: ["fechamentos_pendentes"] });
+      queryClient.invalidateQueries({ queryKey: ["historico_fechamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["estatisticas_fechamentos"] });
       toast.success("Caixa fechado com sucesso!");
     },
     onError: (error: Error) => {
@@ -863,6 +870,179 @@ export function useEditarMovimentacao() {
     },
     onError: (error: Error) => {
       toast.error("Erro ao editar: " + error.message);
+    },
+  });
+}
+
+/**
+ * Hook para buscar fechamentos pendentes de aprovação
+ */
+export function useFechamentosPendentes() {
+  return useQuery({
+    queryKey: ["fechamentos_pendentes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fechamentos_caixa")
+        .select(`
+          *,
+          caixa:caixas(nome)
+        `)
+        .eq("status", "pendente_aprovacao")
+        .order("data_fechamento", { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * Hook para buscar histórico de fechamentos com estatísticas
+ */
+export function useHistoricoFechamentos(limit: number = 30) {
+  return useQuery({
+    queryKey: ["historico_fechamentos", limit],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fechamentos_caixa")
+        .select(`
+          *,
+          caixa:caixas(nome)
+        `)
+        .in("status", ["aprovado", "pendente_aprovacao"])
+        .order("data_fechamento", { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * Hook para calcular estatísticas de fechamentos
+ */
+export function useEstatisticasFechamentos(dias: number = 30) {
+  return useQuery({
+    queryKey: ["estatisticas_fechamentos", dias],
+    queryFn: async () => {
+      const dataInicio = new Date();
+      dataInicio.setDate(dataInicio.getDate() - dias);
+      const dataInicioStr = dataInicio.toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from("fechamentos_caixa")
+        .select("data_fechamento, diferenca, status")
+        .in("status", ["aprovado", "pendente_aprovacao"])
+        .gte("data_fechamento", dataInicioStr)
+        .order("data_fechamento", { ascending: false });
+
+      if (error) throw error;
+
+      // Agrupar por data e calcular estatísticas
+      const groupedByDate = data.reduce((acc: any, item: any) => {
+        const date = item.data_fechamento;
+        if (!acc[date]) {
+          acc[date] = {
+            total_caixas: 0,
+            caixas_corretos: 0,
+            caixas_com_divergencia: 0,
+          };
+        }
+        acc[date].total_caixas++;
+        if (item.diferenca === 0) {
+          acc[date].caixas_corretos++;
+        } else {
+          acc[date].caixas_com_divergencia++;
+        }
+        return acc;
+      }, {});
+
+      // Calcular dias perfeitos (todos os caixas bateram)
+      const diasPerfeitos = Object.values(groupedByDate).filter(
+        (day: any) => day.total_caixas === day.caixas_corretos
+      ).length;
+
+      const totalDias = Object.keys(groupedByDate).length;
+      const percentualDiasPerfeitos = totalDias > 0 
+        ? ((diasPerfeitos / totalDias) * 100).toFixed(1)
+        : "0.0";
+
+      return {
+        totalDias,
+        diasPerfeitos,
+        percentualDiasPerfeitos,
+        detalhePorDia: groupedByDate,
+      };
+    },
+  });
+}
+
+/**
+ * Hook para aprovar fechamento
+ */
+export function useAprovarFechamento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (fechamentoId: string) => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("Usuário não autenticado");
+
+      const { data, error } = await supabase.rpc("fn_aprovar_fechamento", {
+        p_fechamento_id: fechamentoId,
+        p_admin_id: userData.user.id,
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.message);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fechamentos_pendentes"] });
+      queryClient.invalidateQueries({ queryKey: ["historico_fechamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["estatisticas_fechamentos"] });
+      toast.success("Fechamento aprovado com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao aprovar: " + error.message);
+    },
+  });
+}
+
+/**
+ * Hook para rejeitar fechamento
+ */
+export function useRejeitarFechamento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ fechamentoId, motivo }: { fechamentoId: string; motivo: string }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("Usuário não autenticado");
+
+      if (!motivo || motivo.trim() === "") {
+        throw new Error("Motivo da rejeição é obrigatório");
+      }
+
+      const { data, error } = await supabase.rpc("fn_rejeitar_fechamento", {
+        p_fechamento_id: fechamentoId,
+        p_admin_id: userData.user.id,
+        p_motivo: motivo,
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.message);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fechamentos_pendentes"] });
+      queryClient.invalidateQueries({ queryKey: ["historico_fechamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["estatisticas_fechamentos"] });
+      toast.success("Fechamento rejeitado com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao rejeitar: " + error.message);
     },
   });
 }
