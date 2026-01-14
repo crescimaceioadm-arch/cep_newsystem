@@ -17,12 +17,16 @@ export interface Atendimento {
   qtd_itens_grandes: number | null;
   descricao_itens_extra: string | null;
   valor_total_negociado: number | null;
-  metodo_pagto_1: string | null;
-  valor_pagto_1: number | null;
-  metodo_pagto_2: string | null;
-  valor_pagto_2: number | null;
-  metodo_pagto_3: string | null;
-  valor_pagto_3: number | null;
+  desconto_aplicado?: number | null;
+  pagamento_1_metodo: string | null;
+  pagamento_1_valor: number | null;
+  pagamento_1_banco?: string | null;
+  pagamento_2_metodo: string | null;
+  pagamento_2_valor: number | null;
+  pagamento_2_banco?: string | null;
+  pagamento_3_metodo: string | null;
+  pagamento_3_valor: number | null;
+  pagamento_3_banco?: string | null;
   origem_avaliacao?: string | null; // presencial | whatsapp
   created_at: string;
   updated_at: string;

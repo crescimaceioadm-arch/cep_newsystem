@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -37,7 +40,7 @@ import {
 import { useAtendimentos, useDeleteAtendimento } from "@/hooks/useAtendimentos";
 import { useUser } from "@/contexts/UserContext";
 import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
-import { ClipboardList, CalendarIcon, RefreshCw, Trash2, Eye, Pencil } from "lucide-react";
+import { ClipboardList, CalendarIcon, RefreshCw, Trash2, Eye, Pencil, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -46,7 +49,12 @@ import { toast } from "sonner";
 type StatusAtendimento = 'aguardando' | 'em_avaliacao' | 'aguardando_pagamento' | 'finalizado' | 'recusado';
 
 export default function HistoricoAtendimentos() {
-  const [filtroData, setFiltroData] = useState<Date>(new Date());
+  const [filtroDataInicio, setFiltroDataInicio] = useState<Date | undefined>(undefined);
+  const [filtroDataFim, setFiltroDataFim] = useState<Date | undefined>(undefined);
+  const [filtroNome, setFiltroNome] = useState("");
+  const [filtroValorMin, setFiltroValorMin] = useState("");
+  const [filtroValorMax, setFiltroValorMax] = useState("");
+  const [filtroPagamento, setFiltroPagamento] = useState<string>("todos");
   const [atendimentoParaExcluir, setAtendimentoParaExcluir] = useState<any>(null);
   const [deletando, setDeletando] = useState(false);
   const [detalhesAtendimento, setDetalhesAtendimento] = useState<any>(null);
@@ -58,12 +66,50 @@ export default function HistoricoAtendimentos() {
   const { cargo } = useUser();
   const isAdmin = cargo === 'admin';
 
-  // Filtrar atendimentos pela data selecionada (abertura OU encerramento no dia)
+  // Filtrar atendimentos com múltiplos critérios
   const atendimentosFiltrados = atendimentos?.filter((atendimento) => {
-    const dataFormatada = format(filtroData, "yyyy-MM-dd");
-    const chegouNoDia = atendimento.hora_chegada?.startsWith(dataFormatada) || atendimento.created_at?.startsWith(dataFormatada);
-    const encerrouNoDia = atendimento.hora_encerramento?.startsWith(dataFormatada);
-    return chegouNoDia || encerrouNoDia;
+    // Filtro por período
+    if (filtroDataInicio || filtroDataFim) {
+      const dataAtendimento = new Date(atendimento.hora_chegada || atendimento.created_at || "");
+      
+      if (filtroDataInicio) {
+        const inicio = new Date(filtroDataInicio);
+        inicio.setHours(0, 0, 0, 0);
+        if (dataAtendimento < inicio) return false;
+      }
+      
+      if (filtroDataFim) {
+        const fim = new Date(filtroDataFim);
+        fim.setHours(23, 59, 59, 999);
+        if (dataAtendimento > fim) return false;
+      }
+    }
+
+    // Filtro por nome (case-insensitive)
+    if (filtroNome.trim() && !atendimento.nome_cliente?.toLowerCase().includes(filtroNome.toLowerCase().trim())) {
+      return false;
+    }
+
+    // Filtro por valor
+    const valor = atendimento.valor_total_negociado || 0;
+    if (filtroValorMin && parseFloat(filtroValorMin) > valor) return false;
+    if (filtroValorMax && parseFloat(filtroValorMax) < valor) return false;
+
+    // Filtro por pagamento
+    if (filtroPagamento !== "todos") {
+      const metodos = [
+        atendimento.pagamento_1_metodo?.toLowerCase() || "",
+        atendimento.pagamento_2_metodo?.toLowerCase() || "",
+        atendimento.pagamento_3_metodo?.toLowerCase() || "",
+      ];
+      
+      const metodoBuscado = filtroPagamento.toLowerCase();
+      const encontrou = metodos.some(metodo => metodo === metodoBuscado);
+      
+      if (!encontrou) return false;
+    }
+
+    return true;
   });
 
   const getStatusBadge = (status: StatusAtendimento) => {
@@ -170,6 +216,42 @@ export default function HistoricoAtendimentos() {
     }
   };
 
+  const exportarCSV = () => {
+    if (!atendimentosFiltrados || atendimentosFiltrados.length === 0) {
+      toast.error("Não há dados para exportar");
+      return;
+    }
+
+    // Cabeçalho do CSV
+    const cabecalho = "Data de fechamento;Cliente;Valor\n";
+
+    // Linhas de dados
+    const linhas = atendimentosFiltrados.map((att) => {
+      const data = formatDataHora(att.hora_encerramento || att.hora_chegada || att.created_at);
+      const cliente = (att.nome_cliente || "").replace(/;/g, ","); // Remove ponto-e-vírgula
+      const valor = (att.valor_total_negociado || 0).toFixed(2).replace(".", ",");
+      return `${data};${cliente};${valor}`;
+    }).join("\n");
+
+    // Criar o conteúdo CSV
+    const csvContent = cabecalho + linhas;
+
+    // Criar o blob e fazer download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `historico_avaliacoes_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`);
+    link.style.visibility = "hidden";
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success("Arquivo exportado com sucesso!");
+  };
+
   return (
     <MainLayout title="Histórico de Avaliações">
       <div className="space-y-6">
@@ -185,44 +267,159 @@ export default function HistoricoAtendimentos() {
           </Button>
         </div>
 
-        {/* Filtro de Data */}
+        {/* Filtros */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarIcon className="h-4 w-4" />
-              Selecionar Data
+              Filtros de Pesquisa
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-[200px] justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(filtroData, "dd/MM/yyyy", { locale: ptBR })}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={filtroData}
-                    onSelect={(date) => date && setFiltroData(date)}
-                    locale={ptBR}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Período - Data Início */}
+              <div className="space-y-2">
+                <Label htmlFor="dataInicio">Data Início</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filtroDataInicio ? format(filtroDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Selecione..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={filtroDataInicio}
+                      onSelect={setFiltroDataInicio}
+                      locale={ptBR}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
 
+              {/* Período - Data Fim */}
+              <div className="space-y-2">
+                <Label htmlFor="dataFim">Data Fim</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filtroDataFim ? format(filtroDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Selecione..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={filtroDataFim}
+                      onSelect={setFiltroDataFim}
+                      locale={ptBR}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Nome do Cliente */}
+              <div className="space-y-2">
+                <Label htmlFor="filtroNome">Nome do Cliente</Label>
+                <Input
+                  id="filtroNome"
+                  type="text"
+                  placeholder="Digite o nome..."
+                  value={filtroNome}
+                  onChange={(e) => setFiltroNome(e.target.value)}
+                />
+              </div>
+
+              {/* Valor Mínimo */}
+              <div className="space-y-2">
+                <Label htmlFor="valorMin">Valor Mínimo</Label>
+                <Input
+                  id="valorMin"
+                  type="number"
+                  placeholder="R$ 0,00"
+                  value={filtroValorMin}
+                  onChange={(e) => setFiltroValorMin(e.target.value)}
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+
+              {/* Valor Máximo */}
+              <div className="space-y-2">
+                <Label htmlFor="valorMax">Valor Máximo</Label>
+                <Input
+                  id="valorMax"
+                  type="number"
+                  placeholder="R$ 0,00"
+                  value={filtroValorMax}
+                  onChange={(e) => setFiltroValorMax(e.target.value)}
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+
+              {/* Forma de Pagamento */}
+              <div className="space-y-2">
+                <Label htmlFor="filtroPagamento">Forma de Pagamento</Label>
+                <Select value={filtroPagamento} onValueChange={setFiltroPagamento}>
+                  <SelectTrigger id="filtroPagamento">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="gira crédito">Gira Crédito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Botões de ação */}
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFiltroDataInicio(undefined);
+                  setFiltroDataFim(undefined);
+                  setFiltroNome("");
+                  setFiltroValorMin("");
+                  setFiltroValorMax("");
+                  setFiltroPagamento("todos");
+                }}
+              >
+                Limpar Filtros
+              </Button>
               <Button
                 variant="ghost"
-                onClick={() => setFiltroData(new Date())}
-                className="text-sm"
+                onClick={() => {
+                  const hoje = new Date();
+                  setFiltroDataInicio(hoje);
+                  setFiltroDataFim(hoje);
+                }}
               >
                 Hoje
               </Button>
+              {isAdmin && (
+                <Button
+                  variant="default"
+                  onClick={exportarCSV}
+                  disabled={!atendimentosFiltrados || atendimentosFiltrados.length === 0}
+                  className="ml-auto"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar CSV
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

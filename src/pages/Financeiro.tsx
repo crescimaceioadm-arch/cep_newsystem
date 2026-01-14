@@ -57,6 +57,7 @@ import {
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
 import { AprovacaoFechamentosCard } from "@/components/financeiro/AprovacaoFechamentosCard";
 import { RelatorioFechamentosCard } from "@/components/financeiro/RelatorioFechamentosCard";
+import { RelatorioMovimentacoesCard } from "@/components/financeiro/RelatorioMovimentacoesCard";
 import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -501,7 +502,7 @@ export default function Financeiro() {
 
         {/* Painel de Operações */}
         <Tabs defaultValue="transferencia" className="w-full">
-          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-2'}`}>
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-2'}`}>
             <TabsTrigger value="transferencia">
               <ArrowLeftRight className="h-4 w-4 mr-2" />
               Transferência
@@ -519,6 +520,10 @@ export default function Financeiro() {
                 <TabsTrigger value="relatorio">
                   <TrendingUp className="h-4 w-4 mr-2" />
                   Relatório
+                </TabsTrigger>
+                <TabsTrigger value="movimentacoes-manuais">
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Movimentações
                 </TabsTrigger>
               </>
             )}
@@ -702,6 +707,13 @@ export default function Financeiro() {
           {isAdmin && (
             <TabsContent value="relatorio">
               <RelatorioFechamentosCard />
+            </TabsContent>
+          )}
+
+          {/* Aba Movimentações Manuais (Admin Only) */}
+          {isAdmin && (
+            <TabsContent value="movimentacoes-manuais">
+              <RelatorioMovimentacoesCard />
             </TabsContent>
           )}
         </Tabs>

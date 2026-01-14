@@ -1049,3 +1049,49 @@ export function useRejeitarFechamento() {
     },
   });
 }
+
+/**
+ * Hook para buscar relatório de movimentações manuais
+ * Inclui: entradas, saídas e transferências manuais
+ */
+export function useRelatorioMovimentacoesManual(
+  dataInicio?: string,
+  termoBusca?: string,
+  tiposFiltro?: string[]
+) {
+  return useQuery({
+    queryKey: ["relatorio_movimentacoes_manual", dataInicio, termoBusca, tiposFiltro],
+    queryFn: async () => {
+      // Determinar tipos a buscar
+      const tiposBusca = tiposFiltro && tiposFiltro.length > 0 
+        ? tiposFiltro 
+        : ["entrada", "saida", "transferencia_entre_caixas"];
+
+      let query = supabase
+        .from("movimentacoes_caixa")
+        .select(`
+          *,
+          caixa_origem:caixas!movimentacoes_caixa_caixa_origem_id_fkey(nome),
+          caixa_destino:caixas!movimentacoes_caixa_caixa_destino_id_fkey(nome)
+        `)
+        .in("tipo", tiposBusca)
+        .order("data_hora", { ascending: false });
+
+      // Filtro por data inicial
+      if (dataInicio) {
+        const dataInicioTimestamp = new Date(dataInicio + "T00:00:00").toISOString();
+        query = query.gte("data_hora", dataInicioTimestamp);
+      }
+
+      // Filtro por termo de busca (case-insensitive, ignora acentos)
+      if (termoBusca && termoBusca.trim()) {
+        query = query.ilike("motivo", `%${termoBusca.trim()}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data as MovimentacaoCaixa[];
+    },
+  });
+}
