@@ -229,7 +229,7 @@ export default function HistoricoAtendimentos() {
     const linhas = atendimentosFiltrados.map((att) => {
       const data = formatDataHora(att.hora_encerramento || att.hora_chegada || att.created_at);
       const cliente = (att.nome_cliente || "").replace(/;/g, ","); // Remove ponto-e-vírgula
-      const valor = (att.valor_total_negociado || 0).toFixed(2).replace(".", ",");
+      const valor = `-${(att.valor_total_negociado || 0).toFixed(2).replace(".", ",")}`;
       return `${data};${cliente};${valor}`;
     }).join("\n");
 

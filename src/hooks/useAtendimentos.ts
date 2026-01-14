@@ -214,6 +214,7 @@ interface AvaliacaoData {
   pagamento_2_valor?: number | null;
   pagamento_3_metodo?: string | null;
   pagamento_3_valor?: number | null;
+  isEditing?: boolean;
 }
 
 export function useSaveAvaliacao() {
@@ -226,7 +227,7 @@ export function useSaveAvaliacao() {
       // Busca valores atuais para calcular ajuste de dinheiro (caso método mude para Dinheiro)
       const { data: atendimentoAtual, error: atendimentoFetchError } = await supabase
         .from("atendimentos")
-        .select("nome_cliente, pagamento_1_metodo, pagamento_1_valor, pagamento_2_metodo, pagamento_2_valor, pagamento_3_metodo, pagamento_3_valor")
+        .select("nome_cliente, status, pagamento_1_metodo, pagamento_1_valor, pagamento_2_metodo, pagamento_2_valor, pagamento_3_metodo, pagamento_3_valor")
         .eq("id", data.id)
         .maybeSingle();
 
@@ -260,6 +261,9 @@ export function useSaveAvaliacao() {
 
       const deltaDinheiro = (dinheiroDepois || 0) - (dinheiroAntes || 0);
 
+      // Define o novo status: preserva o status atual se for edição, senão muda para aguardando_pagamento
+      const novoStatus: StatusAtendimento = data.isEditing ? (atendimentoAtual?.status as StatusAtendimento) : "aguardando_pagamento";
+
       // 1. Atualiza o atendimento com as quantidades e muda status
       const { error: updateError } = await supabase
         .from("atendimentos")
@@ -282,7 +286,7 @@ export function useSaveAvaliacao() {
           pagamento_2_valor: data.pagamento_2_valor ?? null,
           pagamento_3_metodo: data.pagamento_3_metodo ?? null,
           pagamento_3_valor: data.pagamento_3_valor ?? null,
-          status: "aguardando_pagamento" as StatusAtendimento,
+          status: novoStatus,
         })
         .eq("id", data.id);
 
@@ -303,14 +307,14 @@ export function useSaveAvaliacao() {
           if (caixaError) {
             console.error("[useSaveAvaliacao] Erro ao buscar caixa Avaliação:", caixaError);
           } else if (caixaAvaliacao?.id) {
-            const tipoMov = deltaDinheiro > 0 ? "pagamento_avaliacao" : "estorno_pagamento_avaliacao";
+            // Sempre usa tipo 'pagamento_avaliacao', mas com valor positivo (entrada) ou negativo (saída)
             const { error: movError } = await supabase
               .from("movimentacoes_caixa")
               .insert({
                 caixa_origem_id: caixaAvaliacao.id,
                 caixa_destino_id: null,
-                tipo: tipoMov,
-                valor: Math.abs(deltaDinheiro),
+                tipo: "pagamento_avaliacao",
+                valor: deltaDinheiro,
                 motivo: `Ajuste pagamento avaliação - ${atendimentoAtual?.nome_cliente || "Cliente"}`,
               });
 

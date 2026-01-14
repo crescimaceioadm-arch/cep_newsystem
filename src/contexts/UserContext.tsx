@@ -32,7 +32,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing'
   ],
   caixa: [
-    '/', '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/auth'
+    '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/auth'
   ],
   avaliadora: [
     '/recepcao', '/avaliacao', '/atendimentos/historico', '/auth'

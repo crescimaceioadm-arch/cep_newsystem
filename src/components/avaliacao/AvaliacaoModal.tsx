@@ -171,6 +171,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
         pagamento_3_metodo: formData.metodo_pagto_3 || null,
         pagamento_3_valor: formData.valor_pagto_3 || null,
         avaliadora_nome: avaliadoraSelecionada || undefined,
+        isEditing,
       },
       {
         onSuccess: () => {
