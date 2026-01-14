@@ -279,6 +279,16 @@ export function FechamentoCaixaModal({
                   ? "ℹ️ Sobra de dinheiro na gaveta"
                   : "⚠️ Falta de dinheiro na gaveta"}
               </p>
+              
+              {/* Aviso sobre aprovação */}
+              {temDiferenca && (
+                <div className="mt-3 p-2 bg-orange-100 rounded border border-orange-300">
+                  <p className="text-xs text-orange-800 font-medium">
+                    ⚠️ <strong>Importante:</strong> Este fechamento precisará de aprovação do administrador. 
+                    O saldo do próximo dia só será ajustado após a aprovação.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

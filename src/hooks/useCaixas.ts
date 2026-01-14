@@ -73,12 +73,14 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
 
         console.log("✅ [SALDO INICIAL] Dia anterior:", diaAnterior);
 
-        // PRIORIDADE 1: Buscar fechamento FÍSICO do dia anterior (valor_contado)
+        // PRIORIDADE 1: Buscar fechamento APROVADO do dia anterior (valor_contado)
+        // 🔒 IMPORTANTE: Só considera fechamentos com status "aprovado"
         const { data, error } = await supabase
           .from("fechamentos_caixa")
           .select("*")
           .eq("caixa_id", caixaId)
           .eq("data_fechamento", diaAnterior)
+          .eq("status", "aprovado") // 🆕 Só fechamentos aprovados
           .limit(1)
           .maybeSingle();
 
@@ -88,31 +90,32 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
         }
 
         if (data) {
-          // Usar valor_contado (fechamento físico) como saldo inicial
-          console.log("✅ [SALDO INICIAL] Fechamento físico do dia anterior:", data.valor_contado);
+          // Usar valor_contado (fechamento físico aprovado) como saldo inicial
+          console.log("✅ [SALDO INICIAL] Fechamento aprovado do dia anterior:", data.valor_contado);
           return { 
             valor: data.valor_contado || 0, 
-            fonte: "fechamento_fisico", 
+            fonte: "fechamento_aprovado", 
             data_fechamento: data.data_fechamento 
           };
         }
 
-        // PRIORIDADE 2: Buscar fechamento mais recente antes da data
+        // PRIORIDADE 2: Buscar fechamento APROVADO mais recente antes da data
         const { data: dataFallback, error: errorFallback } = await supabase
           .from("fechamentos_caixa")
           .select("*")
           .eq("caixa_id", caixaId)
+          .eq("status", "aprovado") // 🆕 Só fechamentos aprovados
           .lt("data_fechamento", dataInicio)
           .order("data_fechamento", { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (dataFallback && !errorFallback) {
-          // Usar valor_contado do fechamento anterior mais próximo
-          console.log("✅ [SALDO INICIAL] Fechamento anterior encontrado:", dataFallback.valor_contado);
+          // Usar valor_contado do fechamento aprovado anterior mais próximo
+          console.log("✅ [SALDO INICIAL] Fechamento aprovado anterior encontrado:", dataFallback.valor_contado);
           return { 
             valor: dataFallback.valor_contado || 0, 
-            fonte: "fechamento_anterior",
+            fonte: "fechamento_aprovado_anterior",
             data_fechamento: dataFallback.data_fechamento 
           };
         }
