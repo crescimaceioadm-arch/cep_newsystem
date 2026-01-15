@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 export interface Venda {
   id: string;
-  data_venda: string | null;
+  created_at: string;
   vendedora_nome: string | null;
   caixa_origem: string | null;
   cliente_nome: string | null;
@@ -34,7 +34,7 @@ export function useVendasHistorico() {
       const { data, error } = await supabase
         .from("vendas")
         .select("*")
-        .order("data_venda", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as Venda[];

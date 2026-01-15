@@ -54,10 +54,15 @@ const COLUNAS_PAGAMENTO = [
   "Crédito 4x",
   "Crédito 5x",
   "Crédito 6x",
+  "Crédito 7x",
+  "Crédito 8x",
+  "Crédito 9x",
+  "Crédito 10x",
   "Débito",
   "Dinheiro",
   "Pix",
   "Gira crédito",
+  "Vale Presente",
 ];
 
 // Formatar valor no padrão brasileiro (1.234,56)
@@ -103,10 +108,10 @@ export function ExportarVendasCSV() {
       const { data: vendas, error } = await supabase
         .from("vendas")
         .select(
-          "id, data_venda, metodo_pagto_1, valor_pagto_1, metodo_pagto_2, valor_pagto_2, metodo_pagto_3, valor_pagto_3"
+          "id, created_at, metodo_pagto_1, valor_pagto_1, metodo_pagto_2, valor_pagto_2, metodo_pagto_3, valor_pagto_3"
         )
-        .gte("data_venda", dataInicio)
-        .lte("data_venda", dataFim);
+        .gte("created_at", dataInicio)
+        .lte("created_at", dataFim);
 
       if (error) throw error;
 
@@ -120,7 +125,7 @@ export function ExportarVendasCSV() {
       const totaisPorMes: TotaisPorMes = {};
 
       vendas.forEach((venda) => {
-        const dataVenda = new Date(venda.data_venda);
+        const dataVenda = new Date(venda.created_at);
         const mesKey = `${(dataVenda.getMonth() + 1).toString().padStart(2, "0")}/${ano}`;
 
         if (!totaisPorMes[mesKey]) {
@@ -133,9 +138,59 @@ export function ExportarVendasCSV() {
         // Processar cada método de pagamento
         const processarPagamento = (metodo: string | null, valor: number | null) => {
           if (!metodo || !valor) return;
-          const metodoNormalizado = metodo.trim();
+          
+          // Normalizar o método de pagamento
+          const metodoOriginal = metodo.trim();
+          let metodoNormalizado = metodoOriginal;
+          
+          // Função auxiliar para normalizar string (remove acentos e converte para minúsculas)
+          const normalizar = (str: string) => 
+            str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          
+          // Mapeamento inteligente baseado em padrões
+          const metodoNorm = normalizar(metodoOriginal);
+          
+          // Detectar PIX
+          if (metodoNorm === "pix") {
+            metodoNormalizado = "Pix";
+          }
+          // Detectar Dinheiro
+          else if (metodoNorm === "dinheiro") {
+            metodoNormalizado = "Dinheiro";
+          }
+          // Detectar Débito
+          else if (metodoNorm === "debito") {
+            metodoNormalizado = "Débito";
+          }
+          // Detectar Gira crédito
+          else if (metodoNorm.includes("gira")) {
+            metodoNormalizado = "Gira crédito";
+          }
+          // Detectar Vale Presente
+          else if (metodoNorm.includes("vale")) {
+            metodoNormalizado = "Vale Presente";
+          }
+          // Detectar Crédito com parcelas
+          else if (metodoNorm.includes("credito")) {
+            // Extrair número de parcelas (2x, 3x, etc)
+            const match = metodoOriginal.match(/(\d+)x/i);
+            if (match) {
+              const parcelas = match[1];
+              metodoNormalizado = `Crédito ${parcelas}x`;
+            } else if (metodoNorm.includes("vista")) {
+              metodoNormalizado = "Crédito à vista";
+            } else {
+              // Se não tem parcela especificada, assume à vista
+              metodoNormalizado = "Crédito à vista";
+            }
+          }
+          
+          // Verificar se o método normalizado existe nas colunas
           if (totaisPorMes[mesKey][metodoNormalizado] !== undefined) {
             totaisPorMes[mesKey][metodoNormalizado] += valor;
+          } else {
+            // Se ainda não encontrou, loga para debug
+            console.warn(`⚠️ Método não mapeado: "${metodoOriginal}" → tentou: "${metodoNormalizado}"`);
           }
         };
 
@@ -150,6 +205,17 @@ export function ExportarVendasCSV() {
         const [mesB] = b.split("/");
         return parseInt(mesB) - parseInt(mesA);
       });
+
+      // Calcular total geral para debug
+      let totalGeralCSV = 0;
+      mesesOrdenados.forEach((mesKey) => {
+        COLUNAS_PAGAMENTO.forEach((col) => {
+          totalGeralCSV += totaisPorMes[mesKey][col] || 0;
+        });
+      });
+      
+      console.log(`📊 Total processado no CSV: R$ ${totalGeralCSV.toFixed(2)}`);
+      console.log(`📦 ${vendas.length} vendas processadas no período`);
 
       // Montar CSV no formato especificado
       const header = ["mês", ...COLUNAS_PAGAMENTO];

@@ -58,6 +58,7 @@ const CustomTooltip = ({ active, payload, label, type = "currency" }: any) => {
 
 export default function Dashboard() {
   const [allAtendimentos, setAllAtendimentos] = useState<any[]>([]);
+  const [allAtendimentosMesInteiro, setAllAtendimentosMesInteiro] = useState<any[]>([]); // Novo: sempre o mês inteiro
   const [allVendas, setAllVendas] = useState<any[]>([]); // Estado Novo para Vendas
   const [loading, setLoading] = useState(true);
   const { data: estoque } = useEstoque();
@@ -107,7 +108,7 @@ export default function Dashboard() {
             const inicio = periodo?.from ? periodo.from : inicioMes;
             const fim = periodo?.to ? periodo.to : fimMes;
 
-            // 1. Busca Atendimentos
+            // 1. Busca Atendimentos do PERÍODO SELECIONADO (para a tabela)
             // 1a. Finalizados usando a data de fechamento/encerramento dentro do período
             const { data: atendFinalizados } = await supabase
                 .from("atendimentos")
@@ -133,7 +134,15 @@ export default function Dashboard() {
                 .gte("created_at", inicio.toISOString())
                 .lte("created_at", endOfDay(fim).toISOString());
 
-      // 2. Busca Vendas (Novo código)
+      // 2. Busca Atendimentos do MÊS INTEIRO (para o gráfico de rosca)
+      const { data: atendFinalizadosMes } = await supabase
+        .from("atendimentos")
+        .select("*")
+        .eq("status", "finalizado")
+        .gte("hora_encerramento", inicioMes.toISOString())
+        .lte("hora_encerramento", endOfDay(fimMes).toISOString());
+
+      // 3. Busca Vendas (Novo código)
       const { data: vendas } = await supabase
         .from("vendas")
         .select("*")
@@ -141,6 +150,7 @@ export default function Dashboard() {
                 .lte("created_at", endOfDay(fim).toISOString());
 
     setAllAtendimentos([...(atendFinalizados || []), ...(atendRecusados || []), ...(atendOutros || [])]);
+      setAllAtendimentosMesInteiro(atendFinalizadosMes || []); // Novo: sempre o mês inteiro
       setAllVendas(vendas || []);
       setLoading(false);
     }
@@ -384,9 +394,31 @@ export default function Dashboard() {
     };
   }, [allVendas, hoje]);
 
-    // Totais do mês para o donut: vendas vs gastos em dinheiro (avaliações)
+  // === PICOS DE HORÁRIOS FILTRADO POR PERÍODO ===
+  const picosHorariosFiltrados = useMemo(() => {
+    const vendasPorHora = new Map();
+    allVendas.forEach(venda => {
+      const hora = new Date(venda.created_at).getHours();
+      const faixaHoraria = `${hora}h`;
+      const valor = Number(venda.valor_total_venda || 0);
+      vendasPorHora.set(faixaHoraria, (vendasPorHora.get(faixaHoraria) || 0) + valor);
+    });
+    
+    return Array.from(vendasPorHora, ([hora, valor]) => ({ 
+      hora, 
+      valor 
+    })).sort((a, b) => {
+      const horaA = parseInt(a.hora);
+      const horaB = parseInt(b.hora);
+      return horaA - horaB;
+    });
+  }, [allVendas]);
+
+    // Totais para o donut: vendas vs gastos em dinheiro (avaliações) - FILTRA POR PERÍODO
     const donutResumoMes = useMemo(() => {
         const totalVendasMes = salesMetrics.totalVendidoMes;
+        
+        // Usar os atendimentos do PERÍODO FILTRADO
         const totalGastosDinheiroMes = allAtendimentos
             .filter((a) => a.status === "finalizado")
             .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
@@ -417,6 +449,15 @@ export default function Dashboard() {
             const brinquedos = (a.qtd_brinquedos || 0) > 0;
             const roupasOuSapatos = ((a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0)) > 0;
             return !grandes && !medios && !brinquedos && roupasOuSapatos;
+        });
+        // Novo: Capturar avaliações sem itens (todas as quantidades zeradas)
+        const grupoOutros = finalizadosPeriodo.filter((a) => {
+            const temGrandes = (a.qtd_itens_grandes || 0) > 0;
+            const temMedios = (a.qtd_itens_medios || 0) > 0;
+            const temBrinquedos = (a.qtd_brinquedos || 0) > 0;
+            const temRoupasOuSapatos = ((a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0)) > 0;
+            // Se não tem NENHUM item, vai para "Outros"
+            return !temGrandes && !temMedios && !temBrinquedos && !temRoupasOuSapatos;
         });
 
         const totalGrupo = (lista: any[]) =>
@@ -454,9 +495,18 @@ export default function Dashboard() {
                 quantidade: grupoRoupasESapatos.filter(ehDinheiro).length,
                 detalhes: getAvaliacoesPorGrupo(grupoRoupasESapatos)
             },
+            { 
+                categoria: "Outros (sem itens registrados)", 
+                total: totalGrupo(grupoOutros), 
+                quantidade: grupoOutros.filter(ehDinheiro).length,
+                detalhes: getAvaliacoesPorGrupo(grupoOutros)
+            },
         ];
 
         const totalGeral = rows.reduce((acc, r) => acc + r.total, 0);
+        
+        // DEBUG removido - problema resolvido
+        
         return { rows, totalGeral };
     }, [allAtendimentos]);
 
@@ -466,119 +516,186 @@ export default function Dashboard() {
   // ==================================================================================
   return (
     <MainLayout title="Dashboard Estratégico">
-      <div className="space-y-8 pb-10">
-                {/* Resumo: Donut + Tabela de gastos em dinheiro */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr items-stretch">
-                    {/* Donut de resumo mensal */}
-                    <Card className="h-full">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Resumo do mês: Vendas vs Gastos em dinheiro</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex flex-col md:flex-row items-center md:items-stretch gap-6 h-full">
-                                <div className="w-full max-w-[260px] h-[260px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie data={donutResumoMes.data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}>
-                                                {donutResumoMes.data.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip content={<CustomTooltip type="currency" />} />
-                                            <Legend />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                                <div className="space-y-2 flex-1">
-                                    <div className="text-sm text-muted-foreground">Total de vendas no mês</div>
-                                    <div className="text-2xl font-bold">{formatCurrency(donutResumoMes.totalVendasMes)}</div>
-                                    <div className="text-sm text-muted-foreground">Gastos em dinheiro (avaliações)</div>
-                                    <div className="text-lg font-semibold text-red-600">{formatCurrency(donutResumoMes.totalGastosDinheiroMes)}</div>
-                                    <div className="text-sm text-muted-foreground">Percentual dos gastos sobre vendas</div>
-                                    <div className="text-lg font-semibold">{donutResumoMes.percentual.toFixed(1)}%</div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+      <div className="space-y-6 pb-10">
+        
+        {/* === CABEÇALHO COM SELETOR DE PERÍODO UNIVERSAL === */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Visão Geral</h2>
+            <p className="text-muted-foreground">{format(hoje, "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
+          </div>
+          
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            {/* Seletor de abas */}
+            <Tabs defaultValue="equipe" className="w-full md:w-auto">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="equipe">Performance das Equipes</TabsTrigger>
+                <TabsTrigger value="estoque">Estoque</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
+            {/* Seletor de período universal */}
+            <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant={isQuickRangeActive("hoje") ? "default" : "outline"}
+              onClick={() => applyQuickRange("hoje")}
+            >
+              Hoje
+            </Button>
+            <Button
+              size="sm"
+              variant={isQuickRangeActive("semana") ? "default" : "outline"}
+              onClick={() => applyQuickRange("semana")}
+            >
+              Semana
+            </Button>
+            <Button
+              size="sm"
+              variant={isQuickRangeActive("mes") ? "default" : "outline"}
+              onClick={() => applyQuickRange("mes")}
+            >
+              Mês
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
+                  {periodo?.from && periodo?.to
+                    ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
+                    : "Selecionar período"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={periodo as any}
+                  onSelect={(range) => setPeriodo(range as DateRange)}
+                  defaultMonth={periodo?.from || inicioMes}
+                  locale={ptBR}
+                  numberOfMonths={2}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            </div>
+          </div>
+        </div>
 
-                    {/* Tabela de gastos em dinheiro por tipo de avaliação */}
-                    <Card className="h-full">
-                        <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                            <div className="flex flex-col gap-2">
-                                <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant={isQuickRangeActive("hoje") ? "default" : "outline"}
-                                        onClick={() => applyQuickRange("hoje")}
-                                    >
-                                        Hoje
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant={isQuickRangeActive("semana") ? "default" : "outline"}
-                                        onClick={() => applyQuickRange("semana")}
-                                    >
-                                        Semana
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant={isQuickRangeActive("mes") ? "default" : "outline"}
-                                        onClick={() => applyQuickRange("mes")}
-                                    >
-                                        Mês
-                                    </Button>
-                                </div>
-                            </div>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
-                                        {periodo?.from && periodo?.to
-                                            ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
-                                            : "Selecionar período"}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="end">
-                                    <Calendar
-                                        mode="range"
-                                        selected={periodo as any}
-                                        onSelect={(range) => setPeriodo(range as DateRange)}
-                                        defaultMonth={periodo?.from || inicioMes}
-                                        locale={ptBR}
-                                        numberOfMonths={2}
-                                        initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                        </CardHeader>
-                        <CardContent className="max-h-[420px] overflow-auto">
-                            <div className="min-w-full">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Categoria</TableHead>
-                                            <TableHead className="text-right">Total em dinheiro</TableHead>
-                                            <TableHead className="text-right">Nº avaliações</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {tabelaGastos.rows.map((row) => {
-                                            const isExpanded = expandedCategories.has(row.categoria);
-                                            const toggleExpanded = () => {
-                                                const newExpanded = new Set(expandedCategories);
-                                                if (newExpanded.has(row.categoria)) {
-                                                    newExpanded.delete(row.categoria);
-                                                } else {
-                                                    newExpanded.add(row.categoria);
-                                                }
-                                                setExpandedCategories(newExpanded);
-                                            };
+        {/* === CARDS DE RESUMO NO TOPO === */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Card className="border-blue-200 bg-blue-50">
+            <CardHeader className="pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-blue-700">💰 Vendas - Mês</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-3">
+              <div className="text-xl font-bold text-blue-900">{formatCurrency(salesMetrics.totalVendidoMes)}</div>
+              <p className="text-[10px] text-blue-600 mt-0.5">{salesMetrics.qtdVendasMes} vendas</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-green-200 bg-green-50">
+            <CardHeader className="pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-green-700">💵 Vendas - Hoje</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-3">
+              <div className="text-xl font-bold text-green-900">{formatCurrency(salesMetrics.totalVendidoHoje)}</div>
+              <p className="text-[10px] text-green-600 mt-0.5">{salesMetrics.qtdVendasHoje} vendas</p>
+            </CardContent>
+          </Card>
 
-                                            return (
-                                                <>
-                                                    <TableRow key={row.categoria} className="cursor-pointer hover:bg-gray-50" onClick={toggleExpanded}>
-                                                        <TableCell className="flex items-center gap-2">
-                                                            <ChevronDown 
+          <Card className="border-purple-200 bg-purple-50">
+            <CardHeader className="pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-purple-700">🎯 Ticket Médio - Mês</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-3">
+              <div className="text-xl font-bold text-purple-900">{formatCurrency(salesMetrics.ticketMedioGeral)}</div>
+              <p className="text-[10px] text-purple-600 mt-0.5">Média por venda</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-teal-200 bg-teal-50">
+            <CardHeader className="pb-1 pt-3">
+              <CardTitle className="text-xs font-medium text-teal-700">🎯 Ticket Médio - Hoje</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-3">
+              <div className="text-xl font-bold text-teal-900">
+                {formatCurrency(salesMetrics.qtdVendasHoje > 0 ? salesMetrics.totalVendidoHoje / salesMetrics.qtdVendasHoje : 0)}
+              </div>
+              <p className="text-[10px] text-teal-600 mt-0.5">Média de hoje</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* === RESUMO: ROSCA (1/3) + TABELA DE GASTOS (2/3) === */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-fr items-stretch">
+          {/* Donut de resumo mensal - 1 coluna */}
+          <Card className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Resumo: Vendas vs Gastos</CardTitle>
+              <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="flex flex-col items-center justify-center gap-3 h-full">
+                <div className="w-full flex justify-center items-center">
+                  <div className="w-[180px] h-[180px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={donutResumoMes.data} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75}>
+                          {donutResumoMes.data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip type="currency" />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="space-y-1.5 w-full text-center">
+                  <div className="text-[10px] text-muted-foreground">Total vendas (período)</div>
+                  <div className="text-lg font-bold text-green-600">{formatCurrency(donutResumoMes.totalVendasMes)}</div>
+                  <div className="text-[10px] text-muted-foreground">Gastos em dinheiro</div>
+                  <div className="text-base font-semibold text-red-600">{formatCurrency(donutResumoMes.totalGastosDinheiroMes)}</div>
+                  <div className="text-[10px] text-muted-foreground">% sobre vendas</div>
+                  <div className="text-base font-semibold">{donutResumoMes.percentual.toFixed(1)}%</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabela de gastos em dinheiro - 2 colunas */}
+          <Card className="h-full md:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Gasto em dinheiro por tipo de avaliação</CardTitle>
+              <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
+            </CardHeader>
+            <CardContent className="max-h-[420px] overflow-auto">
+              <div className="min-w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead className="text-right">Total em dinheiro</TableHead>
+                      <TableHead className="text-right">Nº avaliações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tabelaGastos.rows.map((row) => {
+                      const isExpanded = expandedCategories.has(row.categoria);
+                      const toggleExpanded = () => {
+                        const newExpanded = new Set(expandedCategories);
+                        if (newExpanded.has(row.categoria)) {
+                          newExpanded.delete(row.categoria);
+                        } else {
+                          newExpanded.add(row.categoria);
+                        }
+                        setExpandedCategories(newExpanded);
+                      };
+
+                      return (
+                        <>
+                          <TableRow key={row.categoria} className="cursor-pointer hover:bg-gray-50" onClick={toggleExpanded}>
+                            <TableCell className="flex items-center gap-2">
+                              <ChevronDown 
                                                                 className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                                                             />
                                                             {row.categoria}
@@ -649,148 +766,254 @@ export default function Dashboard() {
                         </CardContent>
                     </Card>
                 </div>
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Visão Geral</h2>
-            <p className="text-muted-foreground">{format(hoje, "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
-          </div>
+
+        {/* === PROPORÇÃO DE PAGAMENTOS === */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Valor de Avaliações por Forma de Pagamento */}
+          <Card className="border-blue-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center justify-between">
+                <span className="flex flex-col">
+                  <span>Proporção de Pagamentos - Mês (Valor)</span>
+                  <span className="text-[11px] text-muted-foreground">Base: avaliações finalizadas</span>
+                </span>
+                <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasMes.total)}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {/* Barra de progresso */}
+                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                  <div 
+                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                    style={{ width: `${metrics.metricasMes.total > 0 ? (metrics.metricasMes.dinheiro / metrics.metricasMes.total * 100) : 0}%` }}
+                  >
+                    {metrics.metricasMes.total > 0 && (metrics.metricasMes.dinheiro / metrics.metricasMes.total * 100).toFixed(1)}%
+                  </div>
+                  <div 
+                    className="absolute right-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                    style={{ width: `${metrics.metricasMes.total > 0 ? (metrics.metricasMes.gira / metrics.metricasMes.total * 100) : 0}%` }}
+                  >
+                    {metrics.metricasMes.total > 0 && (metrics.metricasMes.gira / metrics.metricasMes.total * 100).toFixed(1)}%
+                  </div>
+                </div>
+                
+                {/* Legenda */}
+                <div className="flex justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-green-600 rounded"></div>
+                    <span className="text-gray-700">Dinheiro/PIX: <strong>{formatCurrency(metrics.metricasMes.dinheiro)}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-amber-600 rounded"></div>
+                    <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(metrics.metricasMes.gira)}</strong></span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quantidade de Avaliações por Forma de Pagamento */}
+          <Card className="border-purple-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center justify-between">
+                <span className="flex flex-col">
+                  <span>Proporção de Pagamentos - Mês (Qtd)</span>
+                  <span className="text-[11px] text-muted-foreground">Base: avaliações finalizadas</span>
+                </span>
+                <span className="text-xs text-gray-500">{metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira} avaliações</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {/* Barra de progresso */}
+                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
+                  <div 
+                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                    style={{ width: `${(metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) > 0 ? (metrics.metricasMes.qtdDinheiro / (metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) * 100) : 0}%` }}
+                  >
+                    {(metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) > 0 && (metrics.metricasMes.qtdDinheiro / (metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) * 100).toFixed(1)}%
+                  </div>
+                  <div 
+                    className="absolute right-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold transition-all duration-500"
+                    style={{ width: `${(metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) > 0 ? (metrics.metricasMes.qtdGira / (metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) * 100) : 0}%` }}
+                  >
+                    {(metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) > 0 && (metrics.metricasMes.qtdGira / (metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                
+                {/* Legenda */}
+                <div className="flex justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-green-600 rounded"></div>
+                    <span className="text-gray-700">Dinheiro/PIX: <strong>{metrics.metricasMes.qtdDinheiro} avaliações</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-amber-600 rounded"></div>
+                    <span className="text-gray-700">Gira-Crédito: <strong>{metrics.metricasMes.qtdGira} avaliações</strong></span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+        
+        {/* === GRÁFICO DE PICOS DE VENDAS (fora das abas) === */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex gap-2 items-center"><BarChart3 className="w-5"/> Picos de Vendas por Horário</CardTitle>
+            <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
+          </CardHeader>
+          <CardContent className="h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={picosHorariosFiltrados}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="hora" />
+                <YAxis />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="valor" name="Valor Vendido" fill="#0088FE" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
         {/* --- AQUI COMEÇA O SISTEMA DE ABAS --- */}
-        <Tabs defaultValue="vendas" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mb-6">
-                <TabsTrigger value="vendas">Resultados de Vendas</TabsTrigger>
-                <TabsTrigger value="compras">Resultados de Compras</TabsTrigger>
-            </TabsList>
-
-            {/* --- ABA 1: VENDAS (COMPLETA) --- */}
-            <TabsContent value="vendas" className="space-y-6 animate-in fade-in-50">
+        <Tabs defaultValue="equipe" className="w-full">
+            {/* --- ABA 1: PERFORMANCE DAS EQUIPES --- */}
+            <TabsContent value="equipe" className="space-y-6 animate-in fade-in-50">
                 
-                {/* === RESUMO GERAL NO TOPO === */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-blue-200 bg-blue-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-blue-700">💰 Valor Total - Mês</CardTitle>
+                {/* === GRÁFICOS DE BARRAS: VALOR E QUANTIDADE POR VENDEDORA === */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Gráfico: Total de Vendas por Vendedora */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm flex gap-2 items-center">
+                                <TrendingUp className="w-4"/> Total de Vendas por Vendedora
+                            </CardTitle>
+                            <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-blue-900">{formatCurrency(salesMetrics.totalVendidoMes)}</div>
-                            <p className="text-xs text-blue-600 mt-1">{salesMetrics.qtdVendasMes} vendas realizadas</p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card className="border-green-200 bg-green-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-green-700">💵 Valor Total - Hoje</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-green-900">{formatCurrency(salesMetrics.totalVendidoHoje)}</div>
-                            <p className="text-xs text-green-600 mt-1">{salesMetrics.qtdVendasHoje} vendas hoje</p>
+                        <CardContent className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={salesMetrics.vendedorasData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Bar dataKey="valorMes" name="Valor Total" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-teal-200 bg-teal-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-teal-700">🎯 Ticket Médio Geral (Mês)</CardTitle>
+                    {/* Gráfico: Quantidade de Vendas por Vendedora */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm flex gap-2 items-center">
+                                <BarChart3 className="w-4"/> Quantidade de Vendas por Vendedora
+                            </CardTitle>
+                            <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-teal-900">{formatCurrency(salesMetrics.ticketMedioGeral)}</div>
-                            <p className="text-xs text-teal-600 mt-1">Valor médio por venda no mês</p>
+                        <CardContent className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={salesMetrics.vendedorasData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip type="number" />} />
+                                    <Bar dataKey="qtdMes" name="Quantidade" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
                 </div>
-
-                {/* === PROPORÇÃO GIRA-CRÉDITO (BARRAS HORIZONTAIS) === */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Barra do Mês */}
-                    <Card className="border-blue-200">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span className="flex flex-col">
-                                    <span>Proporção de Pagamentos - Mês</span>
-                                    <span className="text-[11px] text-muted-foreground">Base: vendas (recebimentos)</span>
-                                </span>
-                                <span className="text-xs text-gray-500">{formatCurrency(salesMetrics.totalVendidoMes)}</span>
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                {/* Barra de progresso */}
-                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
-                                    <div 
-                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${salesMetrics.totalVendidoMes > 0 ? ((salesMetrics.totalVendidoMes - salesMetrics.totalGiraCreditoMes) / salesMetrics.totalVendidoMes * 100) : 0}%` }}
-                                    >
-                                        {salesMetrics.totalVendidoMes > 0 && ((salesMetrics.totalVendidoMes - salesMetrics.totalGiraCreditoMes) / salesMetrics.totalVendidoMes * 100).toFixed(1)}%
+                
+                {/* === DESEMPENHO POR VENDEDORA (VISUAL E COMPARATIVO) === */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {salesMetrics.vendedorasData.map((vendedora, index) => (
+                        <Card key={index} className="border-2 hover:shadow-lg transition-all">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="flex items-center gap-2">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+                                        {vendedora.nome.charAt(0)}
                                     </div>
-                                    <div 
-                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${salesMetrics.totalVendidoMes > 0 ? (salesMetrics.totalGiraCreditoMes / salesMetrics.totalVendidoMes * 100) : 0}%` }}
-                                    >
-                                        {salesMetrics.totalVendidoMes > 0 && (salesMetrics.totalGiraCreditoMes / salesMetrics.totalVendidoMes * 100).toFixed(1)}%
+                                    <div>
+                                        <div className="text-base font-bold">{vendedora.nome}</div>
+                                        <div className="text-xs text-gray-500">Ticket Médio: {formatCurrency(vendedora.ticketMedio)}</div>
                                     </div>
-                                </div>
-                                
-                                {/* Legenda */}
-                                <div className="flex justify-between text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-blue-600 rounded"></div>
-                                        <span className="text-gray-700">Outras Formas: <strong>{formatCurrency(salesMetrics.totalVendidoMes - salesMetrics.totalGiraCreditoMes)}</strong></span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    {/* Valor Total Mês */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs text-gray-600">Valor Total - Mês</span>
+                                            <span className="text-sm font-bold text-blue-700">{formatCurrency(vendedora.valorMes)}</span>
+                                        </div>
+                                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-500"
+                                                style={{ width: `${Math.min((vendedora.valorMes / Math.max(...salesMetrics.vendedorasData.map(v => v.valorMes)) * 100), 100)}%` }}
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-amber-600 rounded"></div>
-                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(salesMetrics.totalGiraCreditoMes)}</strong></span>
+                                    
+                                    {/* Quantidade Mês */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs text-gray-600">Quantidade - Mês</span>
+                                            <span className="text-sm font-bold text-purple-700">{vendedora.qtdMes} vendas</span>
+                                        </div>
+                                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-gradient-to-r from-purple-400 to-purple-600 transition-all duration-500"
+                                                style={{ width: `${Math.min((vendedora.qtdMes / Math.max(...salesMetrics.vendedorasData.map(v => v.qtdMes)) * 100), 100)}%` }}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Barra de Hoje */}
-                    <Card className="border-green-200">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span className="flex flex-col">
-                                    <span>Proporção de Pagamentos - Hoje</span>
-                                    <span className="text-[11px] text-muted-foreground">Base: vendas (recebimentos)</span>
-                                </span>
-                                <span className="text-xs text-gray-500">{formatCurrency(salesMetrics.totalVendidoHoje)}</span>
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                {/* Barra de progresso */}
-                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
-                                    <div 
-                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${salesMetrics.totalVendidoHoje > 0 ? ((salesMetrics.totalVendidoHoje - salesMetrics.totalGiraCreditoHoje) / salesMetrics.totalVendidoHoje * 100) : 0}%` }}
-                                    >
-                                        {salesMetrics.totalVendidoHoje > 0 && ((salesMetrics.totalVendidoHoje - salesMetrics.totalGiraCreditoHoje) / salesMetrics.totalVendidoHoje * 100).toFixed(1)}%
-                                    </div>
-                                    <div 
-                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${salesMetrics.totalVendidoHoje > 0 ? (salesMetrics.totalGiraCreditoHoje / salesMetrics.totalVendidoHoje * 100) : 0}%` }}
-                                    >
-                                        {salesMetrics.totalVendidoHoje > 0 && (salesMetrics.totalGiraCreditoHoje / salesMetrics.totalVendidoHoje * 100).toFixed(1)}%
+                                    
+                                    {/* Valor Hoje */}
+                                    <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                                        <div className="bg-green-50 p-2 rounded">
+                                            <div className="text-[10px] text-gray-600">Hoje - Valor</div>
+                                            <div className="text-sm font-bold text-green-700">{formatCurrency(vendedora.valorHoje)}</div>
+                                        </div>
+                                        <div className="bg-green-50 p-2 rounded">
+                                            <div className="text-[10px] text-gray-600">Hoje - Qtd</div>
+                                            <div className="text-sm font-bold text-green-700">{vendedora.qtdHoje}</div>
+                                        </div>
                                     </div>
                                 </div>
-                                
-                                {/* Legenda */}
-                                <div className="flex justify-between text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-green-600 rounded"></div>
-                                        <span className="text-gray-700">Outras Formas: <strong>{formatCurrency(salesMetrics.totalVendidoHoje - salesMetrics.totalGiraCreditoHoje)}</strong></span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-amber-600 rounded"></div>
-                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(salesMetrics.totalGiraCreditoHoje)}</strong></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
 
+                {/* === PERFORMANCE DA EQUIPE (GRÁFICO DE BARRAS) === */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex gap-2 items-center"><Users className="w-5"/> Performance da Equipe</CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart layout="vertical" data={metrics.performanceData}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                <XAxis type="number" />
+                                <YAxis dataKey="nome" type="category" width={100} />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="aprovadoDinheiro" name="Aprovado em Dinheiro" stackId="a" fill="#10b981" />
+                                <Bar dataKey="aprovadoGira" name="Aprovado em Gira" stackId="a" fill="#f59e0b" />
+                                <Bar dataKey="recusado" name="Recusado" stackId="a" fill="#ef4444" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            {/* --- ABA 2: ESTOQUE --- */}
+            <TabsContent value="estoque" className="space-y-6 animate-in fade-in-50">
+                
                 {/* === VENDAS x COMPRAS POR CATEGORIA (MÊS) === */}
                 <Card>
                     <CardHeader>
@@ -818,262 +1041,81 @@ export default function Dashboard() {
                     </CardContent>
                 </Card>
 
-                {/* === DESEMPENHO POR VENDEDORA === */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex gap-2 items-center"><Users className="w-5"/> Desempenho por Vendedora</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {salesMetrics.vendedorasData.map((vendedora, index) => (
-                                <div key={index} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h3 className="font-bold text-lg">{vendedora.nome}</h3>
-                                            <p className="text-sm text-gray-600">Ticket Médio: {formatCurrency(vendedora.ticketMedio)}</p>
+                {/* === MIX DE PEÇAS + QUANTIDADE EM ESTOQUE === */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Mix de Peças */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm flex gap-2"><Package className="w-4"/> Mix de Peças (Mês)</CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-64">
+                            <ResponsiveContainer>
+                                <PieChart>
+                                    <Pie data={metrics.pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                        {metrics.pieData.map((_, index) => (<Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />))}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+
+                    {/* Quantidade em Estoque por Categoria */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm flex gap-2"><Package className="w-4"/> Peças em Estoque por Categoria</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {estoque && [
+                                    { nome: 'Baby', qtd: estoque.filter((item: any) => item.categoria === 'baby').reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0), color: 'bg-pink-500' },
+                                    { nome: 'Infantil', qtd: estoque.filter((item: any) => item.categoria === 'infantil').reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0), color: 'bg-blue-500' },
+                                    { nome: 'Calçados', qtd: estoque.filter((item: any) => item.categoria === 'calcados').reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0), color: 'bg-purple-500' },
+                                    { nome: 'Brinquedos', qtd: estoque.filter((item: any) => item.categoria === 'brinquedos').reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0), color: 'bg-yellow-500' },
+                                    { nome: 'Itens Médios', qtd: estoque.filter((item: any) => item.categoria === 'itens_medios').reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0), color: 'bg-green-500' },
+                                    { nome: 'Itens Grandes', qtd: estoque.filter((item: any) => item.categoria === 'itens_grandes').reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0), color: 'bg-red-500' },
+                                ].map((cat, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-3 h-3 rounded-full ${cat.color}`}></div>
+                                            <span className="font-medium text-sm">{cat.nome}</span>
                                         </div>
+                                        <span className="text-lg font-bold text-gray-800">{cat.qtd}</span>
                                     </div>
-                                    
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div className="bg-blue-50 p-3 rounded">
-                                            <div className="text-xs text-gray-600">Valor - Mês</div>
-                                            <div className="text-lg font-bold text-blue-700">{formatCurrency(vendedora.valorMes)}</div>
-                                        </div>
-                                        <div className="bg-blue-50 p-3 rounded">
-                                            <div className="text-xs text-gray-600">Qtd - Mês</div>
-                                            <div className="text-lg font-bold text-blue-700">{vendedora.qtdMes} vendas</div>
-                                        </div>
-                                        <div className="bg-green-50 p-3 rounded">
-                                            <div className="text-xs text-gray-600">Valor - Hoje</div>
-                                            <div className="text-lg font-bold text-green-700">{formatCurrency(vendedora.valorHoje)}</div>
-                                        </div>
-                                        <div className="bg-green-50 p-3 rounded">
-                                            <div className="text-xs text-gray-600">Qtd - Hoje</div>
-                                            <div className="text-lg font-bold text-green-700">{vendedora.qtdHoje} vendas</div>
-                                        </div>
+                                ))}
+                                <div className="pt-3 border-t mt-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-bold text-gray-700">Total em Estoque:</span>
+                                        <span className="text-xl font-bold text-blue-600">
+                                            {estoque?.reduce((sum: number, item: any) => sum + (item.quantidade || 0), 0) || 0}
+                                        </span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
 
-                {/* === PICOS DE VENDAS POR HORÁRIO === */}
+                {/* === COMPRAS VS ESTOQUE === */}
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex gap-2 items-center"><BarChart3 className="w-5"/> Picos de Vendas por Horário (Mês)</CardTitle>
+                        <CardTitle className="text-sm flex gap-2"><TrendingUp className="w-4"/> Compras vs Estoque</CardTitle>
                     </CardHeader>
-                    <CardContent className="h-[400px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={salesMetrics.picosHorarios}>
+                    <CardContent className="h-64">
+                        <ResponsiveContainer>
+                            <BarChart data={dataComparativo}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="hora" />
+                                <XAxis dataKey="name" />
                                 <YAxis />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="valor" name="Valor Vendido" fill="#0088FE" radius={[8, 8, 0, 0]} />
+                                <Tooltip cursor={{fill: 'transparent'}} />
+                                <Legend />
+                                <Bar dataKey="compras" name="Comprado" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="estoque" name="Estoque" fill="#10b981" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
-            </TabsContent>
-
-            {/* --- ABA 2: COMPRAS (REFORMULADA) --- */}
-            <TabsContent value="compras" className="space-y-6 animate-in fade-in-50">
-                
-                {/* === RESUMO GERAL NO TOPO === */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="border-blue-200 bg-blue-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-blue-700">💰 Valor Total - Mês</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-blue-900">{formatCurrency(metrics.metricasMes.total)}</div>
-                            <p className="text-xs text-blue-600 mt-1">{metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira} compras realizadas</p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card className="border-green-200 bg-green-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-green-700">💵 Valor Total - Hoje</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-green-900">{formatCurrency(metrics.metricasHoje.total)}</div>
-                            <p className="text-xs text-green-600 mt-1">{metrics.metricasHoje.qtdDinheiro + metrics.metricasHoje.qtdGira} compras hoje</p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card className="border-purple-200 bg-purple-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-purple-700">🛍️ Quantidade - Mês</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-purple-900">{metrics.metricasMes.qtdDinheiro + metrics.metricasMes.qtdGira}</div>
-                            <p className="text-xs text-purple-600 mt-1">atendimentos finalizados</p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card className="border-orange-200 bg-orange-50">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-orange-700">🎯 Quantidade - Hoje</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-orange-900">{metrics.metricasHoje.qtdDinheiro + metrics.metricasHoje.qtdGira}</div>
-                            <p className="text-xs text-orange-600 mt-1">atendimentos finalizados</p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* === PROPORÇÃO DINHEIRO VS GIRA === */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Barra do Mês */}
-                    <Card className="border-blue-200">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span className="flex flex-col">
-                                    <span>Proporção de Pagamentos - Mês</span>
-                                    <span className="text-[11px] text-muted-foreground">Base: compras/avaliações</span>
-                                </span>
-                                <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasMes.total)}</span>
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                {/* Barra de progresso */}
-                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
-                                    <div 
-                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${metrics.metricasMes.total > 0 ? (metrics.metricasMes.dinheiro / metrics.metricasMes.total * 100) : 0}%` }}
-                                    >
-                                        {metrics.metricasMes.total > 0 && (metrics.metricasMes.dinheiro / metrics.metricasMes.total * 100).toFixed(1)}%
-                                    </div>
-                                    <div 
-                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${metrics.metricasMes.total > 0 ? (metrics.metricasMes.gira / metrics.metricasMes.total * 100) : 0}%` }}
-                                    >
-                                        {metrics.metricasMes.total > 0 && (metrics.metricasMes.gira / metrics.metricasMes.total * 100).toFixed(1)}%
-                                    </div>
-                                </div>
-                                
-                                {/* Legenda */}
-                                <div className="flex justify-between text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-emerald-600 rounded"></div>
-                                        <span className="text-gray-700">Dinheiro/PIX: <strong>{formatCurrency(metrics.metricasMes.dinheiro)}</strong></span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-yellow-600 rounded"></div>
-                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(metrics.metricasMes.gira)}</strong></span>
-                                    </div>
-                                </div>
-                                
-                                {/* Info adicional */}
-                                <div className="flex justify-between text-xs text-gray-600 pt-2 border-t">
-                                    <span>{metrics.metricasMes.qtdDinheiro} compras em dinheiro</span>
-                                    <span>{metrics.metricasMes.qtdGira} compras em gira</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Barra de Hoje */}
-                    <Card className="border-green-200">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium flex items-center justify-between">
-                                <span className="flex flex-col">
-                                    <span>Proporção de Pagamentos - Hoje</span>
-                                    <span className="text-[11px] text-muted-foreground">Base: compras/avaliações</span>
-                                </span>
-                                <span className="text-xs text-gray-500">{formatCurrency(metrics.metricasHoje.total)}</span>
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                {/* Barra de progresso */}
-                                <div className="relative w-full h-12 bg-gray-200 rounded-lg overflow-hidden shadow-inner">
-                                    <div 
-                                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${metrics.metricasHoje.total > 0 ? (metrics.metricasHoje.dinheiro / metrics.metricasHoje.total * 100) : 0}%` }}
-                                    >
-                                        {metrics.metricasHoje.total > 0 && (metrics.metricasHoje.dinheiro / metrics.metricasHoje.total * 100).toFixed(1)}%
-                                    </div>
-                                    <div 
-                                        className="absolute right-0 top-0 h-full bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center text-white font-bold transition-all duration-500"
-                                        style={{ width: `${metrics.metricasHoje.total > 0 ? (metrics.metricasHoje.gira / metrics.metricasHoje.total * 100) : 0}%` }}
-                                    >
-                                        {metrics.metricasHoje.total > 0 && (metrics.metricasHoje.gira / metrics.metricasHoje.total * 100).toFixed(1)}%
-                                    </div>
-                                </div>
-                                
-                                {/* Legenda */}
-                                <div className="flex justify-between text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-emerald-600 rounded"></div>
-                                        <span className="text-gray-700">Dinheiro/PIX: <strong>{formatCurrency(metrics.metricasHoje.dinheiro)}</strong></span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 bg-yellow-600 rounded"></div>
-                                        <span className="text-gray-700">Gira-Crédito: <strong>{formatCurrency(metrics.metricasHoje.gira)}</strong></span>
-                                    </div>
-                                </div>
-                                
-                                {/* Info adicional */}
-                                <div className="flex justify-between text-xs text-gray-600 pt-2 border-t">
-                                    <span>{metrics.metricasHoje.qtdDinheiro} compras em dinheiro</span>
-                                    <span>{metrics.metricasHoje.qtdGira} compras em gira</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card><CardHeader><CardTitle className="text-sm flex gap-2"><Package className="w-4"/> Mix de Peças (Mês)</CardTitle></CardHeader>
-                    <CardContent className="h-64">
-                      <ResponsiveContainer>
-                        <PieChart>
-                          <Pie data={metrics.pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                            {metrics.pieData.map((_, index) => (<Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-
-                  <Card><CardHeader><CardTitle className="text-sm flex gap-2"><TrendingUp className="w-4"/> Compras vs Estoque</CardTitle></CardHeader>
-                    <CardContent className="h-64">
-                      <ResponsiveContainer>
-                        <BarChart data={dataComparativo}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip cursor={{fill: 'transparent'}} />
-                          <Legend />
-                          <Bar dataKey="compras" name="Comprado" fill={COLORS.compras} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="estoque" name="Estoque" fill={COLORS.estoque} radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                   <Card className="lg:col-span-2"><CardHeader><CardTitle className="text-sm flex gap-2"><Users className="w-4"/> Performance Equipe</CardTitle></CardHeader>
-                    <CardContent className="h-64">
-                       <ResponsiveContainer><BarChart layout="vertical" data={metrics.performanceData}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" /><YAxis dataKey="nome" type="category" width={100} /><Tooltip /><Legend /><Bar dataKey="aprovadoDinheiro" stackId="a" fill={COLORS.dinheiro} /><Bar dataKey="aprovadoGira" stackId="a" fill={COLORS.gira} /><Bar dataKey="recusado" stackId="a" fill={COLORS.recusado} /></BarChart></ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-purple-50 border-purple-200">
-                    <CardHeader><CardTitle className="text-purple-800 flex gap-2"><Crown className="w-5"/> Rainha do Gira</CardTitle></CardHeader>
-                    <CardContent className="flex flex-col items-center justify-center h-48 text-center">
-                       <div className="w-16 h-16 bg-purple-200 rounded-full flex items-center justify-center mb-2"><span className="text-2xl font-bold text-purple-700">{metrics.rainha.nome.charAt(0)}</span></div>
-                       <h3 className="text-lg font-bold">{metrics.rainha.nome}</h3>
-                       <p className="text-purple-700 font-bold">{formatCurrency(metrics.rainha.valor)}</p>
-                    </CardContent>
-                  </Card>
-                </div>
             </TabsContent>
         </Tabs>
       </div>

@@ -3,6 +3,8 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -44,8 +46,9 @@ import { useUser } from "@/contexts/UserContext";
 
 export default function VendasHistorico() {
   const { isAdmin } = useUser();
+  const [filtroDataInicio, setFiltroDataInicio] = useState<Date | undefined>(undefined);
+  const [filtroDataFim, setFiltroDataFim] = useState<Date | undefined>(undefined);
   const [filtroCaixa, setFiltroCaixa] = useState("");
-  const [filtroData, setFiltroData] = useState<Date | undefined>(undefined);
   const { data: vendas, isLoading, refetch } = useVendasHistorico();
   const { mutate: excluirVenda, isPending: excluindo } = useExcluirVenda();
 
@@ -53,18 +56,34 @@ export default function VendasHistorico() {
   const [vendaParaEditar, setVendaParaEditar] = useState<Venda | null>(null);
   const [vendaParaExcluir, setVendaParaExcluir] = useState<Venda | null>(null);
 
+  // Extrair lista dinâmica de caixas
+  const caixasDisponiveis = Array.from(new Set(vendas?.map(v => v.caixa_origem).filter(Boolean))).sort();
+
   // Filtrar vendas
   const vendasFiltradas = vendas?.filter((venda) => {
-    // Filtro por caixa de origem (exato)
-    const matchCaixa =
-      !filtroCaixa || venda.caixa_origem === filtroCaixa;
+    // Filtro por caixa
+    if (filtroCaixa && venda.caixa_origem !== filtroCaixa) {
+      return false;
+    }
 
-    // Filtro de data
-    const matchData =
-      !filtroData ||
-      venda.data_venda?.startsWith(format(filtroData, "yyyy-MM-dd"));
+    // Filtro por período
+    if (filtroDataInicio || filtroDataFim) {
+      const dataVenda = new Date(venda.created_at || "");
+      
+      if (filtroDataInicio) {
+        const inicio = new Date(filtroDataInicio);
+        inicio.setHours(0, 0, 0, 0);
+        if (dataVenda < inicio) return false;
+      }
+      
+      if (filtroDataFim) {
+        const fim = new Date(filtroDataFim);
+        fim.setHours(23, 59, 59, 999);
+        if (dataVenda > fim) return false;
+      }
+    }
 
-    return matchCaixa && matchData;
+    return true;
   });
 
   const handleConfirmarExclusao = () => {
@@ -104,63 +123,103 @@ export default function VendasHistorico() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Search className="h-4 w-4" />
-              Filtros
+              <CalendarIcon className="h-4 w-4" />
+              Filtros de Pesquisa
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-4">
-              {/* Filtro por caixa */}
-              <div className="w-[200px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Período - Data Início */}
+              <div className="space-y-2">
+                <Label htmlFor="dataInicio">Data Início</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filtroDataInicio ? format(filtroDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Selecione..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={filtroDataInicio}
+                      onSelect={setFiltroDataInicio}
+                      locale={ptBR}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Período - Data Fim */}
+              <div className="space-y-2">
+                <Label htmlFor="dataFim">Data Fim</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filtroDataFim ? format(filtroDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Selecione..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={filtroDataFim}
+                      onSelect={setFiltroDataFim}
+                      locale={ptBR}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Filtro por Caixa */}
+              <div className="space-y-2">
+                <Label htmlFor="filtroCaixa">Caixa</Label>
                 <Select value={filtroCaixa || "todos"} onValueChange={(value) => setFiltroCaixa(value === "todos" ? "" : value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar caixa" />
+                  <SelectTrigger id="filtroCaixa">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos os caixas</SelectItem>
-                    <SelectItem value="Caixa 1">Caixa 1</SelectItem>
-                    <SelectItem value="Caixa 2">Caixa 2</SelectItem>
+                    {caixasDisponiveis.map(caixa => (
+                      <SelectItem key={caixa} value={caixa}>
+                        {caixa}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              {/* Seletor de Data */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-[200px] justify-start text-left font-normal",
-                      !filtroData && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {filtroData ? format(filtroData, "dd/MM/yyyy", { locale: ptBR }) : "Filtrar por data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={filtroData}
-                    onSelect={setFiltroData}
-                    locale={ptBR}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-
-              {/* Limpar filtros */}
-              {(filtroCaixa || filtroData) && (
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setFiltroCaixa("");
-                    setFiltroData(undefined);
-                  }}
-                >
-                  Limpar filtros
-                </Button>
-              )}
+            {/* Botões de ação */}
+            <div className="flex gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFiltroDataInicio(undefined);
+                  setFiltroDataFim(undefined);
+                  setFiltroCaixa("");
+                }}
+              >
+                Limpar Filtros
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const hoje = new Date();
+                  setFiltroDataInicio(hoje);
+                  setFiltroDataFim(hoje);
+                }}
+              >
+                Hoje
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -198,8 +257,8 @@ export default function VendasHistorico() {
                   {vendasFiltradas?.map((venda) => (
                     <TableRow key={venda.id}>
                       <TableCell>
-                        {venda.data_venda
-                          ? format(new Date(venda.data_venda), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                        {venda.created_at
+                          ? format(new Date(venda.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
                           : "-"}
                       </TableCell>
                       <TableCell>{venda.vendedora_nome || "-"}</TableCell>
