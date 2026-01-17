@@ -32,7 +32,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing'
   ],
   caixa: [
-    '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/auth'
+    '/', '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth'
   ],
   avaliadora: [
     '/recepcao', '/avaliacao', '/atendimentos/historico', '/auth'
@@ -48,7 +48,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
 // Rota padrão por cargo (para redirecionamento)
 export const DEFAULT_ROUTE: Record<UserRole, string> = {
   admin: '/',
-  caixa: '/vendas',
+  caixa: '/dashboard',
   avaliadora: '/avaliacao',
   geral: '/vendas',
   social_media: '/marketing',

@@ -7,6 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard, BarChart3, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoque } from "@/hooks/useEstoque";
+import { useUser } from "@/contexts/UserContext";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -57,7 +58,10 @@ const CustomTooltip = ({ active, payload, label, type = "currency" }: any) => {
 };
 
 export default function Dashboard() {
+    const { cargo } = useUser();
+    const [config, setConfig] = useState<any>(null);
   const [allAtendimentos, setAllAtendimentos] = useState<any[]>([]);
+  const [abaSelecionada, setAbaSelecionada] = useState<string>("equipe");
   const [allAtendimentosMesInteiro, setAllAtendimentosMesInteiro] = useState<any[]>([]); // Novo: sempre o mês inteiro
   const [allVendas, setAllVendas] = useState<any[]>([]); // Estado Novo para Vendas
   const [loading, setLoading] = useState(true);
@@ -103,6 +107,12 @@ export default function Dashboard() {
 
   // --- FETCH DE DADOS (JUNTOS MAS SEPARADOS) ---
     useEffect(() => {
+        // Buscar configuração dos valores dos itens
+        async function fetchConfig() {
+          const { data } = await supabase.from('configuracao').select('*').single();
+          setConfig(data);
+        }
+        fetchConfig();
     async function fetchData() {
       setLoading(true);
             const inicio = periodo?.from ? periodo.from : inicioMes;
@@ -514,75 +524,297 @@ export default function Dashboard() {
   // ==================================================================================
   // RENDERIZAÇÃO (TABS)
   // ==================================================================================
-  return (
-    <MainLayout title="Dashboard Estratégico">
-      <div className="space-y-6 pb-10">
-        
-        {/* === CABEÇALHO COM SELETOR DE PERÍODO UNIVERSAL === */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Visão Geral</h2>
-            <p className="text-muted-foreground">{format(hoje, "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
-          </div>
-          
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            {/* Seletor de abas */}
-            <Tabs defaultValue="equipe" className="w-full md:w-auto">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="equipe">Performance das Equipes</TabsTrigger>
-                <TabsTrigger value="estoque">Estoque</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            
-            {/* Seletor de período universal */}
-            <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant={isQuickRangeActive("hoje") ? "default" : "outline"}
-              onClick={() => applyQuickRange("hoje")}
-            >
-              Hoje
-            </Button>
-            <Button
-              size="sm"
-              variant={isQuickRangeActive("semana") ? "default" : "outline"}
-              onClick={() => applyQuickRange("semana")}
-            >
-              Semana
-            </Button>
-            <Button
-              size="sm"
-              variant={isQuickRangeActive("mes") ? "default" : "outline"}
-              onClick={() => applyQuickRange("mes")}
-            >
-              Mês
-            </Button>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
-                  {periodo?.from && periodo?.to
-                    ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
-                    : "Selecionar período"}
+  
+  // Se for perfil caixa, mostrar apenas Performance da Equipe
+  if (cargo === 'caixa') {
+    return (
+      <MainLayout title="Dashboard">
+        <div className="relative -m-6">
+          {/* === CABEÇALHO FIXO === */}
+          <div className="sticky top-0 z-50 bg-white border-b px-6 py-4 shadow-sm">
+            <div className="flex flex-col justify-between items-start gap-4">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">Performance da Equipe</h2>
+                <p className="text-muted-foreground">{format(hoje, "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
+              </div>
+              
+              {/* Seletor de período universal */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={isQuickRangeActive("hoje") ? "default" : "outline"}
+                  onClick={() => applyQuickRange("hoje")}
+                >
+                  Hoje
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="range"
-                  selected={periodo as any}
-                  onSelect={(range) => setPeriodo(range as DateRange)}
-                  defaultMonth={periodo?.from || inicioMes}
-                  locale={ptBR}
-                  numberOfMonths={2}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+                <Button
+                  size="sm"
+                  variant={isQuickRangeActive("semana") ? "default" : "outline"}
+                  onClick={() => applyQuickRange("semana")}
+                >
+                  Semana
+                </Button>
+                <Button
+                  size="sm"
+                  variant={isQuickRangeActive("mes") ? "default" : "outline"}
+                  onClick={() => applyQuickRange("mes")}
+                >
+                  Mês
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
+                      {periodo?.from && periodo?.to
+                        ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
+                        : "Selecionar período"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      mode="range"
+                      selected={periodo as any}
+                      onSelect={(range) => setPeriodo(range as DateRange)}
+                      defaultMonth={periodo?.from || inicioMes}
+                      locale={ptBR}
+                      numberOfMonths={2}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* === CARDS DE RESUMO NO TOPO === */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {/* === CONTEÚDO === */}
+          <div className="px-6 py-6 space-y-6">
+            {/* === GRÁFICOS DE VENDAS POR VENDEDORA === */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico: Valor Total de Vendas por Vendedora */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex gap-2 items-center">
+                  <TrendingUp className="w-4"/> Total de Vendas por Vendedora
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
+              </CardHeader>
+              <CardContent className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={salesMetrics.vendedorasData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
+                    <YAxis />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="valorMes" name="Valor Total" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico: Quantidade de Vendas por Vendedora */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex gap-2 items-center">
+                  <BarChart3 className="w-4"/> Quantidade de Vendas por Vendedora
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</p>
+              </CardHeader>
+              <CardContent className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={salesMetrics.vendedorasData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
+                    <YAxis />
+                    <Tooltip content={<CustomTooltip type="number" />} />
+                    <Bar dataKey="qtdMes" name="Quantidade" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* === DESEMPENHO POR VENDEDORA (VISUAL E COMPARATIVO) === */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {salesMetrics.vendedorasData.map((vendedora, index) => {
+              const maxValorMes = Math.max(...salesMetrics.vendedorasData.map(v => v.valorMes));
+              const maxQtdMes = Math.max(...salesMetrics.vendedorasData.map(v => v.qtdMes));
+              const maxValorHoje = Math.max(...salesMetrics.vendedorasData.map(v => v.valorHoje));
+              const maxQtdHoje = Math.max(...salesMetrics.vendedorasData.map(v => v.qtdHoje));
+              const isClienteNaoAtendido = vendedora.nome.toLowerCase().includes('cliente não atendido');
+              
+              return (
+                <Card key={index} className={`border-2 hover:shadow-lg transition-all ${isClienteNaoAtendido ? 'border-red-500' : ''}`}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2">
+                      <div className={`w-10 h-10 rounded-full ${isClienteNaoAtendido ? 'bg-gradient-to-br from-red-500 to-red-600' : 'bg-gradient-to-br from-purple-500 to-pink-500'} flex items-center justify-center text-white font-bold`}>
+                        {vendedora.nome.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="text-base font-bold">{vendedora.nome}</div>
+                        <div className="text-xs text-muted-foreground">Vendedora</div>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Valor do Mês com barra */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="text-[10px] text-gray-600">Mês - Valor</div>
+                          <div className="text-sm font-bold text-blue-700">{formatCurrency(vendedora.valorMes)}</div>
+                        </div>
+                        <div className="w-full h-2 bg-blue-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500"
+                            style={{ width: `${maxValorMes > 0 ? (vendedora.valorMes / maxValorMes * 100) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quantidade do Mês com barra */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="text-[10px] text-gray-600">Mês - Qtd</div>
+                          <div className="text-sm font-bold text-purple-700">{vendedora.qtdMes}</div>
+                        </div>
+                        <div className="w-full h-2 bg-purple-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-500"
+                            style={{ width: `${maxQtdMes > 0 ? (vendedora.qtdMes / maxQtdMes * 100) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Valor de Hoje com barra */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="text-[10px] text-gray-600">Hoje - Valor</div>
+                          <div className="text-sm font-bold text-green-700">{formatCurrency(vendedora.valorHoje)}</div>
+                        </div>
+                        <div className="w-full h-2 bg-green-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                            style={{ width: `${maxValorHoje > 0 ? (vendedora.valorHoje / maxValorHoje * 100) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quantidade de Hoje com barra */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="text-[10px] text-gray-600">Hoje - Qtd</div>
+                          <div className="text-sm font-bold text-teal-700">{vendedora.qtdHoje}</div>
+                        </div>
+                        <div className="w-full h-2 bg-teal-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-teal-500 to-teal-600 transition-all duration-500"
+                            style={{ width: `${maxQtdHoje > 0 ? (vendedora.qtdHoje / maxQtdHoje * 100) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* === PERFORMANCE EQUIPE AVALIAÇÃO (GRÁFICO DE BARRAS) === */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex gap-2 items-center">
+                <Users className="w-5"/> Performance Equipe Avaliação
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Período: {periodo?.from && periodo?.to 
+                  ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` 
+                  : "Mês atual"}
+              </p>
+            </CardHeader>
+            <CardContent className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart layout="vertical" data={metrics.performanceData}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" />
+                  <YAxis dataKey="nome" type="category" width={100} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="aprovadoDinheiro" name="Aprovado em Dinheiro" stackId="a" fill="#10b981" />
+                  <Bar dataKey="aprovadoGira" name="Aprovado em Gira" stackId="a" fill="#f59e0b" />
+                  <Bar dataKey="recusado" name="Recusado" stackId="a" fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+  
+  // Dashboard completo para admin e outros perfis
+  return (
+    <MainLayout title="Dashboard Estratégico">
+      <div className="relative -m-6">
+        {/* === CABEÇALHO FIXO === */}
+        <div className="sticky top-0 z-50 bg-white border-b px-6 py-4 shadow-sm">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">Visão Geral</h2>
+                <p className="text-muted-foreground">{format(hoje, "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
+              </div>
+              
+              {/* Seletor de período universal */}
+              <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={isQuickRangeActive("hoje") ? "default" : "outline"}
+                    onClick={() => applyQuickRange("hoje")}
+                  >
+                    Hoje
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isQuickRangeActive("semana") ? "default" : "outline"}
+                    onClick={() => applyQuickRange("semana")}
+                  >
+                    Semana
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isQuickRangeActive("mes") ? "default" : "outline"}
+                    onClick={() => applyQuickRange("mes")}
+                  >
+                    Mês
+                  </Button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[260px] justify-start text-left font-normal">
+                        {periodo?.from && periodo?.to
+                          ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}`
+                          : "Selecionar período"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <Calendar
+                        mode="range"
+                        selected={periodo as any}
+                        onSelect={(range) => setPeriodo(range as DateRange)}
+                        defaultMonth={periodo?.from || inicioMes}
+                        locale={ptBR}
+                        numberOfMonths={2}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        {/* === CONTEÚDO === */}
+        <div className="px-6 py-6 space-y-6">
+          {/* === CARDS DE RESUMO NO TOPO === */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Card className="border-blue-200 bg-blue-50">
             <CardHeader className="pb-1 pt-3">
               <CardTitle className="text-xs font-medium text-blue-700">💰 Vendas - Mês</CardTitle>
@@ -878,7 +1110,15 @@ export default function Dashboard() {
         </Card>
 
         {/* --- AQUI COMEÇA O SISTEMA DE ABAS --- */}
-        <Tabs defaultValue="equipe" className="w-full">
+        <Tabs value={abaSelecionada} onValueChange={setAbaSelecionada} className="w-full">
+            {/* Seletor de abas */}
+            <div className="flex justify-center mb-6">
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="equipe">Performance das Equipes</TabsTrigger>
+                <TabsTrigger value="estoque">Estoque</TabsTrigger>
+              </TabsList>
+            </div>
+
             {/* --- ABA 1: PERFORMANCE DAS EQUIPES --- */}
             <TabsContent value="equipe" className="space-y-6 animate-in fade-in-50">
                 
@@ -1040,26 +1280,95 @@ export default function Dashboard() {
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
+                {/* Quadro replicado Compras vs Estoque */}
+                                {/* Quadro de Gasto em dinheiro por tipo de avaliação */}
+                                <Card className="mt-6 border shadow">
+                                  <CardHeader>
+                                    <CardTitle className="text-base font-bold">Gasto em dinheiro por tipo de avaliação</CardTitle>
+                                    <div className="text-sm text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</div>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div className="overflow-x-auto">
+                                      <table className="min-w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b">
+                                            <th className="text-left py-2 px-2 font-semibold">Categoria</th>
+                                            <th className="text-right py-2 px-2 font-semibold">Total em dinheiro</th>
+                                            <th className="text-right py-2 px-2 font-semibold">Nº avaliações</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          <tr className="border-b">
+                                            <td className="py-2 px-2">Com itens grandes</td>
+                                            <td className="py-2 px-2 text-right">{formatCurrency(metrics.comprasPorCat.itens_grandes * (config?.valor_item_grande || 0))}</td>
+                                            <td className="py-2 px-2 text-right">{metrics.comprasPorCat.itens_grandes}</td>
+                                          </tr>
+                                          <tr className="border-b">
+                                            <td className="py-2 px-2">Sem grandes, com médios ou brinquedos</td>
+                                            <td className="py-2 px-2 text-right">{formatCurrency(metrics.comprasPorCat.itens_medios * (config?.valor_item_medio || 0) + metrics.comprasPorCat.brinquedos * (config?.valor_brinquedo || 0))}</td>
+                                            <td className="py-2 px-2 text-right">{metrics.comprasPorCat.itens_medios + metrics.comprasPorCat.brinquedos}</td>
+                                          </tr>
+                                          <tr className="border-b">
+                                            <td className="py-2 px-2">Só roupas/sapatos</td>
+                                            <td className="py-2 px-2 text-right">{formatCurrency(metrics.comprasPorCat.baby * (config?.valor_brinquedo || 0) + metrics.comprasPorCat.infantil * (config?.valor_brinquedo || 0) + metrics.comprasPorCat.calcados * (config?.valor_brinquedo || 0))}</td>
+                                            <td className="py-2 px-2 text-right">{metrics.comprasPorCat.baby + metrics.comprasPorCat.infantil + metrics.comprasPorCat.calcados}</td>
+                                          </tr>
+                                          <tr className="border-b">
+                                            <td className="py-2 px-2">Outros (sem itens registrados)</td>
+                                            <td className="py-2 px-2 text-right">{formatCurrency(0)}</td>
+                                            <td className="py-2 px-2 text-right">0</td>
+                                          </tr>
+                                          <tr className="font-bold">
+                                            <td className="py-2 px-2">Total</td>
+                                            <td className="py-2 px-2 text-right">{
+                                              formatCurrency(
+                                                metrics.comprasPorCat.itens_grandes * (config?.valor_item_grande || 0)
+                                                + metrics.comprasPorCat.itens_medios * (config?.valor_item_medio || 0)
+                                                + metrics.comprasPorCat.brinquedos * (config?.valor_brinquedo || 0)
+                                                + metrics.comprasPorCat.baby * (config?.valor_brinquedo || 0)
+                                                + metrics.comprasPorCat.infantil * (config?.valor_brinquedo || 0)
+                                                + metrics.comprasPorCat.calcados * (config?.valor_brinquedo || 0)
+                                              )
+                                            }</td>
+                                            <td className="py-2 px-2 text-right">{
+                                              metrics.comprasPorCat.itens_grandes
+                                              + metrics.comprasPorCat.itens_medios
+                                              + metrics.comprasPorCat.brinquedos
+                                              + metrics.comprasPorCat.baby
+                                              + metrics.comprasPorCat.infantil
+                                              + metrics.comprasPorCat.calcados
+                                            }</td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                <Card className="border-2 border-blue-500 shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex gap-2 text-blue-700"><TrendingUp className="w-5"/> COMPRAS VS ESTOQUE (DESTAQUE)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-[300px] flex items-center justify-center">
+                    {dataComparativo && dataComparativo.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={dataComparativo} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip cursor={{fill: 'transparent'}} />
+                          <Legend />
+                          <Bar dataKey="compras" name="Comprado" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="estoque" name="Estoque" fill="#10b981" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-center text-gray-500">Nenhum dado disponível para exibir o gráfico.</div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 {/* === MIX DE PEÇAS + QUANTIDADE EM ESTOQUE === */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Mix de Peças */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm flex gap-2"><Package className="w-4"/> Mix de Peças (Mês)</CardTitle>
-                        </CardHeader>
-                        <CardContent className="h-64">
-                            <ResponsiveContainer>
-                                <PieChart>
-                                    <Pie data={metrics.pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                        {metrics.pieData.map((_, index) => (<Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />))}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
 
                     {/* Quantidade em Estoque por Categoria */}
                     <Card>
@@ -1118,7 +1427,7 @@ export default function Dashboard() {
                 </Card>
             </TabsContent>
         </Tabs>
-      </div>
+        </div>
     </MainLayout>
   );
 }
