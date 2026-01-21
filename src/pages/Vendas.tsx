@@ -14,19 +14,9 @@ import { useCaixa } from "@/contexts/CaixaContext";
 import { useUser } from "@/contexts/UserContext";
 import { PagamentoInput } from "@/components/vendas/PagamentoInput";
 import { ExportarVendasCSV } from "@/components/vendas/ExportarVendasCSV";
-import { ShoppingCart, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
+import { ShoppingCart, CreditCard, Loader2 } from "lucide-react";
 // CORREÇÃO 1: Usando o hook padrão do projeto em vez do Sonner (evita crash de Provider)
 import { useToast } from "@/hooks/use-toast";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -67,8 +57,6 @@ export default function Vendas() {
   const [valorTotal, setValorTotal] = useState<string>("");
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: "" }]);
   const [vendedoraSelecionada, setVendedoraSelecionada] = useState<string>("");
-  const [showAlertaEstoque, setShowAlertaEstoque] = useState(false);
-  const [alertasEstoque, setAlertasEstoque] = useState<string[]>([]);
 
   // Helper seguro para buscar estoque por categoria dinâmica (id > nome > slug)
   const getEstoqueCategoria = (catId: string, nome: string, slug: string): number => {
@@ -98,21 +86,9 @@ export default function Vendas() {
   const valorTotalNum = parseFloat(valorTotal) || 0;
   const diferenca = valorTotalNum - totalPagamentos;
 
-  const verificarEstoque = (): string[] => {
-    if (!estoque.length) return []; // Se não carregou estoque, não bloqueia
-    const alertas: string[] = [];
-    categoriasVenda.forEach((cat) => {
-      const qtd = quantidades[cat.id] || 0;
-      if (qtd <= 0) return;
-      const atual = getEstoqueCategoria(cat.id, cat.nome, cat.slug);
-      if (qtd > atual) {
-        alertas.push(`${cat.nome}: estoque ${atual}, vendendo ${qtd}`);
-      }
-    });
-    return alertas;
-  };
 
-  const handleFinalizarVenda = (forcar = false) => {
+
+  const handleFinalizarVenda = () => {
     if (totalPecas === 0) {
       toast({ variant: "destructive", title: "Erro", description: "Adicione itens à venda." });
       return;
@@ -126,13 +102,6 @@ export default function Vendas() {
     // Tolerância para arredondamento (0.05 centavos)
     if (Math.abs(diferenca) > 0.05) {
       toast({ variant: "destructive", title: "Erro", description: "Pagamento não bate com o valor total." });
-      return;
-    }
-
-    const alertas = verificarEstoque();
-    if (alertas.length > 0 && !forcar) {
-      setAlertasEstoque(alertas);
-      setShowAlertaEstoque(true);
       return;
     }
 
@@ -282,7 +251,7 @@ export default function Vendas() {
             </div>
 
             <Button 
-              onClick={() => handleFinalizarVenda(false)} 
+              onClick={() => handleFinalizarVenda()} 
               disabled={isPending || totalPecas === 0}
               className="w-full h-14 text-lg"
               size="lg"
@@ -335,27 +304,7 @@ export default function Vendas() {
         </Card>
       </div>
 
-      <AlertDialog open={showAlertaEstoque} onOpenChange={setShowAlertaEstoque}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-orange-500">
-              <AlertTriangle className="h-5 w-5" /> Estoque Insuficiente
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              <ul className="list-disc pl-5 space-y-1 mt-2">
-                {alertasEstoque.map((a, i) => <li key={i} className="text-red-500">{a}</li>)}
-              </ul>
-              <p className="mt-4 font-bold">Continuar mesmo assim?</p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setShowAlertaEstoque(false); handleFinalizarVenda(true); }}>
-              Forçar Venda
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
     </MainLayout>
   );
 }

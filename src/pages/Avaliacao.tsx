@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
 import { Atendimento } from "@/types/database";
+import { ClientePreferenciaPaymentBadge } from "@/components/ClientePreferenciaPaymentBadge";
 
 export default function Avaliacao() {
   const { data, isLoading, error } = useAtendimentosByStatus("aguardando_avaliacao");
@@ -54,7 +55,12 @@ export default function Avaliacao() {
               <TableBody>
                 {data.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="font-medium">{a.nome_cliente}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{a.nome_cliente}</span>
+                        <ClientePreferenciaPaymentBadge nomeCliente={a.nome_cliente} />
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(a.hora_chegada).toLocaleTimeString("pt-BR", {
                         hour: "2-digit",

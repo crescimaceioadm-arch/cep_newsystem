@@ -33,6 +33,7 @@ import { TempoEspera } from "@/components/recepcao/TempoEspera";
 import { NovoAtendimentoModal } from "@/components/recepcao/NovoAtendimentoModal";
 import { FinalizarAtendimentoModal } from "@/components/recepcao/FinalizarAtendimentoModal";
 import { Badge } from "@/components/ui/badge";
+import { ClientePreferenciaPaymentBadge } from "@/components/ClientePreferenciaPaymentBadge";
 import { UserPlus, CheckCircle, Loader2, Trash2, MessageCircle, User } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -184,7 +185,10 @@ export default function Recepcao() {
                   {atendimentos.map((atendimento) => (
                     <TableRow key={atendimento.id}>
                       <TableCell className="font-medium">
-                        {atendimento.nome_cliente}
+                        <div className="flex items-center gap-2">
+                          <span>{atendimento.nome_cliente}</span>
+                          <ClientePreferenciaPaymentBadge nomeCliente={atendimento.nome_cliente} />
+                        </div>
                       </TableCell>
                       <TableCell>
                         {getOrigemEditavel(atendimento)}
