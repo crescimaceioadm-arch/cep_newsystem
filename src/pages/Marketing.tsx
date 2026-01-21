@@ -1,30 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { addDays, eachDayOfInterval, format, isSameDay, isWithinInterval, parseISO, startOfWeek } from "date-fns";
+import { addDays, format, isSameDay, parseISO, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { CalendarDays, Clapperboard, Clock3, ArrowLeft, ArrowRight, Plus, Film, CheckCircle2, AlertCircle, Save, Trash2, Check, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, CheckCircle2, Clock, User, Edit2, Trash2, Calendar } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
-
-import type { UserRole } from "@/contexts/UserContext";
-
-type ViewMode = "planejamento" | "producao";
 
 type MarketingItem = {
   id: string;
@@ -32,104 +24,66 @@ type MarketingItem = {
   descricao?: string | null;
   categoria?: string | null;
   data_postagem?: string | null;
-  dia_postagem?: string | null;
   data_producao?: string | null;
-  dia_producao?: string | null;
   produzido?: boolean | null;
-  hora_sugerida?: string | null;
-  hora_real?: string | null;
+  responsavel?: string | null;
+  horarios_postagem?: string[] | null;
+  horario_real_postagem?: string | null;
+  check_timestamp?: string | null;
   created_at?: string | null;
 };
 
-type MarketingPreset = {
-  id: string;
-  tipo?: string | null;
-  valor?: string | null;
-  categoria?: string | null;
-  hora_sugerida?: string | null;
-  titulo_padrao?: string | null;
-  descricao_padrao?: string | null;
-};
+const categoryOptions = ["Reels", "Divulgação", "Stories", "Feed", "Carrossel"];
+const responsavelOptions = ["Duda", "Rose", "Melissa", "Rayane"];
 
-type UpdatePayload = {
-  id: string;
-  produzido?: boolean;
-  hora_real?: string | null;
-};
-
-type EditableRow = {
-  id: string;
-  titulo: string;
-  descricao: string;
-  categoria: string;
-  horaSugerida: string;
-  diaProducao: string;
-  diaPostagem: string;
-  isNew: boolean;
-};
-
-const dayOptions = [
-  { value: "segunda", label: "Segunda-Feira", index: 0 },
-  { value: "terca", label: "Terca-Feira", index: 1 },
-  { value: "quarta", label: "Quarta-Feira", index: 2 },
-  { value: "quinta", label: "Quinta-Feira", index: 3 },
-  { value: "sexta", label: "Sexta-Feira", index: 4 },
-  { value: "sabado", label: "Sabado", index: 5 },
-  { value: "domingo", label: "Domingo", index: 6 },
+// Tipos de postagem padrão (como na planilha)
+const tiposPostagemPadrao = [
+  { tipo: "REPOSIÇÃO COM ISCA QUENTE", horario: "08:00", categoria: "Reels" },
+  { tipo: "REPOSIÇÃO ATRATIVA FRIO", horario: "10:00", categoria: "Reels" },
+  { tipo: "REPOSIÇÃO MÉDIA", horario: "11:30", categoria: "Reels" },
+  { tipo: "EVENTO QUENTE", horario: "14:00", categoria: "Stories" },
+  { tipo: "CARROSSEL EVENTO", horario: "14:00", categoria: "Carrossel" },
+  { tipo: "EVENTO FRIO", horario: "15:00", categoria: "Stories" },
+  { tipo: "LOJA ABERTA AMANHÃ", horario: "19:00", categoria: "Stories" },
+  { tipo: "VÍDEO INSTITUCIONAL FRIO", horario: "19:30", categoria: "Reels" },
+  { tipo: "COMPRAMOS OU CARROSSEL GERAL", horario: "20:00", categoria: "Carrossel" },
 ];
 
-const normalizeDay = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-const dayValueToIndex = (value: string) => {
-  const normalized = normalizeDay(value);
-  const found = dayOptions.find(
-    (day) => normalizeDay(day.value) === normalized || normalizeDay(day.label) === normalized
-  );
-  return found?.index ?? 0;
+type TipoPostagem = {
+  id: string;
+  tipo: string;
+  horario: string;
+  categoria: string;
 };
 
-const isIsoDate = (value: string) => /\d{4}-\d{2}-\d{2}/.test(value);
-
-const resolveDate = (raw: string | null | undefined, baseWeek: Date) => {
-  if (!raw) return null;
-  if (isIsoDate(raw)) {
-    try {
-      const parsed = parseISO(raw);
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    } catch (err) {
-      console.error("Erro ao converter data:", err);
-      return null;
-    }
-  }
-
-  const index = dayValueToIndex(raw);
-  const weekStart = startOfWeek(baseWeek, { weekStartsOn: 1 });
-  return addDays(weekStart, index);
+type CelulaData = {
+  titulo: string;
+  descricao?: string;
+  data_producao?: string;
+  responsavel?: string;
 };
-
-const formatDay = (date: Date) => format(date, "EEE dd/MM", { locale: ptBR });
 
 export default function Marketing() {
   const { cargo } = useUser();
   const queryClient = useQueryClient();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("planejamento");
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [editableRows, setEditableRows] = useState<EditableRow[]>([]);
-  const [openCategoryPopover, setOpenCategoryPopover] = useState<string | null>(null);
-  const [openHourPopover, setOpenHourPopover] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MarketingItem | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [gridDialogOpen, setGridDialogOpen] = useState(false);
+  const [formData, setFormData] = useState<Partial<MarketingItem>>({});
+  const [horarioRealInput, setHorarioRealInput] = useState("");
+  const [gridData, setGridData] = useState<Record<string, Record<string, CelulaData>>>({});
+  const [tiposPostagem, setTiposPostagem] = useState<TipoPostagem[]>([]);
+  const [expandedCell, setExpandedCell] = useState<string | null>(null);
+  
+  // Filtros
+  const [filtroResponsavel, setFiltroResponsavel] = useState<string>("todos");
+  const [filtroDataPostagem, setFiltroDataPostagem] = useState<string>("");
+  const [filtroDataProducao, setFiltroDataProducao] = useState<string>("");
 
-  const isSocialMedia = (cargo as UserRole | string) === "social_media";
-
-  useEffect(() => {
-    if (isSocialMedia) {
-      setViewMode("producao");
-    }
-  }, [isSocialMedia]);
+  const isSocialMedia = cargo === "social_media";
 
   const safeWeekStart = useMemo(
     () => startOfWeek(weekStart, { weekStartsOn: 1 }),
@@ -137,637 +91,957 @@ export default function Marketing() {
   );
 
   const weekDays = useMemo(
-    () => eachDayOfInterval({ start: safeWeekStart, end: addDays(safeWeekStart, 6) }),
+    () => Array.from({ length: 5 }, (_, i) => addDays(safeWeekStart, i)),
     [safeWeekStart]
   );
 
   const weekLabel = `${format(safeWeekStart, "dd MMM", { locale: ptBR })} - ${format(
-    addDays(safeWeekStart, 6),
+    addDays(safeWeekStart, 4),
     "dd MMM",
     { locale: ptBR }
   )}`;
 
-  const { data: presets, isLoading: loadingPresets, isError: presetsError, error: presetsQueryError, refetch: refetchPresets } = useQuery({
-    queryKey: ["marketing_presets"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("marketing_presets")
-        .select("*")
-        .order("tipo", { ascending: true })
-        .order("valor", { ascending: true });
-
-      if (error) throw error;
-      return data as MarketingPreset[];
-    },
-  });
-
-  const { data: items, isLoading: loadingItems } = useQuery({
+  // Query para buscar itens da semana
+  const { data: items = [], isLoading } = useQuery({
     queryKey: ["marketing_items", format(safeWeekStart, "yyyy-MM-dd")],
     queryFn: async () => {
       const start = format(safeWeekStart, "yyyy-MM-dd");
       const end = format(addDays(safeWeekStart, 6), "yyyy-MM-dd");
 
-      try {
-        const { data, error } = await supabase
-          .from("marketing_items")
-          .select("*")
-          .or(
-            `and(data_postagem.gte.${start},data_postagem.lte.${end}),and(data_producao.gte.${start},data_producao.lte.${end})`
-          )
-          .order("data_postagem", { ascending: true });
+      const { data, error } = await supabase
+        .from("marketing_items")
+        .select("*")
+        .gte("data_postagem", start)
+        .lte("data_postagem", end)
+        .order("data_postagem", { ascending: true });
 
-        if (error) throw error;
-        return (data as MarketingItem[]) || [];
-      } catch (error) {
-        console.warn("Filtro por data falhou, buscando tudo:", error);
-        const fallback = await supabase
-          .from("marketing_items")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(120);
-
-        if (fallback.error) throw fallback.error;
-        return (fallback.data as MarketingItem[]) || [];
-      }
+      if (error) throw error;
+      return (data as MarketingItem[]) || [];
     },
   });
 
-  const categoryOptions = useMemo(() => {
-    const unique = new Set<string>();
-    presets?.forEach((preset) => {
-      if (preset.tipo === "categoria" && preset.valor) unique.add(preset.valor);
+  // Agrupar tarefas por dia
+  const tarefasPorDia = useMemo(() => {
+    const dias: Record<string, MarketingItem[]> = {};
+    
+    weekDays.forEach(day => {
+      const dayKey = format(day, "yyyy-MM-dd");
+      dias[dayKey] = items.filter(item => item.data_postagem === dayKey);
     });
-    return Array.from(unique);
-  }, [presets]);
+    
+    return dias;
+  }, [items, weekDays]);
 
-  const hourOptions = useMemo(() => {
-    const unique = new Set<string>();
-    presets
-      ?.filter((preset) => preset.tipo === "horario")
-      .forEach((preset) => {
-        if (preset.valor) unique.add(preset.valor);
-      });
-    return Array.from(unique);
-  }, [presets]);
-
-  const filteredItems = useMemo(() => {
-    if (!items) return [];
-    const window = { start: safeWeekStart, end: addDays(safeWeekStart, 6) };
-    return items.filter((item) => {
-      const postagem = resolveDate(item.data_postagem || item.dia_postagem, safeWeekStart);
-      const producao = resolveDate(item.data_producao || item.dia_producao, safeWeekStart);
-      return (
-        (postagem && isWithinInterval(postagem, window)) ||
-        (producao && isWithinInterval(producao, window))
-      );
-    });
-  }, [items, safeWeekStart]);
-
-  useEffect(() => {
-    if (filteredItems && viewMode === "planejamento") {
-      const rows: EditableRow[] = filteredItems.map((item) => ({
-        id: item.id,
-        titulo: item.titulo || "",
-        descricao: item.descricao || "",
-        categoria: item.categoria || "",
-        horaSugerida: item.hora_sugerida || "",
-        diaProducao: item.dia_producao || item.data_producao || "",
-        diaPostagem: item.dia_postagem || item.data_postagem || "",
-        isNew: false,
-      }));
-      setEditableRows(rows);
-    }
-  }, [filteredItems, viewMode]);
-
-  const monitorPorDia = useMemo(
-    () =>
-      weekDays.map((day) => ({
-        day,
-        items: filteredItems.filter((item) => {
-          const postagem = resolveDate(item.data_postagem || item.dia_postagem, safeWeekStart);
-          return postagem ? isSameDay(postagem, day) : false;
-        }),
-      })),
-    [filteredItems, safeWeekStart, weekDays]
-  );
-
-  const producaoPorDia = useMemo(
-    () =>
-      weekDays.map((day) => ({
-        day,
-        items: filteredItems.filter((item) => {
-          const producao = resolveDate(item.data_producao || item.dia_producao, safeWeekStart);
-          return producao ? isSameDay(producao, day) : false;
-        }),
-      })),
-    [filteredItems, safeWeekStart, weekDays]
-  );
-
-  const planningList = useMemo(() => {
-    const withPostDate = filteredItems.map((item) => {
-      const postagem = resolveDate(item.data_postagem || item.dia_postagem, safeWeekStart);
-      return { ...item, postagem };
-    });
-
-    return withPostDate.sort((a, b) => {
-      if (!a.postagem || !b.postagem) return 0;
-      return a.postagem.getTime() - b.postagem.getTime();
-    });
-  }, [filteredItems, safeWeekStart]);
-
-  const upsertRow = useMutation({
-    mutationFn: async (row: EditableRow) => {
-      if (!row.categoria || !row.titulo.trim()) {
-        throw new Error("Categoria e Titulo sao obrigatorios");
+  // Aplicar filtros nas tarefas
+  const tarefasFiltradasPorDia = useMemo(() => {
+    const dias: Record<string, MarketingItem[]> = {};
+    
+    weekDays.forEach(day => {
+      const dayKey = format(day, "yyyy-MM-dd");
+      let tarefas = tarefasPorDia[dayKey] || [];
+      
+      // Filtro de responsável
+      if (filtroResponsavel !== "todos") {
+        tarefas = tarefas.filter(t => t.responsavel === filtroResponsavel);
       }
+      
+      // Filtro de data de produção
+      if (filtroDataProducao) {
+        tarefas = tarefas.filter(t => t.data_producao === filtroDataProducao);
+      }
+      
+      // Filtro de data de postagem (já está implícito no dayKey, mas deixando para casos futuros)
+      if (filtroDataPostagem) {
+        tarefas = tarefas.filter(t => t.data_postagem === filtroDataPostagem);
+      }
+      
+      dias[dayKey] = tarefas;
+    });
+    
+    return dias;
+  }, [tarefasPorDia, weekDays, filtroResponsavel, filtroDataProducao, filtroDataPostagem]);
 
-      const producaoDate = isIsoDate(row.diaProducao)
-        ? row.diaProducao
-        : format(addDays(safeWeekStart, dayValueToIndex(row.diaProducao)), "yyyy-MM-dd");
-      const postagemDate = isIsoDate(row.diaPostagem)
-        ? row.diaPostagem
-        : format(addDays(safeWeekStart, dayValueToIndex(row.diaPostagem)), "yyyy-MM-dd");
-
+  // Mutation para criar/atualizar
+  const upsertMutation = useMutation({
+    mutationFn: async (item: Partial<MarketingItem>) => {
       const payload = {
-        titulo: row.titulo.trim(),
-        descricao: row.descricao.trim() || null,
-        categoria: row.categoria,
-        data_producao: producaoDate,
-        data_postagem: postagemDate,
-        semana_referencia: format(safeWeekStart, "yyyy-MM-dd"),
+        ...item,
+        semana_referencia: format(safeWeekStart, "yyyy-MM-dd"), // Adiciona semana de referência
       };
-
-      if (row.isNew) {
-        const { error } = await supabase.from("marketing_items").insert(payload);
+      
+      if (item.id) {
+        const { error } = await supabase
+          .from("marketing_items")
+          .update(payload)
+          .eq("id", item.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("marketing_items").update(payload).eq("id", row.id);
+        const { error } = await supabase
+          .from("marketing_items")
+          .insert(payload);
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      toast.success("Item salvo com sucesso");
       queryClient.invalidateQueries({ queryKey: ["marketing_items"] });
+      toast.success("Tarefa salva com sucesso!");
+      setFormDialogOpen(false);
+      setFormData({});
     },
     onError: (error: any) => {
-      console.error("Erro completo:", error);
-      const message = error?.message || error?.error_description || "Erro ao salvar item";
-      toast.error(message);
+      toast.error("Erro ao salvar: " + error.message);
     },
   });
 
-  const deleteRow = useMutation({
+  // Mutation para deletar
+  const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("marketing_items").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Item excluido");
-      queryClient.invalidateQueries({ queryKey: ["marketing_items"] });
-    },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Erro ao excluir item";
-      toast.error(message);
-    },
-  });
-
-  const updateItem = useMutation({
-    mutationFn: async (payload: UpdatePayload) => {
-      const { id, ...values } = payload;
-      const { error } = await supabase.from("marketing_items").update(values).eq("id", id);
+      const { error } = await supabase
+        .from("marketing_items")
+        .delete()
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketing_items"] });
+      toast.success("Tarefa excluída!");
+      setDrawerOpen(false);
     },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "Erro ao atualizar item";
-      toast.error(message);
+    onError: (error: any) => {
+      toast.error("Erro ao excluir: " + error.message);
     },
   });
 
-  const handleAddRow = () => {
-    const newRow: EditableRow = {
-      id: `new-${Date.now()}`,
-      titulo: "",
-      descricao: "",
-      categoria: "",
-      horaSugerida: "",
-      diaProducao: dayOptions[0].value,
-      diaPostagem: dayOptions[0].value,
-      isNew: true,
-    };
-    setEditableRows([...editableRows, newRow]);
+  // Mutation para marcar como realizado
+  const checkMutation = useMutation({
+    mutationFn: async ({ id, horario }: { id: string; horario: string }) => {
+      const { error } = await supabase
+        .from("marketing_items")
+        .update({
+          produzido: true,
+          check_timestamp: new Date().toISOString(),
+          horario_real_postagem: horario,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing_items"] });
+      toast.success("✅ Tarefa concluída!");
+      setDrawerOpen(false);
+      setHorarioRealInput("");
+    },
+    onError: (error: any) => {
+      toast.error("Erro ao marcar: " + error.message);
+    },
+  });
+
+  const getBadge = (item: MarketingItem) => {
+    if (item.produzido) {
+      return { icon: CheckCircle2, color: "bg-green-100 text-green-700 border-green-300", text: "Concluído" };
+    }
+    
+    const hoje = format(new Date(), "yyyy-MM-dd");
+    if (item.data_producao === hoje) {
+      return { icon: Clock, color: "bg-yellow-100 text-yellow-700 border-yellow-300", text: "Produzir Hoje" };
+    }
+    if (item.data_postagem === hoje) {
+      return { icon: Calendar, color: "bg-blue-100 text-blue-700 border-blue-300", text: "Postar Hoje" };
+    }
+    
+    return { icon: Calendar, color: "bg-gray-100 text-gray-600 border-gray-300", text: "Agendado" };
   };
 
-  const handleUpdateRow = (id: string, field: keyof EditableRow, value: string) => {
-    setEditableRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
+  const handleOpenForm = (dia?: Date) => {
+    setFormData({
+      data_postagem: dia ? format(dia, "yyyy-MM-dd") : undefined,
+      data_producao: dia ? format(addDays(dia, -1), "yyyy-MM-dd") : undefined,
+    });
+    setFormDialogOpen(true);
+  };
+
+  const handleEditItem = (item: MarketingItem) => {
+    setFormData(item);
+    setFormDialogOpen(true);
+  };
+
+  const handleViewDetails = (item: MarketingItem) => {
+    setSelectedItem(item);
+    setDrawerOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.titulo || !formData.categoria || !formData.data_postagem) {
+      toast.error("Preencha os campos obrigatórios!");
+      return;
+    }
+    upsertMutation.mutate(formData);
+  };
+
+  const handleCheck = () => {
+    if (!selectedItem || !horarioRealInput) {
+      toast.error("Informe o horário real de postagem!");
+      return;
+    }
+    checkMutation.mutate({ id: selectedItem.id, horario: horarioRealInput });
+  };
+
+  const handleAddHorario = () => {
+    const newHorario = prompt("Digite o horário (ex: 09:00):");
+    if (newHorario) {
+      setFormData(prev => ({
+        ...prev,
+        horarios_postagem: [...(prev.horarios_postagem || []), newHorario],
+      }));
+    }
+  };
+
+  const handleRemoveHorario = (horario: string) => {
+    setFormData(prev => ({
+      ...prev,
+      horarios_postagem: (prev.horarios_postagem || []).filter(h => h !== horario),
+    }));
+  };
+
+  const handleOpenGridPlanning = () => {
+    // Inicializar tipos de postagem com IDs únicos
+    const tipos = tiposPostagemPadrao.map((t, idx) => ({
+      ...t,
+      id: `tipo-${idx}`,
+    }));
+    setTiposPostagem(tipos);
+
+    // Preencher grid com dados existentes
+    const grid: Record<string, Record<string, CelulaData>> = {};
+    
+    tipos.forEach(tipo => {
+      grid[tipo.id] = {};
+      weekDays.forEach(dia => {
+        const dayKey = format(dia, "yyyy-MM-dd");
+        const tarefas = tarefasPorDia[dayKey] || [];
+        const tarefa = tarefas.find(t => 
+          t.categoria === tipo.categoria && 
+          t.horarios_postagem?.includes(tipo.horario)
+        );
+        grid[tipo.id][dayKey] = {
+          titulo: tarefa?.titulo || "",
+          descricao: tarefa?.descricao || "",
+          data_producao: tarefa?.data_producao || format(addDays(dia, -1), "yyyy-MM-dd"),
+          responsavel: tarefa?.responsavel || "",
+        };
+      });
+    });
+    
+    setGridData(grid);
+    setGridDialogOpen(true);
+  };
+
+  const handleSaveGrid = async () => {
+    try {
+      const updates: Array<{ id: string; payload: any }> = [];
+      const inserts: any[] = [];
+
+      tiposPostagem.forEach(tipo => {
+        weekDays.forEach(dia => {
+          const dayKey = format(dia, "yyyy-MM-dd");
+          const celula = gridData[tipo.id]?.[dayKey];
+
+          if (celula?.titulo && celula.titulo.trim()) {
+            // Verifica se já existe uma tarefa
+            const tarefas = tarefasPorDia[dayKey] || [];
+            const existente = tarefas.find(t => 
+              t.categoria === tipo.categoria && 
+              t.horarios_postagem?.includes(tipo.horario)
+            );
+
+            const payload = {
+              titulo: celula.titulo.trim(),
+              descricao: celula.descricao?.trim() || null,
+              categoria: tipo.categoria,
+              data_postagem: dayKey,
+              data_producao: celula.data_producao || format(addDays(parseISO(dayKey), -1), "yyyy-MM-dd"),
+              responsavel: celula.responsavel || null,
+              horarios_postagem: [tipo.horario],
+              semana_referencia: format(safeWeekStart, "yyyy-MM-dd"),
+            };
+
+            if (existente) {
+              updates.push({ id: existente.id, payload });
+            } else {
+              inserts.push(payload);
+            }
+          }
+        });
+      });
+
+      // Executar updates
+      for (const { id, payload } of updates) {
+        const { error } = await supabase.from("marketing_items").update(payload).eq("id", id);
+        if (error) throw error;
+      }
+
+      // Executar inserts
+      if (inserts.length > 0) {
+        const { error } = await supabase.from("marketing_items").insert(inserts);
+        if (error) throw error;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["marketing_items"] });
+      toast.success("Planejamento salvo com sucesso!");
+      setGridDialogOpen(false);
+    } catch (error: any) {
+      toast.error("Erro ao salvar planejamento: " + error.message);
+    }
+  };
+
+  const handleGridInputChange = (tipoId: string, dia: string, field: keyof CelulaData, value: string) => {
+    setGridData(prev => ({
+      ...prev,
+      [tipoId]: {
+        ...prev[tipoId],
+        [dia]: {
+          ...prev[tipoId]?.[dia],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const handleTipoChange = (tipoId: string, field: keyof TipoPostagem, value: string) => {
+    setTiposPostagem(prev =>
+      prev.map(t => (t.id === tipoId ? { ...t, [field]: value } : t))
     );
   };
 
-  const handleSaveRow = (row: EditableRow) => {
-    if (!row.categoria) {
-      toast.error("Selecione a categoria");
-      return;
-    }
-    if (!row.titulo.trim()) {
-      toast.error("Informe um titulo");
-      return;
-    }
-    upsertRow.mutate(row);
+  const handleAddTipo = () => {
+    const newTipo: TipoPostagem = {
+      id: `tipo-${Date.now()}`,
+      tipo: "Novo tipo",
+      horario: "12:00",
+      categoria: "Reels",
+    };
+    setTiposPostagem(prev => [...prev, newTipo]);
+    setGridData(prev => ({
+      ...prev,
+      [newTipo.id]: {},
+    }));
   };
 
-  const handleDeleteRow = (row: EditableRow) => {
-    if (row.isNew) {
-      setEditableRows((prev) => prev.filter((r) => r.id !== row.id));
-    } else {
-      deleteRow.mutate(row.id);
-    }
+  const handleRemoveTipo = (tipoId: string) => {
+    setTiposPostagem(prev => prev.filter(t => t.id !== tipoId));
+    setGridData(prev => {
+      const newData = { ...prev };
+      delete newData[tipoId];
+      return newData;
+    });
   };
 
-  const handleToggleProduzido = (item: MarketingItem, value: boolean) => {
-    updateItem.mutate({ id: item.id, produzido: value });
-  };
-
-  const handleHoraRealBlur = (item: MarketingItem, value: string) => {
-    updateItem.mutate({ id: item.id, hora_real: value || null });
+  const toggleCellExpanded = (tipoId: string, dia: string) => {
+    const key = `${tipoId}-${dia}`;
+    setExpandedCell(expandedCell === key ? null : key);
   };
 
   return (
-    <MainLayout title="Marketing">
+    <MainLayout title="Marketing - Gestão de Conteúdo">
       <div className="space-y-6">
-        <div className="sticky top-4 z-20 space-y-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <Card className="shadow-md border-dashed">
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <CalendarDays className="h-5 w-5 text-primary" />
-                <CardTitle>Monitor de Postagens</CardTitle>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Semana anterior"
-                  onClick={() => setWeekStart(addDays(safeWeekStart, -7))}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="px-4"
-                  onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}
-                >
-                  {weekLabel}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Proxima semana"
-                  onClick={() => setWeekStart(addDays(safeWeekStart, 7))}
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
-                {monitorPorDia.map(({ day, items: itemsDoDia }) => (
-                  <div key={day.toISOString()} className="rounded-lg border bg-muted/40 p-3">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      {format(day, "EEE", { locale: ptBR })}
-                    </div>
-                    <div className="text-sm font-semibold">{format(day, "dd/MM")}</div>
-                    <div className="mt-2 flex flex-col gap-2">
-                      {itemsDoDia.length === 0 && (
-                        <p className="text-xs text-muted-foreground">Sem posts</p>
-                      )}
-                      {itemsDoDia.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`flex items-center gap-2 rounded border px-2 py-1 text-xs ${
-                            item.produzido ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"
-                          }`}
-                        >
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              item.produzido ? "bg-green-500" : "bg-red-500"
-                            }`}
-                          />
-                          <span className="truncate">{item.titulo || item.categoria || "Conteudo"}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Header com navegação de semana */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold">📅 {weekLabel}</h2>
+            <p className="text-sm text-muted-foreground">
+              Planejamento semanal de postagens
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setWeekStart(prev => addDays(prev, -7))}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            
 
-          <div className="flex justify-center">
-              <ToggleGroup
-                type="single"
-                value={viewMode}
-                onValueChange={(value) => value && setViewMode(value as ViewMode)}
-                className="border rounded-full bg-muted/50 px-1"
-              >
-                <ToggleGroupItem value="planejamento" disabled={isSocialMedia} className="px-4">
-                  📝 Modo Planejamento
-                </ToggleGroupItem>
-                <ToggleGroupItem value="producao" className="px-4">
-                  🎬 Modo Producao
-                </ToggleGroupItem>
-              </ToggleGroup>
+        {/* Filtros */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <Label htmlFor="filtro-responsavel" className="text-sm">Responsável</Label>
+                <Select value={filtroResponsavel} onValueChange={setFiltroResponsavel}>
+                  <SelectTrigger id="Filtradasfiltro-responsavel">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {responsavelOptions.map(resp => (
+                      <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex-1 min-w-[200px]">
+                <Label htmlFor="filtro-data-producao" className="text-sm">Data de Produção</Label>
+                <Input
+                  id="filtro-data-producao"
+                  type="date"
+                  value={filtroDataProducao}
+                  onChange={(e) => setFiltroDataProducao(e.target.value)}
+                />
+              </div>
+
+              <div className="flex-1 min-w-[200px]">
+                <Label htmlFor="filtro-data-postagem" className="text-sm">Data de Postagem</Label>
+                <Input
+                  id="filtro-data-postagem"
+                  type="date"
+                  value={filtroDataPostagem}
+                  onChange={(e) => setFiltroDataPostagem(e.target.value)}
+                />
+              </div>
+
+              {(filtroResponsavel !== "todos" || filtroDataProducao || filtroDataPostagem) && (
+                <div className="flex items-end">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setFiltroResponsavel("todos");
+                      setFiltroDataProducao("");
+                      setFiltroDataPostagem("");
+                    }}
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+            <Button
+              variant="outline"
+              onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}
+            >
+              Hoje
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setWeekStart(prev => addDays(prev, 7))}
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            
+            {!isSocialMedia && (
+              <Button onClick={() => handleOpenForm()}>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Tarefa
+              </Button>
+            )}
+            
+            {!isSocialMedia && (
+              <Button onClick={handleOpenGridPlanning} variant="secondary">
+                📋 Planejamento Grid
+              </Button>
+            )}
           </div>
         </div>
 
-        {viewMode === "planejamento" ? (
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clapperboard className="h-5 w-5 text-primary" />
-                    Planejamento da Semana
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Edite os campos diretamente na tabela. Clique em Salvar para confirmar.
-                  </p>
-                </div>
-                {!isSocialMedia && (
-                  <Button onClick={handleAddRow} size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar Linha
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loadingItems ? (
-                <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[180px]">Categoria</TableHead>
-                        <TableHead className="w-[120px]">Horário</TableHead>
-                        <TableHead className="min-w-[200px]">Título do Vídeo</TableHead>
-                        <TableHead className="w-[140px]">Dia Produção</TableHead>
-                        <TableHead className="w-[140px]">Dia Postagem</TableHead>
-                        <TableHead className="w-[100px] text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {editableRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                            <div className="flex flex-col items-center gap-2">
-                              <AlertCircle className="h-5 w-5" />
-                              <span>Nenhum item. Clique em "Adicionar Linha" para começar.</span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        editableRows.map((row) => (
-                          <TableRow key={row.id}>
-                            <TableCell>
-                              <Popover
-                                open={openCategoryPopover === row.id}
-                                onOpenChange={(open) => setOpenCategoryPopover(open ? row.id : null)}
-                              >
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    className="w-full justify-between"
-                                  >
-                                    {row.categoria || "Selecione..."}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[200px] p-0">
-                                  <Command>
-                                    <CommandInput placeholder="Buscar categoria..." />
-                                    <CommandList>
-                                      <CommandEmpty>Nenhuma categoria encontrada.</CommandEmpty>
-                                      <CommandGroup>
-                                        {categoryOptions.map((option) => (
-                                          <CommandItem
-                                            key={option}
-                                            value={option}
-                                            onSelect={() => {
-                                              handleUpdateRow(row.id, "categoria", option);
-                                              setOpenCategoryPopover(null);
-                                            }}
-                                          >
-                                            <Check
-                                              className={`mr-2 h-4 w-4 ${
-                                                row.categoria === option ? "opacity-100" : "opacity-0"
-                                              }`}
-                                            />
-                                            {option}
-                                          </CommandItem>
-                                        ))}
-                                      </CommandGroup>
-                                    </CommandList>
-                                  </Command>
-                                </PopoverContent>
-                              </Popover>
-                            </TableCell>
-                            <TableCell>
-                              <Popover
-                                open={openHourPopover === row.id}
-                                onOpenChange={(open) => setOpenHourPopover(open ? row.id : null)}
-                              >
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    className="w-full justify-between"
-                                  >
-                                    {row.horaSugerida || "Nenhum"}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[140px] p-0">
-                                  <Command>
-                                    <CommandInput placeholder="Buscar horário..." />
-                                    <CommandList>
-                                      <CommandEmpty>Nenhum horário encontrado.</CommandEmpty>
-                                      <CommandGroup>
-                                        <CommandItem
-                                          value=""
-                                          onSelect={() => {
-                                            handleUpdateRow(row.id, "horaSugerida", "");
-                                            setOpenHourPopover(null);
-                                          }}
-                                        >
-                                          <Check
-                                            className={`mr-2 h-4 w-4 ${
-                                              !row.horaSugerida ? "opacity-100" : "opacity-0"
-                                            }`}
-                                          />
-                                          Nenhum
-                                        </CommandItem>
-                                        {hourOptions.map((hour) => (
-                                          <CommandItem
-                                            key={hour}
-                                            value={hour}
-                                            onSelect={() => {
-                                              handleUpdateRow(row.id, "horaSugerida", hour);
-                                              setOpenHourPopover(null);
-                                            }}
-                                          >
-                                            <Check
-                                              className={`mr-2 h-4 w-4 ${
-                                                row.horaSugerida === hour ? "opacity-100" : "opacity-0"
-                                              }`}
-                                            />
-                                            {hour}
-                                          </CommandItem>
-                                        ))}
-                                      </CommandGroup>
-                                    </CommandList>
-                                  </Command>
-                                </PopoverContent>
-                              </Popover>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={row.titulo}
-                                onChange={(e) => handleUpdateRow(row.id, "titulo", e.target.value)}
-                                placeholder="Digite o título..."
-                                className="w-full"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={row.diaProducao}
-                                onValueChange={(value) => handleUpdateRow(row.id, "diaProducao", value)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {dayOptions.map((day) => (
-                                    <SelectItem key={day.value} value={day.value}>
-                                      {day.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={row.diaPostagem}
-                                onValueChange={(value) => handleUpdateRow(row.id, "diaPostagem", value)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {dayOptions.map((day) => (
-                                    <SelectItem key={day.value} value={day.value}>
-                                      {day.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handleSaveRow(row)}
-                                  disabled={upsertRow.isPending}
-                                >
-                                  <Save className="h-4 w-4 text-green-600" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteRow(row)}
-                                  disabled={deleteRow.isPending}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Grid semanal - 5 colunas (Seg-Sex) */}
+        {isLoading ? (
+          <div className="text-center py-12 text-muted-foreground">Carregando...</div>
         ) : (
-          <Card>
-            <CardHeader className="flex flex-col gap-1">
-              <CardTitle className="flex items-center gap-2">
-                <Film className="h-5 w-5 text-primary" />
-                Modo Producao
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">Marque os conteudos produzidos e registre o horario real.</p>
-            </CardHeader>
-            <CardContent>
-              {loadingItems ? (
-                <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
-                  {producaoPorDia.map(({ day, items: itemsDoDia }) => (
-                    <div key={day.toISOString()} className="rounded-lg border bg-muted/40 p-3 flex flex-col gap-2">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        {format(day, "EEE", { locale: ptBR })}
-                      </div>
-                      <div className="text-sm font-semibold">{format(day, "dd/MM")}</div>
-                      {itemsDoDia.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">Sem producao</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {itemsDoDia.map((item) => (
-                            <div key={item.id} className="rounded-lg border bg-background p-3 space-y-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="space-y-1">
-                                  <p className="text-sm font-semibold leading-tight">{item.titulo || "Conteudo"}</p>
-                                  <p className="text-xs text-muted-foreground">{item.categoria || "Sem categoria"}</p>
-                                  {item.hora_sugerida && (
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Clock3 className="h-3 w-3" />
-                                      Sugestao: {item.hora_sugerida}
-                                    </div>
-                                  )}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {weekDays.map(dia => {
+              const dayKey = format(dia, "yyyy-MM-dd");
+              const tarefas = tarefasPorDia[dayKey] || [];
+              const isHoje = isSameDay(dia, new Date());
+
+              return (
+                <div key={dayKey} className="space-y-2">
+                  {/* Cabeçalho do dia */}
+                  <div className={`text-center p-2 rounded-lg ${isHoje ? 'bg-primary/10 border-2 border-primary' : 'bg-muted'}`}>
+                    <div className="font-bold">{format(dia, "EEE", { locale: ptBR })}</div>
+                    <div className="text-sm text-muted-foreground">{format(dia, "dd/MM")}</div>
+                  </div>
+
+                  {/* Cards de tarefas */}
+                  <div className="space-y-2 min-h-[200px]">
+                    {tarefas.map(tarefa => {
+                      const badge = getBadge(tarefa);
+                      const BadgeIcon = badge.icon;
+
+                      return (
+                        <Card
+                          key={tarefa.id}
+                          className="cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => handleViewDetails(tarefa)}
+                        >
+                          <CardContent className="p-3 space-y-2">
+                            <Badge className={badge.color}>
+                              <BadgeIcon className="h-3 w-3 mr-1" />
+                              {badge.text}
+                            </Badge>
+                            
+                            <h4 className="font-semibold text-sm">{tarefa.titulo}</h4>
+                            
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <div className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {tarefa.responsavel || "Não atribuído"}
+                              </div>
+                              {tarefa.horarios_postagem && tarefa.horarios_postagem.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {tarefa.horarios_postagem.join(", ")}
                                 </div>
-                                <Switch
-                                  checked={!!item.produzido}
-                                  onCheckedChange={(value) => handleToggleProduzido(item, value)}
-                                  className="data-[state=checked]:bg-green-500"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Hora Real</Label>
-                                <Input
-                                  type="time"
-                                  defaultValue={item.hora_real || ""}
-                                  onBlur={(e) => handleHoraRealBlur(item, e.target.value)}
-                                  className="text-sm"
-                                />
-                              </div>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    
+                    {/* Botão de adicionar (apenas para não social media) */}
+                    {!isSocialMedia && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => handleOpenForm(dia)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Adicionar
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              );
+            })}
+          </div>
         )}
       </div>
+
+      {/* Drawer de Detalhes */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent className="w-full sm:max-w-md">
+          {selectedItem && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center justify-between">
+                  <span>{selectedItem.titulo}</span>
+                  {!isSocialMedia && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          handleEditItem(selectedItem);
+                          setDrawerOpen(false);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteMutation.mutate(selectedItem.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  )}
+                </SheetTitle>
+              </SheetHeader>
+
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Categoria</Label>
+                  <p className="font-medium">{selectedItem.categoria}</p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">Descrição</Label>
+                  <p className="text-sm">{selectedItem.descricao || "Sem descrição"}</p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">Responsável</Label>
+                  <p className="font-medium">{selectedItem.responsavel || "Não atribuído"}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Produzir em</Label>
+                    <p className="text-sm">
+                      {selectedItem.data_producao
+                        ? format(parseISO(selectedItem.data_producao), "dd/MM/yyyy", { locale: ptBR })
+                        : "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Postar em</Label>
+                    <p className="text-sm">
+                      {selectedItem.data_postagem
+                        ? format(parseISO(selectedItem.data_postagem), "dd/MM/yyyy", { locale: ptBR })
+                        : "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">Horários Planejados</Label>
+                  <p className="text-sm">{selectedItem.horarios_postagem?.join(", ") || "Não definido"}</p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <div className="mt-1">
+                    {selectedItem.produzido ? (
+                      <Badge className="bg-green-100 text-green-700">
+                        ✅ Concluído em {selectedItem.check_timestamp
+                          ? format(parseISO(selectedItem.check_timestamp), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                          : "-"}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-yellow-100 text-yellow-700">
+                        ⏳ Aguardando
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Seção de Check (apenas se não estiver concluído) */}
+                {!selectedItem.produzido && (
+                  <>
+                    <div className="border-t pt-4">
+                      <Label className="font-semibold">Marcar como Realizado</Label>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="horario-real">Horário Real de Postagem</Label>
+                      <Input
+                        id="horario-real"
+                        type="time"
+                        value={horarioRealInput}
+                        onChange={(e) => setHorarioRealInput(e.target.value)}
+                        placeholder="ex: 09:15"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Informe o horário em que foi postado ou programado
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {!selectedItem.produzido && (
+                <SheetFooter>
+                  <Button
+                    onClick={handleCheck}
+                    className="w-full"
+                    disabled={checkMutation.isPending}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Marcar como Realizado
+                  </Button>
+                </SheetFooter>
+              )}
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Dialog de Formulário */}
+      <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{formData.id ? "Editar Tarefa" : "Nova Tarefa"}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="titulo">Título *</Label>
+              <Input
+                id="titulo"
+                value={formData.titulo || ""}
+                onChange={(e) => setFormData(prev => ({ ...prev, titulo: e.target.value }))}
+                placeholder="ex: Reels Institucional"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="categoria">Categoria *</Label>
+              <Select
+                value={formData.categoria || ""}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, categoria: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="descricao">Descrição</Label>
+              <Textarea
+                id="descricao"
+                value={formData.descricao || ""}
+                onChange={(e) => setFormData(prev => ({ ...prev, descricao: e.target.value }))}
+                placeholder="Descreva o conteúdo da postagem"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="responsavel">Responsável</Label>
+              <Select
+                value={formData.responsavel || ""}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, responsavel: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {responsavelOptions.map(resp => (
+                    <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="data-producao">Data de Produção</Label>
+                <Input
+                  id="data-producao"
+                  type="date"
+                  value={formData.data_producao || ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, data_producao: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="data-postagem">Data de Postagem *</Label>
+                <Input
+                  id="data-postagem"
+                  type="date"
+                  value={formData.data_postagem || ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, data_postagem: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Horários de Postagem</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {(formData.horarios_postagem || []).map(horario => (
+                  <Badge key={horario} variant="secondary">
+                    {horario}
+                    <button
+                      onClick={() => handleRemoveHorario(horario)}
+                      className="ml-2 hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddHorario}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Adicionar
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFormDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={upsertMutation.isPending}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Planejamento Grid (estilo planilha) */}
+      <Dialog open={gridDialogOpen} onOpenChange={setGridDialogOpen}>
+        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>📋 Planejamento Semanal - Modo Grid</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Preencha rapidamente o planejamento da semana. Clique em uma célula para expandir e preencher detalhes.
+            </p>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead className="sticky top-0 bg-background z-20">
+                <tr className="bg-muted">
+                  <th className="border p-2 text-left font-semibold w-[250px] sticky left-0 bg-muted z-30">
+                    Tipo de Postagem
+                  </th>
+                  <th className="border p-2 text-center w-[80px]">Horário</th>
+                  <th className="border p-2 text-center w-[100px]">Categoria</th>
+                  {weekDays.map(dia => (
+                    <th key={format(dia, "yyyy-MM-dd")} className="border p-2 text-center min-w-[180px]">
+                      <div className="font-bold">{format(dia, "EEE", { locale: ptBR })}</div>
+                      <div className="text-xs text-muted-foreground">{format(dia, "dd/MM")}</div>
+                    </th>
+                  ))}
+                  <th className="border p-2 w-[60px] sticky right-0 bg-muted z-30"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {tiposPostagem.map(tipo => (
+                  <tr key={tipo.id} className="hover:bg-muted/30">
+                    <td className="border p-2 sticky left-0 bg-background z-10">
+                      <Input
+                        value={tipo.tipo}
+                        onChange={(e) => handleTipoChange(tipo.id, "tipo", e.target.value)}
+                        className="text-xs h-8 font-medium"
+                        placeholder="Nome do tipo"
+                      />
+                    </td>
+                    <td className="border p-1">
+                      <Input
+                        type="time"
+                        value={tipo.horario}
+                        onChange={(e) => handleTipoChange(tipo.id, "horario", e.target.value)}
+                        className="text-xs h-8 w-[75px] font-mono"
+                      />
+                    </td>
+                    <td className="border p-1">
+                      <Select
+                        value={tipo.categoria}
+                        onValueChange={(value) => handleTipoChange(tipo.id, "categoria", value)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categoryOptions.map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    {weekDays.map(dia => {
+                      const dayKey = format(dia, "yyyy-MM-dd");
+                      const celula = gridData[tipo.id]?.[dayKey] || { titulo: "", descricao: "", data_producao: "", responsavel: "" };
+                      const cellKey = `${tipo.id}-${dayKey}`;
+                      const isExpanded = expandedCell === cellKey;
+
+                      return (
+                        <td key={dayKey} className="border p-1 align-top">
+                          <div className="space-y-1">
+                            <Input
+                              value={celula.titulo}
+                              onChange={(e) => handleGridInputChange(tipo.id, dayKey, "titulo", e.target.value)}
+                              onFocus={() => toggleCellExpanded(tipo.id, dayKey)}
+                              placeholder="Título..."
+                              className="text-xs h-8 border-0 focus-visible:ring-1"
+                            />
+                            {isExpanded && (
+                              <div className="space-y-1 p-2 bg-muted/30 rounded border">
+                                <Textarea
+                                  value={celula.descricao || ""}
+                                  onChange={(e) => handleGridInputChange(tipo.id, dayKey, "descricao", e.target.value)}
+                                  placeholder="Descrição..."
+                                  className="text-xs min-h-[60px]"
+                                  rows={2}
+                                />
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">Data Produção</Label>
+                                    <Input
+                                      type="date"
+                                      value={celula.data_producao || ""}
+                                      onChange={(e) => handleGridInputChange(tipo.id, dayKey, "data_producao", e.target.value)}
+                                      className="text-xs h-7"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">Responsável</Label>
+                                    <Select
+                                      value={celula.responsavel || ""}
+                                      onValueChange={(value) => handleGridInputChange(tipo.id, dayKey, "responsavel", value)}
+                                    >
+                                      <SelectTrigger className="h-7 text-xs">
+                                        <SelectValue placeholder="Selecione" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {responsavelOptions.map(resp => (
+                                          <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setExpandedCell(null)}
+                                  className="w-full h-6 text-[10px]"
+                                >
+                                  Fechar
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="border p-1 text-center sticky right-0 bg-background z-10">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => handleRemoveTipo(tipo.id)}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={3 + weekDays.length + 1} className="border p-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddTipo}
+                      className="w-full"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar Tipo de Postagem
+                    </Button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setGridDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveGrid}>
+              💾 Salvar Planejamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

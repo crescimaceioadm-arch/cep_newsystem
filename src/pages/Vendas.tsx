@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useEstoque } from "@/hooks/useEstoque";
 import { useFinalizarVenda } from "@/hooks/useVendas";
+import { useItemCategories } from "@/hooks/useItemCategories";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { useCaixa } from "@/contexts/CaixaContext";
 import { useUser } from "@/contexts/UserContext";
@@ -34,15 +36,6 @@ import {
 } from "@/components/ui/select";
 
 // Definição de Tipos Seguros
-interface Quantidades {
-  baby: number;
-  infantil: number;
-  calcados: number;
-  brinquedos: number;
-  medios: number;
-  grandes: number;
-}
-
 interface Pagamento {
   metodo: string;
   valor: string;
@@ -53,6 +46,11 @@ export default function Vendas() {
   const { toast } = useToast(); // Hook correto
   const { isAdmin } = useUser();
   const { caixaSelecionado } = useCaixa();
+  const { data: categorias } = useItemCategories();
+  const categoriasVenda = useMemo(
+    () => (categorias || []).filter((c) => c.ativo !== false && (c.tipo === "venda" || c.tipo === "ambos")),
+    [categorias]
+  );
   
   // CORREÇÃO 2: Proteção contra dados undefined/null do banco
   const { data: rawEstoque, isLoading: loadingEstoque } = useEstoque();
@@ -63,9 +61,8 @@ export default function Vendas() {
 
   const { mutate: finalizarVenda, isPending } = useFinalizarVenda();
 
-  const [quantidades, setQuantidades] = useState<Quantidades>({
-    baby: 0, infantil: 0, calcados: 0, brinquedos: 0, medios: 0, grandes: 0,
-  });
+  const [quantidades, setQuantidades] = useState<Record<string, number>>({});
+  const [descricaoItensExtras, setDescricaoItensExtras] = useState("");
 
   const [valorTotal, setValorTotal] = useState<string>("");
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: "" }]);
@@ -73,33 +70,48 @@ export default function Vendas() {
   const [showAlertaEstoque, setShowAlertaEstoque] = useState(false);
   const [alertasEstoque, setAlertasEstoque] = useState<string[]>([]);
 
-  // Helper seguro para buscar estoque
-  const getEstoqueCategoria = (categoria: string): number => {
+  // Helper seguro para buscar estoque por categoria dinâmica (id > nome > slug)
+  const getEstoqueCategoria = (catId: string, nome: string, slug: string): number => {
     if (!estoque.length) return 0;
-    return estoque.find((e) => e.categoria === categoria)?.quantidade_atual || 0;
+    const byId = estoque.find((e) => e.categoria_id === catId);
+    if (byId) return byId.quantidade_atual || 0;
+    const byName = estoque.find((e) => e.categoria === nome);
+    if (byName) return byName.quantidade_atual || 0;
+    const bySlug = estoque.find((e) => e.categoria.toLowerCase() === slug.toLowerCase());
+    return bySlug?.quantidade_atual || 0;
   };
 
+  useEffect(() => {
+    if (!categoriasVenda.length) return;
+    setQuantidades((prev) => {
+      const next: Record<string, number> = {};
+      categoriasVenda.forEach((cat) => {
+        next[cat.id] = prev[cat.id] ?? 0;
+      });
+      return next;
+    });
+  }, [categoriasVenda]);
+
   const totalPecas = Object.values(quantidades).reduce((acc, curr) => acc + (curr || 0), 0);
+  
+  const requiresDescription = categoriasVenda.some(
+    (cat) => cat.requer_valor && (quantidades[cat.id] || 0) > 0
+  );
   const totalPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
   const valorTotalNum = parseFloat(valorTotal) || 0;
   const diferenca = valorTotalNum - totalPagamentos;
 
   const verificarEstoque = (): string[] => {
     if (!estoque.length) return []; // Se não carregou estoque, não bloqueia
-    
     const alertas: string[] = [];
-    const check = (qtd: number, cat: string) => {
-      const atual = getEstoqueCategoria(cat);
-      if (qtd > atual) alertas.push(`${cat}: estoque ${atual}, vendendo ${qtd}`);
-    };
-
-    check(quantidades.baby, "Roupas Baby");
-    check(quantidades.infantil, "Roupas 1 a 16");
-    check(quantidades.calcados, "Calçados");
-    check(quantidades.brinquedos, "Brinquedos");
-    check(quantidades.medios, "Itens Médios");
-    check(quantidades.grandes, "Itens Grandes");
-
+    categoriasVenda.forEach((cat) => {
+      const qtd = quantidades[cat.id] || 0;
+      if (qtd <= 0) return;
+      const atual = getEstoqueCategoria(cat.id, cat.nome, cat.slug);
+      if (qtd > atual) {
+        alertas.push(`${cat.nome}: estoque ${atual}, vendendo ${qtd}`);
+      }
+    });
     return alertas;
   };
 
@@ -127,20 +139,57 @@ export default function Vendas() {
       return;
     }
 
+    const basePayload = {
+      qtd_baby_vendida: 0,
+      qtd_1_a_16_vendida: 0,
+      qtd_calcados_vendida: 0,
+      qtd_brinquedos_vendida: 0,
+      qtd_itens_medios_vendida: 0,
+      qtd_itens_grandes_vendida: 0,
+    };
+    const itensExtras: Array<{ categoria_id: string; quantidade: number }> = [];
+    let descricaoFinal = descricaoItensExtras;
+    
+    categoriasVenda.forEach((cat) => {
+      const qtd = quantidades[cat.id] || 0;
+      if (qtd <= 0) return;
+      switch (cat.slug) {
+        case "baby":
+          basePayload.qtd_baby_vendida = qtd;
+          break;
+        case "1a16":
+          basePayload.qtd_1_a_16_vendida = qtd;
+          break;
+        case "calcados":
+          basePayload.qtd_calcados_vendida = qtd;
+          break;
+        case "brinquedos":
+          basePayload.qtd_brinquedos_vendida = qtd;
+          break;
+        case "itens_medios":
+          basePayload.qtd_itens_medios_vendida = qtd;
+          break;
+        case "itens_grandes":
+          basePayload.qtd_itens_grandes_vendida = qtd;
+          break;
+        default:
+          itensExtras.push({ categoria_id: cat.id, quantidade: qtd });
+      }
+    });
+
     finalizarVenda({
-      qtd_baby_vendida: quantidades.baby || 0,
-      qtd_1_a_16_vendida: quantidades.infantil || 0,
-      qtd_calcados_vendida: quantidades.calcados || 0,
-      qtd_brinquedos_vendida: quantidades.brinquedos || 0,
-      qtd_itens_medios_vendida: quantidades.medios || 0,
-      qtd_itens_grandes_vendida: quantidades.grandes || 0,
+      ...basePayload,
+      itens: itensExtras,
       valor_total_venda: valorTotalNum,
       pagamentos: pagamentos.map(p => ({ ...p, valor: parseFloat(p.valor) || 0 })),
       vendedora_nome: vendedoraSelecionada || undefined,
       caixa_origem: caixaSelecionado || "Caixa 1",
     }, {
       onSuccess: () => {
-        setQuantidades({ baby: 0, infantil: 0, calcados: 0, brinquedos: 0, medios: 0, grandes: 0 });
+        const reset: Record<string, number> = {};
+        categoriasVenda.forEach((cat) => { reset[cat.id] = 0; });
+        setQuantidades(reset);
+        setDescricaoItensExtras("");
         setValorTotal("");
         setPagamentos([{ metodo: "PIX", valor: "" }]);
         setVendedoraSelecionada("");
@@ -254,35 +303,52 @@ export default function Vendas() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Inputs protegidos com fallback || 0 */}
-              {[
-                { label: "Baby", key: "baby", estoqueCat: "Roupas Baby" },
-                { label: "1 a 16", key: "infantil", estoqueCat: "Roupas 1 a 16" },
-                { label: "Calçados", key: "calcados", estoqueCat: "Calçados" },
-                { label: "Brinquedos", key: "brinquedos", estoqueCat: "Brinquedos" },
-                { label: "Médios", key: "medios", estoqueCat: "Itens Médios" },
-                { label: "Grandes", key: "grandes", estoqueCat: "Itens Grandes" },
-              ].map((item) => (
-                <div key={item.key} className="space-y-2">
-                  <Label>{item.label}</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={quantidades[item.key as keyof Quantidades] || ""}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      setQuantidades(prev => ({ ...prev, [item.key]: isNaN(val) ? 0 : val }));
-                    }}
-                    placeholder="0"
-                    className="text-center text-lg font-semibold"
+            {categoriasVenda.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Cadastre categorias de venda em Configurações.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {categoriasVenda.map((cat) => (
+                  <div key={cat.id} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>{cat.nome}</Label>
+                      <span className="text-[11px] text-muted-foreground uppercase">{cat.slug}</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={quantidades[cat.id] ?? ""}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setQuantidades((prev) => ({ ...prev, [cat.id]: Number.isNaN(val) ? 0 : val }));
+                      }}
+                      placeholder="0"
+                      className="text-center text-lg font-semibold"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      Estoque: {getEstoqueCategoria(cat.id, cat.nome, cat.slug)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {requiresDescription && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <Label htmlFor="descricao_itens" className="text-sm font-semibold">
+                    Descrição dos Itens com Valor *
+                  </Label>
+                  <Textarea
+                    id="descricao_itens"
+                    placeholder="Descreva os itens..."
+                    value={descricaoItensExtras}
+                    onChange={(e) => setDescricaoItensExtras(e.target.value)}
+                    className="min-h-20"
                   />
-                  <span className="text-xs text-muted-foreground">
-                    Estoque: {getEstoqueCategoria(item.estoqueCat)}
-                  </span>
                 </div>
-              ))}
-            </div>
+              </>
+            )}
 
             <Separator />
             <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ import {
 import { useAtualizarVenda, Venda } from "@/hooks/useVendasHistorico";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { useCaixas } from "@/hooks/useCaixas";
+import { useItemCategories } from "@/hooks/useItemCategories";
 import { Pencil } from "lucide-react";
 
 const METODOS_PAGAMENTO = [
@@ -46,20 +47,21 @@ interface EditarVendaModalProps {
 export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModalProps) {
   const { data: vendedoras } = useColaboradoresByFuncao("Vendedora");
   const { data: caixas } = useCaixas();
+  const { data: categorias } = useItemCategories();
   const { mutate: atualizarVenda, isPending } = useAtualizarVenda();
+
+  const categoriasVenda = useMemo(
+    () => (categorias || []).filter((c) => c.ativo !== false && (c.tipo === "venda" || c.tipo === "ambos")),
+    [categorias]
+  );
 
   // Estados do formulário - Informações gerais
   const [vendedora, setVendedora] = useState("");
   const [cliente, setCliente] = useState("");
   const [caixaOrigem, setCaixaOrigem] = useState("");
 
-  // Estados - Produtos vendidos
-  const [qtdBaby, setQtdBaby] = useState("");
-  const [qtdInfantil, setQtdInfantil] = useState("");
-  const [qtdCalcados, setQtdCalcados] = useState("");
-  const [qtdBrinquedos, setQtdBrinquedos] = useState("");
-  const [qtdMedios, setQtdMedios] = useState("");
-  const [qtdGrandes, setQtdGrandes] = useState("");
+  // Estados - Produtos vendidos (dinâmico por categoria)
+  const [quantidades, setQuantidades] = useState<Record<string, number>>({});
 
   // Estados - Formas de pagamento
   const [metodoPagto1, setMetodoPagto1] = useState("");
@@ -77,13 +79,38 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
       setCliente(venda.cliente_nome || "");
       setCaixaOrigem(venda.caixa_origem || "");
 
-      // Produtos
-      setQtdBaby(venda.qtd_baby_vendida?.toString() || "0");
-      setQtdInfantil(venda.qtd_1_a_16_vendida?.toString() || "0");
-      setQtdCalcados(venda.qtd_calcados_vendida?.toString() || "0");
-      setQtdBrinquedos(venda.qtd_brinquedos_vendida?.toString() || "0");
-      setQtdMedios(venda.qtd_itens_medios_vendida?.toString() || "0");
-      setQtdGrandes(venda.qtd_itens_grandes_vendida?.toString() || "0");
+      // Produtos (pivot + fallback legados por slug)
+      const initial: Record<string, number> = {};
+      categoriasVenda.forEach((cat) => {
+        const pivot = venda.itens?.find((i) => i.categoria_id === cat.id);
+        let qtd = pivot?.quantidade ?? 0;
+        if (qtd === 0 || Number.isNaN(qtd)) {
+          switch (cat.slug) {
+            case "baby":
+              qtd = venda.qtd_baby_vendida || 0;
+              break;
+            case "1a16":
+              qtd = venda.qtd_1_a_16_vendida || 0;
+              break;
+            case "calcados":
+              qtd = venda.qtd_calcados_vendida || 0;
+              break;
+            case "brinquedos":
+              qtd = venda.qtd_brinquedos_vendida || 0;
+              break;
+            case "itens_medios":
+              qtd = venda.qtd_itens_medios_vendida || 0;
+              break;
+            case "itens_grandes":
+              qtd = venda.qtd_itens_grandes_vendida || 0;
+              break;
+            default:
+              qtd = 0;
+          }
+        }
+        initial[cat.id] = qtd || 0;
+      });
+      setQuantidades(initial);
 
       // Formas de pagamento
       setMetodoPagto1(venda.metodo_pagto_1 || "");
@@ -92,25 +119,54 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
       setValorPagto2(venda.valor_pagto_2?.toFixed(2) || "0.00");
       setMetodoPagto3(venda.metodo_pagto_3 || "");
       setValorPagto3(venda.valor_pagto_3?.toFixed(2) || "0.00");
-
-      console.log("📝 Venda carregada no modal:", {
-        produtos: { qtdBaby: venda.qtd_baby_vendida, qtdInfantil: venda.qtd_1_a_16_vendida },
-        pagamentos: { metodo1: venda.metodo_pagto_1, valor1: venda.valor_pagto_1, metodo2: venda.metodo_pagto_2, valor2: venda.valor_pagto_2 }
-      });
     }
-  }, [venda, open]);
+  }, [venda, open, categoriasVenda]);
 
   const handleSalvar = () => {
     if (!venda) return;
 
-    // Calcular totais
-    const totalItens = (parseFloat(qtdBaby) || 0) + (parseFloat(qtdInfantil) || 0) + 
-                       (parseFloat(qtdCalcados) || 0) + (parseFloat(qtdBrinquedos) || 0) + 
-                       (parseFloat(qtdMedios) || 0) + (parseFloat(qtdGrandes) || 0);
-    
-    const valorTotalCalculado = (parseFloat(valorPagto1) || 0) + 
-                                (parseFloat(valorPagto2) || 0) + 
-                                (parseFloat(valorPagto3) || 0);
+    const valorTotalCalculado = (parseFloat(valorPagto1) || 0) +
+      (parseFloat(valorPagto2) || 0) +
+      (parseFloat(valorPagto3) || 0);
+
+    const basePayload = {
+      qtd_baby_vendida: 0,
+      qtd_1_a_16_vendida: 0,
+      qtd_calcados_vendida: 0,
+      qtd_brinquedos_vendida: 0,
+      qtd_itens_medios_vendida: 0,
+      qtd_itens_grandes_vendida: 0,
+    };
+    const itensExtras: Array<{ categoria_id: string; quantidade: number }> = [];
+
+    categoriasVenda.forEach((cat) => {
+      const qtd = quantidades[cat.id] || 0;
+      if (qtd <= 0) return;
+      switch (cat.slug) {
+        case "baby":
+          basePayload.qtd_baby_vendida = qtd;
+          break;
+        case "1a16":
+          basePayload.qtd_1_a_16_vendida = qtd;
+          break;
+        case "calcados":
+          basePayload.qtd_calcados_vendida = qtd;
+          break;
+        case "brinquedos":
+          basePayload.qtd_brinquedos_vendida = qtd;
+          break;
+        case "itens_medios":
+          basePayload.qtd_itens_medios_vendida = qtd;
+          break;
+        case "itens_grandes":
+          basePayload.qtd_itens_grandes_vendida = qtd;
+          break;
+        default:
+          itensExtras.push({ categoria_id: cat.id, quantidade: qtd });
+      }
+    });
+
+    const totalItens = Object.values(quantidades).reduce((sum, v) => sum + (v || 0), 0);
 
     atualizarVenda(
       {
@@ -125,12 +181,8 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
           valor_pagto_2: parseFloat(valorPagto2) || 0,
           metodo_pagto_3: metodoPagto3 || null,
           valor_pagto_3: parseFloat(valorPagto3) || 0,
-          qtd_baby_vendida: parseFloat(qtdBaby) || 0,
-          qtd_1_a_16_vendida: parseFloat(qtdInfantil) || 0,
-          qtd_calcados_vendida: parseFloat(qtdCalcados) || 0,
-          qtd_brinquedos_vendida: parseFloat(qtdBrinquedos) || 0,
-          qtd_itens_medios_vendida: parseFloat(qtdMedios) || 0,
-          qtd_itens_grandes_vendida: parseFloat(qtdGrandes) || 0,
+          ...basePayload,
+          itens: itensExtras,
           qtd_total_itens: totalItens,
           valor_total_venda: valorTotalCalculado,
         },
@@ -144,9 +196,7 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
     );
   };
 
-  const totalPecas = (parseFloat(qtdBaby) || 0) + (parseFloat(qtdInfantil) || 0) + 
-                     (parseFloat(qtdCalcados) || 0) + (parseFloat(qtdBrinquedos) || 0) + 
-                     (parseFloat(qtdMedios) || 0) + (parseFloat(qtdGrandes) || 0);
+  const totalPecas = Object.values(quantidades).reduce((acc, curr) => acc + (curr || 0), 0);
   
   const totalValor = (parseFloat(valorPagto1) || 0) + 
                      (parseFloat(valorPagto2) || 0) + 
@@ -213,62 +263,29 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
           {/* Seção 2: Produtos Vendidos */}
           <div className="space-y-3 border-b pb-4">
             <h3 className="font-semibold text-sm">Produtos Vendidos</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Baby</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={qtdBaby}
-                  onChange={(e) => setQtdBaby(e.target.value)}
-                />
+            {categoriasVenda.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Cadastre categorias de venda em Configurações.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {categoriasVenda.map((cat) => (
+                  <div key={cat.id} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>{cat.nome}</Label>
+                      <span className="text-[11px] text-muted-foreground uppercase">{cat.slug}</span>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={quantidades[cat.id] ?? ""}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setQuantidades((prev) => ({ ...prev, [cat.id]: Number.isNaN(val) ? 0 : val }));
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label>Infantil (1-16)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={qtdInfantil}
-                  onChange={(e) => setQtdInfantil(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Calçados</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={qtdCalcados}
-                  onChange={(e) => setQtdCalcados(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Brinquedos</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={qtdBrinquedos}
-                  onChange={(e) => setQtdBrinquedos(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Médios</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={qtdMedios}
-                  onChange={(e) => setQtdMedios(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Grandes</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={qtdGrandes}
-                  onChange={(e) => setQtdGrandes(e.target.value)}
-                />
-              </div>
-            </div>
+            )}
             <div className="bg-blue-50 p-2 rounded text-sm">
               <strong>Total de Peças:</strong> {totalPecas}
             </div>

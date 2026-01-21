@@ -369,6 +369,88 @@ export default function Dashboard() {
       }
     });
 
+    // === ANÁLISE DE TIPOS DE PAGAMENTO (HOJE) ===
+    let pagamentosHoje = {
+      giraCredito: 0,
+      dinheiro: 0,
+      pix: 0,
+      todosCreditos: 0,
+      debito: 0
+    };
+
+    vendasHoje.forEach(venda => {
+      [
+        { metodo: venda.metodo_pagto_1, valor: venda.valor_pagto_1 },
+        { metodo: venda.metodo_pagto_2, valor: venda.valor_pagto_2 },
+        { metodo: venda.metodo_pagto_3, valor: venda.valor_pagto_3 },
+      ].forEach(pag => {
+        const metodo = (pag.metodo || "").toLowerCase();
+        const valor = Number(pag.valor || 0);
+        
+        if (metodo.includes("gira")) {
+          pagamentosHoje.giraCredito += valor;
+        } else if (metodo.includes("dinheiro")) {
+          pagamentosHoje.dinheiro += valor;
+        } else if (metodo.includes("pix")) {
+          pagamentosHoje.pix += valor;
+        } else if (metodo.includes("crédito") || metodo.includes("credito")) {
+          pagamentosHoje.todosCreditos += valor;
+        } else if (metodo.includes("débito") || metodo.includes("debito")) {
+          pagamentosHoje.debito += valor;
+        }
+      });
+    });
+
+    const totalPagamentosHoje = pagamentosHoje.giraCredito + pagamentosHoje.dinheiro + pagamentosHoje.pix + pagamentosHoje.todosCreditos + pagamentosHoje.debito;
+    const porcentagensPagamentos = totalPagamentosHoje > 0 ? {
+      giraCredito: (pagamentosHoje.giraCredito / totalPagamentosHoje) * 100,
+      dinheiro: (pagamentosHoje.dinheiro / totalPagamentosHoje) * 100,
+      pix: (pagamentosHoje.pix / totalPagamentosHoje) * 100,
+      todosCreditos: (pagamentosHoje.todosCreditos / totalPagamentosHoje) * 100,
+      debito: (pagamentosHoje.debito / totalPagamentosHoje) * 100
+    } : { giraCredito: 0, dinheiro: 0, pix: 0, todosCreditos: 0, debito: 0 };
+
+    // === ANÁLISE DE TIPOS DE PAGAMENTO (MÊS/PERÍODO) ===
+    let pagamentosMes = {
+      giraCredito: 0,
+      dinheiro: 0,
+      pix: 0,
+      todosCreditos: 0,
+      debito: 0
+    };
+
+    allVendas.forEach(venda => {
+      [
+        { metodo: venda.metodo_pagto_1, valor: venda.valor_pagto_1 },
+        { metodo: venda.metodo_pagto_2, valor: venda.valor_pagto_2 },
+        { metodo: venda.metodo_pagto_3, valor: venda.valor_pagto_3 },
+      ].forEach(pag => {
+        const metodo = (pag.metodo || "").toLowerCase();
+        const valor = Number(pag.valor || 0);
+        
+        if (metodo.includes("gira")) {
+          pagamentosMes.giraCredito += valor;
+        } else if (metodo.includes("dinheiro")) {
+          pagamentosMes.dinheiro += valor;
+        } else if (metodo.includes("pix")) {
+          pagamentosMes.pix += valor;
+        } else if (metodo.includes("crédito") || metodo.includes("credito")) {
+          pagamentosMes.todosCreditos += valor;
+        } else if (metodo.includes("débito") || metodo.includes("debito")) {
+          pagamentosMes.debito += valor;
+        }
+      });
+    });
+
+    const totalPagamentosMes = pagamentosMes.giraCredito + pagamentosMes.dinheiro + pagamentosMes.pix + pagamentosMes.todosCreditos + pagamentosMes.debito;
+    const porcentagensPagamentosMes = totalPagamentosMes > 0 ? {
+      giraCredito: (pagamentosMes.giraCredito / totalPagamentosMes) * 100,
+      dinheiro: (pagamentosMes.dinheiro / totalPagamentosMes) * 100,
+      pix: (pagamentosMes.pix / totalPagamentosMes) * 100,
+      todosCreditos: (pagamentosMes.todosCreditos / totalPagamentosMes) * 100,
+      debito: (pagamentosMes.debito / totalPagamentosMes) * 100
+    } : { giraCredito: 0, dinheiro: 0, pix: 0, todosCreditos: 0, debito: 0 };
+
     // === PICOS DE VENDAS POR HORÁRIO ===
     const vendasPorHora = new Map();
     allVendas.forEach(venda => {
@@ -400,7 +482,11 @@ export default function Dashboard() {
       vendedorasData,
       totalGiraCreditoMes,
       totalGiraCreditoHoje,
-      picosHorarios
+      picosHorarios,
+      pagamentosHoje,
+      porcentagensPagamentos,
+      pagamentosMes,
+      porcentagensPagamentosMes
     };
   }, [allVendas, hoje]);
 
@@ -822,6 +908,45 @@ export default function Dashboard() {
             <CardContent className="pb-3">
               <div className="text-xl font-bold text-blue-900">{formatCurrency(salesMetrics.totalVendidoMes)}</div>
               <p className="text-[10px] text-blue-600 mt-0.5">{salesMetrics.qtdVendasMes} vendas</p>
+              
+              {/* Barra de distribuição de pagamentos */}
+              <div className="mt-3 w-full h-6 bg-blue-50 rounded overflow-hidden flex">
+                {salesMetrics.porcentagensPagamentosMes.giraCredito > 0 && (
+                  <div 
+                    className="bg-orange-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.giraCredito}%` }}
+                    title={`Gira-crédito: ${salesMetrics.porcentagensPagamentosMes.giraCredito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.giraCredito)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentosMes.dinheiro > 0 && (
+                  <div 
+                    className="bg-green-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.dinheiro}%` }}
+                    title={`Dinheiro: ${salesMetrics.porcentagensPagamentosMes.dinheiro.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.dinheiro)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentosMes.pix > 0 && (
+                  <div 
+                    className="bg-teal-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.pix}%` }}
+                    title={`Pix: ${salesMetrics.porcentagensPagamentosMes.pix.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.pix)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentosMes.todosCreditos > 0 && (
+                  <div 
+                    className="bg-blue-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.todosCreditos}%` }}
+                    title={`Créditos: ${salesMetrics.porcentagensPagamentosMes.todosCreditos.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.todosCreditos)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentosMes.debito > 0 && (
+                  <div 
+                    className="bg-purple-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.debito}%` }}
+                    title={`Débito: ${salesMetrics.porcentagensPagamentosMes.debito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.debito)})`}
+                  />
+                )}
+              </div>
             </CardContent>
           </Card>
           
@@ -832,6 +957,45 @@ export default function Dashboard() {
             <CardContent className="pb-3">
               <div className="text-xl font-bold text-green-900">{formatCurrency(salesMetrics.totalVendidoHoje)}</div>
               <p className="text-[10px] text-green-600 mt-0.5">{salesMetrics.qtdVendasHoje} vendas</p>
+              
+              {/* Barra de distribuição de pagamentos */}
+              <div className="mt-3 w-full h-6 bg-green-50 rounded overflow-hidden flex">
+                {salesMetrics.porcentagensPagamentos.giraCredito > 0 && (
+                  <div 
+                    className="bg-orange-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentos.giraCredito}%` }}
+                    title={`Gira-crédito: ${salesMetrics.porcentagensPagamentos.giraCredito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.giraCredito)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentos.dinheiro > 0 && (
+                  <div 
+                    className="bg-green-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentos.dinheiro}%` }}
+                    title={`Dinheiro: ${salesMetrics.porcentagensPagamentos.dinheiro.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.dinheiro)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentos.pix > 0 && (
+                  <div 
+                    className="bg-teal-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentos.pix}%` }}
+                    title={`Pix: ${salesMetrics.porcentagensPagamentos.pix.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.pix)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentos.todosCreditos > 0 && (
+                  <div 
+                    className="bg-blue-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentos.todosCreditos}%` }}
+                    title={`Créditos: ${salesMetrics.porcentagensPagamentos.todosCreditos.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.todosCreditos)})`}
+                  />
+                )}
+                {salesMetrics.porcentagensPagamentos.debito > 0 && (
+                  <div 
+                    className="bg-purple-300 transition-all duration-500"
+                    style={{ width: `${salesMetrics.porcentagensPagamentos.debito}%` }}
+                    title={`Débito: ${salesMetrics.porcentagensPagamentos.debito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.debito)})`}
+                  />
+                )}
+              </div>
             </CardContent>
           </Card>
 

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Atendimento, StatusAtendimento } from "@/types/database";
+import type { Atendimento, StatusAtendimento, ItemCategoria, AtendimentoItem } from "@/types/database";
 
 export function useAtendimentos() {
   return useQuery({
@@ -12,7 +12,27 @@ export function useAtendimentos() {
         .order("hora_chegada", { ascending: false });
 
       if (error) throw error;
-      return data as Atendimento[];
+      const { data: itens } = await supabase
+        .from("atendimento_itens")
+        .select("*, item_categories(*)");
+
+      const itensByAtendimento = new Map<string, AtendimentoItem[]>();
+      (itens || []).forEach((it) => {
+        const list = itensByAtendimento.get(it.atendimento_id) || [];
+        list.push({
+          id: it.id,
+          categoria_id: it.categoria_id,
+          quantidade: it.quantidade,
+          valor_total: it.valor_total,
+          categoria: it.item_categories as ItemCategoria | undefined,
+        });
+        itensByAtendimento.set(it.atendimento_id, list);
+      });
+
+      return (data as Atendimento[]).map((a) => ({
+        ...a,
+        itens: itensByAtendimento.get(a.id) || [],
+      }));
     },
   });
 }
@@ -32,7 +52,27 @@ export function useAtendimentosByStatus(status: StatusAtendimento) {
       // DEBUG: confirma dados retornando do Supabase
       console.log("[useAtendimentosByStatus]", status, data);
 
-      return data as Atendimento[];
+      const { data: itens } = await supabase
+        .from("atendimento_itens")
+        .select("*, item_categories(*)");
+
+      const itensByAtendimento = new Map<string, AtendimentoItem[]>();
+      (itens || []).forEach((it) => {
+        const list = itensByAtendimento.get(it.atendimento_id) || [];
+        list.push({
+          id: it.id,
+          categoria_id: it.categoria_id,
+          quantidade: it.quantidade,
+          valor_total: it.valor_total,
+          categoria: it.item_categories as ItemCategoria | undefined,
+        });
+        itensByAtendimento.set(it.atendimento_id, list);
+      });
+
+      return (data as Atendimento[]).map((a) => ({
+        ...a,
+        itens: itensByAtendimento.get(a.id) || [],
+      }));
     },
   });
 }
@@ -215,6 +255,7 @@ interface AvaliacaoData {
   pagamento_3_metodo?: string | null;
   pagamento_3_valor?: number | null;
   isEditing?: boolean;
+  itens?: Array<{ categoria_id: string; quantidade: number; valor_total?: number | null }>;
 }
 
 export function useSaveAvaliacao() {
@@ -223,6 +264,14 @@ export function useSaveAvaliacao() {
   return useMutation({
     mutationFn: async (data: AvaliacaoData) => {
       console.log("[useSaveAvaliacao] Salvando avaliação:", data);
+
+      const { data: categorias } = await supabase
+        .from("item_categories")
+        .select("id, slug, ativo");
+      const catBySlug = new Map<string, string>();
+      (categorias || []).forEach((c) => {
+        if ((c as any).ativo !== false) catBySlug.set((c as any).slug, (c as any).id);
+      });
 
       // Busca valores atuais para calcular ajuste de dinheiro (caso método mude para Dinheiro)
       const { data: atendimentoAtual, error: atendimentoFetchError } = await supabase
@@ -293,6 +342,30 @@ export function useSaveAvaliacao() {
       if (updateError) {
         console.error("[useSaveAvaliacao] Erro ao atualizar atendimento:", updateError);
         throw updateError;
+      }
+
+      // 1.0a Atualiza pivot de itens (remove e recria)
+      await supabase.from("atendimento_itens").delete().eq("atendimento_id", data.id);
+
+      const itensPivot: Array<{ atendimento_id: string; categoria_id: string; quantidade: number; valor_total?: number | null }> = [];
+      const pushIf = (slug: string, qtd: number, valor?: number | null) => {
+        if (qtd && qtd > 0) {
+          const cid = catBySlug.get(slug);
+          if (cid) itensPivot.push({ atendimento_id: data.id, categoria_id: cid, quantidade: qtd, valor_total: valor });
+        }
+      };
+      pushIf("baby", Number(data.qtd_baby));
+      pushIf("1a16", Number(data.qtd_1_a_16));
+      pushIf("calcados", Number(data.qtd_calcados));
+      pushIf("brinquedos", Number(data.qtd_brinquedos));
+      pushIf("itens_medios", Number(data.qtd_itens_medios), data.valor_total_itens_medios || null);
+      pushIf("itens_grandes", Number(data.qtd_itens_grandes), data.valor_total_itens_grandes || null);
+      (data.itens || []).forEach((it) => {
+        if (it.quantidade > 0) itensPivot.push({ atendimento_id: data.id, categoria_id: it.categoria_id, quantidade: it.quantidade, valor_total: it.valor_total ?? null });
+      });
+
+      if (itensPivot.length > 0) {
+        await supabase.from("atendimento_itens").insert(itensPivot);
       }
 
       // 1.1 Ajuste de dinheiro no caixa de Avaliação (se houve mudança para Dinheiro)

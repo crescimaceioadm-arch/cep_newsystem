@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Venda, Estoque } from "@/types/database";
+import { Venda, Estoque, ItemCategoria } from "@/types/database";
 import { toast } from "sonner";
 import { registrarMovimentacaoCaixa } from "@/lib/registrarMovimentacaoCaixa";
 
@@ -15,6 +15,7 @@ export interface NovaVenda {
   pagamentos: Array<{ metodo: string; valor: number; bandeira?: string }>;
   vendedora_nome?: string;
   caixa_origem?: string;
+  itens?: Array<{ categoria_id: string; quantidade: number }>;
 }
 
 export function useVendas() {
@@ -27,7 +28,26 @@ export function useVendas() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as Venda[];
+      const { data: itens } = await supabase
+        .from("venda_itens")
+        .select("*, item_categories(*)");
+
+      const itensByVenda = new Map<string, any[]>();
+      (itens || []).forEach((it) => {
+        const list = itensByVenda.get(it.venda_id) || [];
+        list.push({
+          id: it.id,
+          categoria_id: it.categoria_id,
+          quantidade: it.quantidade,
+          categoria: it.item_categories as ItemCategoria | undefined,
+        });
+        itensByVenda.set(it.venda_id, list);
+      });
+
+      return (data as Venda[]).map((v) => ({
+        ...v,
+        itens: itensByVenda.get(v.id) || [],
+      }));
     },
   });
 }
@@ -48,7 +68,26 @@ export function useVendasHoje() {
         .lt("created_at", amanha.toISOString());
 
       if (error) throw error;
-      return data as Venda[];
+      const { data: itens } = await supabase
+        .from("venda_itens")
+        .select("*, item_categories(*)");
+
+      const itensByVenda = new Map<string, any[]>();
+      (itens || []).forEach((it) => {
+        const list = itensByVenda.get(it.venda_id) || [];
+        list.push({
+          id: it.id,
+          categoria_id: it.categoria_id,
+          quantidade: it.quantidade,
+          categoria: it.item_categories as ItemCategoria | undefined,
+        });
+        itensByVenda.set(it.venda_id, list);
+      });
+
+      return (data as Venda[]).map((v) => ({
+        ...v,
+        itens: itensByVenda.get(v.id) || [],
+      }));
     },
   });
 }
@@ -62,6 +101,15 @@ export function useFinalizarVenda() {
       const transactionId = `VENDA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       console.log(`[useFinalizarVenda] 🆔 ID da Transação: ${transactionId}`);
       console.log("[useFinalizarVenda] Iniciando venda:", venda);
+
+      // Categorias dinâmicas (para pivot)
+      const { data: categorias } = await supabase
+        .from("item_categories")
+        .select("id, slug, ativo");
+      const catBySlug = new Map<string, string>();
+      (categorias || []).forEach((c) => {
+        if ((c as any).ativo !== false) catBySlug.set((c as any).slug, (c as any).id);
+      });
 
       // 1. Buscar estoque atual
       const { data: estoqueAtual, error: estoqueError } = await supabase
@@ -148,6 +196,30 @@ export function useFinalizarVenda() {
       if (vendaError) {
         console.error("[useFinalizarVenda] Erro ao inserir venda:", vendaError);
         throw vendaError;
+      }
+
+      // 3b. Inserir itens pivot (derivados dos campos legados + opcionais)
+      if (vendaInserida) {
+        const itensPivot: Array<{ venda_id: string; categoria_id: string; quantidade: number }> = [];
+        const pushIf = (slug: string, qtd: number) => {
+          if (qtd && qtd > 0) {
+            const cid = catBySlug.get(slug);
+            if (cid) itensPivot.push({ venda_id: vendaInserida.id, categoria_id: cid, quantidade: qtd });
+          }
+        };
+        pushIf("baby", Number(venda.qtd_baby_vendida));
+        pushIf("1a16", Number(venda.qtd_1_a_16_vendida));
+        pushIf("calcados", Number(venda.qtd_calcados_vendida));
+        pushIf("brinquedos", Number(venda.qtd_brinquedos_vendida));
+        pushIf("itens_medios", Number(venda.qtd_itens_medios_vendida));
+        pushIf("itens_grandes", Number(venda.qtd_itens_grandes_vendida));
+        (venda.itens || []).forEach((it) => {
+          if (it.quantidade > 0) itensPivot.push({ venda_id: vendaInserida.id, categoria_id: it.categoria_id, quantidade: it.quantidade });
+        });
+
+        if (itensPivot.length > 0) {
+          await supabase.from("venda_itens").insert(itensPivot);
+        }
       }
 
       // 5. ✅ REGISTRAR MOVIMENTAÇÃO DE CAIXA DE FORMA SEGURA (NÃO DEPENDE APENAS DO TRIGGER)

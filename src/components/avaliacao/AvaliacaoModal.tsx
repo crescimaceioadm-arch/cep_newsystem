@@ -22,6 +22,7 @@ import { Atendimento } from "@/types/database";
 import { useSaveAvaliacao, useRecusarAvaliacao } from "@/hooks/useAtendimentos";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { toast } from "@/hooks/use-toast";
+import { useItemCategories } from "@/hooks/useItemCategories";
 
 interface AvaliacaoModalProps {
   atendimento: Atendimento | null;
@@ -70,6 +71,12 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
   const [avaliadoraSelecionada, setAvaliadoraSelecionada] = useState("");
   const [isRecusando, setIsRecusando] = useState(false);
   const [motivoRecusa, setMotivoRecusa] = useState<"loja" | "cliente" | "">("");
+  const { data: categorias } = useItemCategories();
+  const categoriasCompra = React.useMemo(
+    () => (categorias || []).filter((c) => c.ativo !== false && (c.tipo === "compra" || c.tipo === "ambos")),
+    [categorias]
+  );
+  const [itemQuantities, setItemQuantities] = useState<Record<string, { quantidade: number; valor_total?: number | null }>>({});
 
   // Quando abrir em modo de edição, carrega os dados da avaliação
   React.useEffect(() => {
@@ -98,11 +105,48 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
         metodo_pagto_3: pagamento3Metodo,
         valor_pagto_3: pagamento3Valor,
       });
+      const initialItems: Record<string, { quantidade: number; valor_total?: number | null }> = {};
+      const itensPivot = atendimento.itens || [];
+      categoriasCompra.forEach((cat) => {
+        const pivot = itensPivot.find((i) => i.categoria_id === cat.id);
+        let quantidade = pivot?.quantidade ?? 0;
+        let valor_total = pivot?.valor_total ?? null;
+        if (!pivot) {
+          // fallback para campos legados
+          switch (cat.slug) {
+            case "baby":
+              quantidade = atendimento.qtd_baby || 0;
+              break;
+            case "1a16":
+              quantidade = atendimento.qtd_1_a_16 || 0;
+              break;
+            case "calcados":
+              quantidade = atendimento.qtd_calcados || 0;
+              break;
+            case "brinquedos":
+              quantidade = atendimento.qtd_brinquedos || 0;
+              break;
+            case "itens_medios":
+              quantidade = atendimento.qtd_itens_medios || 0;
+              valor_total = atendimento.valor_total_itens_medios ?? null;
+              break;
+            case "itens_grandes":
+              quantidade = atendimento.qtd_itens_grandes || 0;
+              valor_total = atendimento.valor_total_itens_grandes ?? null;
+              break;
+            default:
+              quantidade = 0;
+              valor_total = null;
+          }
+        }
+        initialItems[cat.id] = { quantidade, valor_total };
+      });
+      setItemQuantities(initialItems);
       setAvaliadoraSelecionada((atendimento as any).avaliadora_nome || "");
     } else if (open && !isEditing) {
       resetForm();
     }
-  }, [open, isEditing, atendimento]);
+  }, [open, isEditing, atendimento, categoriasCompra]);
 
   const saveAvaliacao = useSaveAvaliacao();
   const recusarAvaliacao = useRecusarAvaliacao();
@@ -110,11 +154,54 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
   // Adicionei isLoading para feedback visual se a internet estiver lenta
   const { data: avaliadoras, isLoading } = useColaboradoresByFuncao("Avaliadora");
 
-  const requiresDescription = formData.qtd_itens_grandes > 0 || formData.qtd_itens_medios > 0;
+  const requiresDescription = Object.entries(itemQuantities).some(
+    ([catId, entry]) => {
+      const cat = categoriasCompra.find((c) => c.id === catId);
+      return cat?.requer_valor && (entry.quantidade || 0) > 0;
+    }
+  );
   const isDescriptionValid = !requiresDescription || formData.descricao_itens_extra.trim().length > 0;
 
   const handleChange = (field: keyof typeof formData, value: number | string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleItemChange = (catId: string, quantidade: number, valor_total?: number | null) => {
+    setItemQuantities((prev) => ({
+      ...prev,
+      [catId]: { quantidade, valor_total },
+    }));
+
+    const categoria = categoriasCompra.find((c) => c.id === catId);
+    if (!categoria) return;
+    const updates: Partial<typeof formData> = {};
+    switch (categoria.slug) {
+      case "baby":
+        updates.qtd_baby = quantidade;
+        break;
+      case "1a16":
+        updates.qtd_1_a_16 = quantidade;
+        break;
+      case "calcados":
+        updates.qtd_calcados = quantidade;
+        break;
+      case "brinquedos":
+        updates.qtd_brinquedos = quantidade;
+        break;
+      case "itens_medios":
+        updates.qtd_itens_medios = quantidade;
+        updates.valor_total_itens_medios = valor_total ?? 0;
+        break;
+      case "itens_grandes":
+        updates.qtd_itens_grandes = quantidade;
+        updates.valor_total_itens_grandes = valor_total ?? 0;
+        break;
+      default:
+        break;
+    }
+    if (Object.keys(updates).length) {
+      setFormData((prev) => ({ ...prev, ...updates }));
+    }
   };
 
   const resetForm = () => {
@@ -138,6 +225,11 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
     setAvaliadoraSelecionada("");
     setIsRecusando(false);
     setMotivoRecusa("");
+    const emptyItems: Record<string, { quantidade: number; valor_total?: number | null }> = {};
+    categoriasCompra.forEach((cat) => {
+      emptyItems[cat.id] = { quantidade: 0, valor_total: null };
+    });
+    setItemQuantities(emptyItems);
   };
 
   const handleSubmit = async () => {
@@ -152,27 +244,63 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
       return;
     }
 
+    const payload = {
+      id: atendimento.id,
+      qtd_baby: 0,
+      qtd_1_a_16: 0,
+      qtd_calcados: 0,
+      qtd_brinquedos: 0,
+      qtd_itens_medios: 0,
+      qtd_itens_grandes: 0,
+      valor_total_itens_medios: 0,
+      valor_total_itens_grandes: 0,
+      descricao_itens_extra: formData.descricao_itens_extra,
+      pagamento_1_metodo: formData.metodo_pagto_1 || null,
+      pagamento_1_valor: formData.valor_pagto_1 || null,
+      pagamento_2_metodo: formData.metodo_pagto_2 || null,
+      pagamento_2_valor: formData.valor_pagto_2 || null,
+      pagamento_3_metodo: formData.metodo_pagto_3 || null,
+      pagamento_3_valor: formData.valor_pagto_3 || null,
+      avaliadora_nome: avaliadoraSelecionada || undefined,
+      isEditing,
+      itens: [] as Array<{ categoria_id: string; quantidade: number; valor_total?: number | null }>,
+      origem_avaliacao: atendimento.origem_avaliacao ?? null,
+    };
+
+    categoriasCompra.forEach((cat) => {
+      const entry = itemQuantities[cat.id] || { quantidade: 0, valor_total: null };
+      const qtd = entry.quantidade || 0;
+      const valorTotal = entry.valor_total ?? null;
+      if (qtd <= 0) return;
+      switch (cat.slug) {
+        case "baby":
+          payload.qtd_baby = qtd;
+          break;
+        case "1a16":
+          payload.qtd_1_a_16 = qtd;
+          break;
+        case "calcados":
+          payload.qtd_calcados = qtd;
+          break;
+        case "brinquedos":
+          payload.qtd_brinquedos = qtd;
+          break;
+        case "itens_medios":
+          payload.qtd_itens_medios = qtd;
+          payload.valor_total_itens_medios = valorTotal || 0;
+          break;
+        case "itens_grandes":
+          payload.qtd_itens_grandes = qtd;
+          payload.valor_total_itens_grandes = valorTotal || 0;
+          break;
+        default:
+          payload.itens.push({ categoria_id: cat.id, quantidade: qtd, valor_total: valorTotal });
+          break;
+      }
+    });
+
     saveAvaliacao.mutate(
-      { 
-        id: atendimento.id, 
-        qtd_baby: formData.qtd_baby,
-        qtd_1_a_16: formData.qtd_1_a_16,
-        qtd_calcados: formData.qtd_calcados,
-        qtd_brinquedos: formData.qtd_brinquedos,
-        qtd_itens_medios: formData.qtd_itens_medios,
-        qtd_itens_grandes: formData.qtd_itens_grandes,
-        valor_total_itens_medios: formData.valor_total_itens_medios,
-        valor_total_itens_grandes: formData.valor_total_itens_grandes,
-        descricao_itens_extra: formData.descricao_itens_extra,
-        pagamento_1_metodo: formData.metodo_pagto_1 || null,
-        pagamento_1_valor: formData.valor_pagto_1 || null,
-        pagamento_2_metodo: formData.metodo_pagto_2 || null,
-        pagamento_2_valor: formData.valor_pagto_2 || null,
-        pagamento_3_metodo: formData.metodo_pagto_3 || null,
-        pagamento_3_valor: formData.valor_pagto_3 || null,
-        avaliadora_nome: avaliadoraSelecionada || undefined,
-        isEditing,
-      },
+      payload,
       {
         onSuccess: () => {
           toast({ title: "Avaliação salva com sucesso!" });
@@ -263,96 +391,44 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
 
         {!isRecusando ? (
           <>
-            <div className="grid grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="qtd_baby">Baby</Label>
-                <Input
-                  id="qtd_baby"
-                  type="number"
-                  min={0}
-                  value={formData.qtd_baby}
-                  onChange={(e) => handleChange("qtd_baby", parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="qtd_1_a_16">1 a 16 anos</Label>
-                <Input
-                  id="qtd_1_a_16"
-                  type="number"
-                  min={0}
-                  value={formData.qtd_1_a_16}
-                  onChange={(e) => handleChange("qtd_1_a_16", parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="qtd_calcados">Calçados</Label>
-                <Input
-                  id="qtd_calcados"
-                  type="number"
-                  min={0}
-                  value={formData.qtd_calcados}
-                  onChange={(e) => handleChange("qtd_calcados", parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="qtd_brinquedos">Brinquedos</Label>
-                <Input
-                  id="qtd_brinquedos"
-                  type="number"
-                  min={0}
-                  value={formData.qtd_brinquedos}
-                  onChange={(e) => handleChange("qtd_brinquedos", parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="qtd_itens_medios">Itens Médios</Label>
-                <Input
-                  id="qtd_itens_medios"
-                  type="number"
-                  min={0}
-                  value={formData.qtd_itens_medios}
-                  onChange={(e) => handleChange("qtd_itens_medios", parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="qtd_itens_grandes">Itens Grandes</Label>
-                <Input
-                  id="qtd_itens_grandes"
-                  type="number"
-                  min={0}
-                  value={formData.qtd_itens_grandes}
-                  onChange={(e) => handleChange("qtd_itens_grandes", parseInt(e.target.value) || 0)}
-                />
-              </div>
+            <div className="space-y-4 py-4">
+              {categoriasCompra.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Cadastre categorias de compra em Configurações.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {categoriasCompra.map((cat) => {
+                    const entry = itemQuantities[cat.id] || { quantidade: 0, valor_total: null };
+                    const showValor = cat.requer_valor;
+                    return (
+                      <div key={cat.id} className="space-y-2 p-3 border rounded-lg bg-muted/40">
+                        <div className="flex justify-between items-center">
+                          <Label>{cat.nome}</Label>
+                          <span className="text-[11px] text-muted-foreground uppercase">{cat.slug}</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={entry.quantidade || 0}
+                          onChange={(e) => handleItemChange(cat.id, parseInt(e.target.value) || 0, entry.valor_total)}
+                        />
+                        {showValor && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Valor Total Ofertado (R$)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={entry.valor_total ?? 0}
+                              onChange={(e) => handleItemChange(cat.id, entry.quantidade, parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-
-            {formData.qtd_itens_medios > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="valor_total_itens_medios">Valor Total Ofertado (Médios) R$</Label>
-                <Input
-                  id="valor_total_itens_medios"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={formData.valor_total_itens_medios}
-                  onChange={(e) => handleChange("valor_total_itens_medios", parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            )}
-
-            {formData.qtd_itens_grandes > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="valor_total_itens_grandes">Valor Total Ofertado (Grandes) R$</Label>
-                <Input
-                  id="valor_total_itens_grandes"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={formData.valor_total_itens_grandes}
-                  onChange={(e) => handleChange("valor_total_itens_grandes", parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            )}
 
             {requiresDescription && (
               <div className="space-y-2">

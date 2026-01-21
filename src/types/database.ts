@@ -3,12 +3,31 @@ export type StatusAtendimento =
   | 'aguardando_pagamento' 
   | 'finalizado';
 
+export interface ItemCategoria {
+  id: string;
+  slug: string;
+  nome: string;
+  tipo: 'compra' | 'venda' | 'ambos';
+  requer_valor: boolean;
+  ordem: number;
+  ativo: boolean;
+}
+
+export interface AtendimentoItem {
+  id?: string;
+  categoria_id: string;
+  quantidade: number;
+  valor_total?: number | null;
+  categoria?: ItemCategoria;
+}
+
 export interface Atendimento {
   id: string;
   nome_cliente: string;
   hora_chegada: string;
   hora_encerramento?: string | null;
   status: StatusAtendimento;
+  itens?: AtendimentoItem[];
   qtd_baby: number | null;
   qtd_1_a_16: number | null;
   qtd_calcados: number | null;
@@ -35,12 +54,21 @@ export interface Atendimento {
 export interface Estoque {
   id: string;
   categoria: string;
+  categoria_id?: string | null;
   quantidade_atual: number;
   updated_at: string;
 }
 
+export interface VendaItem {
+  id?: string;
+  categoria_id: string;
+  quantidade: number;
+  categoria?: ItemCategoria;
+}
+
 export interface Venda {
   id: string;
+  itens?: VendaItem[];
   qtd_baby_vendida: number | null;
   qtd_1_a_16_vendida: number | null;
   qtd_calcados_vendida: number | null;
