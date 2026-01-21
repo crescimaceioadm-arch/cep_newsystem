@@ -9,6 +9,7 @@ export interface ItemCategoria {
   nome: string;
   tipo: 'compra' | 'venda' | 'ambos';
   requer_valor: boolean;
+  requer_descricao: boolean;
   ordem: number;
   ativo: boolean;
 }

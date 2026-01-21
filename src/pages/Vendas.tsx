@@ -94,9 +94,6 @@ export default function Vendas() {
 
   const totalPecas = Object.values(quantidades).reduce((acc, curr) => acc + (curr || 0), 0);
   
-  const requiresDescription = categoriasVenda.some(
-    (cat) => cat.requer_valor && (quantidades[cat.id] || 0) > 0
-  );
   const totalPagamentos = pagamentos.reduce((sum, p) => sum + (parseFloat(p.valor) || 0), 0);
   const valorTotalNum = parseFloat(valorTotal) || 0;
   const diferenca = valorTotalNum - totalPagamentos;
@@ -330,24 +327,6 @@ export default function Vendas() {
                   </div>
                 ))}
               </div>
-            )}
-
-            {requiresDescription && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <Label htmlFor="descricao_itens" className="text-sm font-semibold">
-                    Descrição dos Itens com Valor *
-                  </Label>
-                  <Textarea
-                    id="descricao_itens"
-                    placeholder="Descreva os itens..."
-                    value={descricaoItensExtras}
-                    onChange={(e) => setDescricaoItensExtras(e.target.value)}
-                    className="min-h-20"
-                  />
-                </div>
-              </>
             )}
 
             <Separator />

@@ -157,7 +157,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
   const requiresDescription = Object.entries(itemQuantities).some(
     ([catId, entry]) => {
       const cat = categoriasCompra.find((c) => c.id === catId);
-      return cat?.requer_valor && (entry.quantidade || 0) > 0;
+      return cat?.requer_descricao && (entry.quantidade || 0) > 0;
     }
   );
   const isDescriptionValid = !requiresDescription || formData.descricao_itens_extra.trim().length > 0;
@@ -238,7 +238,28 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
     if (!isDescriptionValid) {
       toast({
         title: "Campo obrigatório",
-        description: "Descreva os itens grandes/médios.",
+        description: "Descreva os itens grandes e Enxoval",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar valores obrigatórios para categorias com requer_valor = true
+    const itemsWithMissingValue = Object.entries(itemQuantities).filter(([catId, entry]) => {
+      const cat = categoriasCompra.find((c) => c.id === catId);
+      const hasQuantity = (entry.quantidade || 0) > 0;
+      const hasValue = entry.valor_total != null && entry.valor_total > 0;
+      return cat?.requer_valor && hasQuantity && !hasValue;
+    });
+
+    if (itemsWithMissingValue.length > 0) {
+      const categoriasNomes = itemsWithMissingValue
+        .map(([catId]) => categoriasCompra.find((c) => c.id === catId)?.nome)
+        .filter(Boolean)
+        .join(", ");
+      toast({
+        title: "Valor obrigatório",
+        description: `Informe o valor total para: ${categoriasNomes}`,
         variant: "destructive",
       });
       return;
