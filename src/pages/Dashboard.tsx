@@ -531,79 +531,73 @@ export default function Dashboard() {
 
     // Tabela de gasto em dinheiro por grupos de avaliações (com base no período selecionado)
     const tabelaGastos = useMemo(() => {
-        const finalizadosPeriodo = allAtendimentos.filter((a) => a.status === "finalizado");
+      const finalizadosPeriodo = allAtendimentos.filter((a) => a.status === "finalizado");
 
-        const ehDinheiro = (a: any) => classificarPagamento(a) === "dinheiro";
+      const ehDinheiro = (a: any) => classificarPagamento(a) === "dinheiro";
 
-        const grupoGrandes = finalizadosPeriodo.filter((a) => (a.qtd_itens_grandes || 0) > 0);
-        const grupoMediosOuBrinquedos = finalizadosPeriodo.filter(
-            (a) => (a.qtd_itens_grandes || 0) === 0 && ((a.qtd_itens_medios || 0) > 0 || (a.qtd_brinquedos || 0) > 0)
-        );
-        const grupoRoupasESapatos = finalizadosPeriodo.filter((a) => {
-            const grandes = (a.qtd_itens_grandes || 0) > 0;
-            const medios = (a.qtd_itens_medios || 0) > 0;
-            const brinquedos = (a.qtd_brinquedos || 0) > 0;
-            const roupasOuSapatos = ((a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0)) > 0;
-            return !grandes && !medios && !brinquedos && roupasOuSapatos;
-        });
-        // Novo: Capturar avaliações sem itens (todas as quantidades zeradas)
-        const grupoOutros = finalizadosPeriodo.filter((a) => {
-            const temGrandes = (a.qtd_itens_grandes || 0) > 0;
-            const temMedios = (a.qtd_itens_medios || 0) > 0;
-            const temBrinquedos = (a.qtd_brinquedos || 0) > 0;
-            const temRoupasOuSapatos = ((a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0)) > 0;
-            // Se não tem NENHUM item, vai para "Outros"
-            return !temGrandes && !temMedios && !temBrinquedos && !temRoupasOuSapatos;
-        });
+      // Classificação única por avaliação com precedência: Grandes > Enxoval > Brinquedos > Só roupas/sapatos > Outras > Outros
+      const classificarAvaliacao = (a: any): string => {
+        const hasGrandes = (a.qtd_itens_grandes || 0) > 0;
+        const hasEnxoval = (a.qtd_itens_medios || 0) > 0; // Enxoval
+        const hasBrinquedos = (a.qtd_brinquedos || 0) > 0;
+        const roupasSapatosQtd = (a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0);
+        const hasRoupasOuSapatos = roupasSapatosQtd > 0;
 
-        const totalGrupo = (lista: any[]) =>
-            lista.filter(ehDinheiro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
+        const hasQualquerItem = hasGrandes || hasEnxoval || hasBrinquedos || hasRoupasOuSapatos;
 
-        const getAvaliacoesPorGrupo = (lista: any[]) => {
-            const resultado = lista.filter(ehDinheiro).map(a => ({
-                cliente: a.cliente_nome || "Sem nome",
-                data: a.hora_encerramento ? format(parseISO(a.hora_encerramento), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
-                valor: Number(a.valor_total_negociado || 0),
-                pagamento_1_metodo: a.pagamento_1_metodo,
-                pagamento_2_metodo: a.pagamento_2_metodo,
-                pagamento_3_metodo: a.pagamento_3_metodo,
-                pagamento_4_metodo: a.pagamento_4_metodo
-            }));
-            return resultado;
+        if (!hasQualquerItem) return "Outros (sem item registrado)";
+        if (hasGrandes) return "Com Itens grandes";
+        if (hasEnxoval) return "Com Enxoval";
+        if (hasBrinquedos) return "Com Brinquedos";
+        if (hasRoupasOuSapatos) return "Só roupas/sapatos";
+        return "Com outras categorias";
+      };
+
+      // Agrupar avaliações por categoria classificada
+      const gruposMap = new Map<string, any[]>();
+      finalizadosPeriodo.forEach(a => {
+        const cat = classificarAvaliacao(a);
+        const arr = gruposMap.get(cat) || [];
+        arr.push(a);
+        gruposMap.set(cat, arr);
+      });
+
+      const totalGrupo = (lista: any[]) =>
+        lista.filter(ehDinheiro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
+
+      const getAvaliacoesPorGrupo = (lista: any[]) =>
+        lista.filter(ehDinheiro).map(a => ({
+          cliente: a.cliente_nome || "Sem nome",
+          data: a.hora_encerramento ? format(parseISO(a.hora_encerramento), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
+          valor: Number(a.valor_total_negociado || 0),
+          pagamento_1_metodo: a.pagamento_1_metodo,
+          pagamento_2_metodo: a.pagamento_2_metodo,
+          pagamento_3_metodo: a.pagamento_3_metodo,
+          pagamento_4_metodo: a.pagamento_4_metodo
+        }));
+
+      // Ordem solicitada de exibição
+      const order = [
+        "Só roupas/sapatos",
+        "Com Itens grandes",
+        "Com Enxoval",
+        "Com Brinquedos",
+        "Com outras categorias",
+        "Outros (sem item registrado)",
+      ];
+
+      const rows = order.map(categoria => {
+        const lista = gruposMap.get(categoria) || [];
+        return {
+          categoria,
+          total: totalGrupo(lista),
+          quantidade: lista.filter(ehDinheiro).length,
+          detalhes: getAvaliacoesPorGrupo(lista)
         };
+      });
 
-        const rows = [
-            { 
-                categoria: "Com itens grandes", 
-                total: totalGrupo(grupoGrandes), 
-                quantidade: grupoGrandes.filter(ehDinheiro).length,
-                detalhes: getAvaliacoesPorGrupo(grupoGrandes)
-            },
-            { 
-                categoria: "Sem grandes, com médios ou brinquedos", 
-                total: totalGrupo(grupoMediosOuBrinquedos), 
-                quantidade: grupoMediosOuBrinquedos.filter(ehDinheiro).length,
-                detalhes: getAvaliacoesPorGrupo(grupoMediosOuBrinquedos)
-            },
-            { 
-                categoria: "Só roupas/sapatos", 
-                total: totalGrupo(grupoRoupasESapatos), 
-                quantidade: grupoRoupasESapatos.filter(ehDinheiro).length,
-                detalhes: getAvaliacoesPorGrupo(grupoRoupasESapatos)
-            },
-            { 
-                categoria: "Outros (sem itens registrados)", 
-                total: totalGrupo(grupoOutros), 
-                quantidade: grupoOutros.filter(ehDinheiro).length,
-                detalhes: getAvaliacoesPorGrupo(grupoOutros)
-            },
-        ];
-
-        const totalGeral = rows.reduce((acc, r) => acc + r.total, 0);
-        
-        // DEBUG removido - problema resolvido
-        
-        return { rows, totalGeral };
+      const totalGeral = rows.reduce((acc, r) => acc + r.total, 0);
+      return { rows, totalGeral };
     }, [allAtendimentos]);
 
 

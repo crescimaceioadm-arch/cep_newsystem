@@ -306,10 +306,7 @@ export default function Vendas() {
               <div className="grid grid-cols-2 gap-4">
                 {categoriasVenda.map((cat) => (
                   <div key={cat.id} className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label>{cat.nome}</Label>
-                      <span className="text-[11px] text-muted-foreground uppercase">{cat.slug}</span>
-                    </div>
+                    <Label>{cat.nome}</Label>
                     <Input
                       type="number"
                       min="0"

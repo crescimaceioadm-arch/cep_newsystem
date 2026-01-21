@@ -18,6 +18,7 @@ const InactivityContext = createContext<InactivityContextType>(defaultContextVal
 export function InactivityProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const midnightRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -33,6 +34,18 @@ export function InactivityProvider({ children }: { children: ReactNode }) {
     timeoutRef.current = setTimeout(handleLogout, INACTIVITY_TIMEOUT);
   };
 
+  // Agenda logout no próximo meia-noite
+  const scheduleMidnightLogout = () => {
+    if (midnightRef.current) {
+      clearTimeout(midnightRef.current);
+    }
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0); // próximo 00:00
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+    midnightRef.current = setTimeout(handleLogout, msUntilMidnight);
+  };
+
   useEffect(() => {
     const events = ["mousedown", "mousemove", "keydown", "touchstart", "scroll"];
 
@@ -42,6 +55,16 @@ export function InactivityProvider({ children }: { children: ReactNode }) {
 
     // Start the timer
     resetTimer();
+    scheduleMidnightLogout();
+
+    // Se abriu no dia seguinte, força logout
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const storedDate = localStorage.getItem("session_date");
+    if (storedDate && storedDate !== todayStr) {
+      handleLogout();
+    } else {
+      localStorage.setItem("session_date", todayStr);
+    }
 
     // Add event listeners
     events.forEach((event) => {
@@ -51,6 +74,9 @@ export function InactivityProvider({ children }: { children: ReactNode }) {
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+      }
+      if (midnightRef.current) {
+        clearTimeout(midnightRef.current);
       }
       events.forEach((event) => {
         document.removeEventListener(event, handleActivity);

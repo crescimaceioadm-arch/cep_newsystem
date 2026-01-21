@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useColaboradoresByFuncao, useAddColaborador, useDeleteColaborador } from "@/hooks/useColaboradores";
 import { useCaixas } from "@/hooks/useCaixas";
 import { supabase } from "@/integrations/supabase/client";
-import { Trash2, Plus, Users, Wallet, Save, Shield, LogOut, Tags, CheckCircle2 } from "lucide-react";
+import { Trash2, Plus, Users, Wallet, Save, Shield, Tags, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
@@ -21,19 +21,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useItemCategories, useCreateItemCategory, useUpdateItemCategory } from "@/hooks/useItemCategories";
 
-function EquipeCard({ 
-  titulo, 
+function EquipeSection({ 
   funcao 
 }: { 
-  titulo: string; 
-  funcao: "Vendedora" | "Avaliadora" 
+  funcao: "Vendedora" | "Avaliadora" | "Marketing"
 }) {
-  const { data: colaboradores, isLoading } = useColaboradoresByFuncao(funcao);
+  const { data: colaboradores, isLoading } = useColaboradoresByFuncao(funcao as any);
   const addColaborador = useAddColaborador();
   const deleteColaborador = useDeleteColaborador();
   const [novoNome, setNovoNome] = useState("");
+
+  const funcaoLabel = funcao === "Marketing" ? "membro da equipe" : funcao.toLowerCase();
 
   const handleAdd = () => {
     if (!novoNome.trim()) {
@@ -42,10 +48,10 @@ function EquipeCard({
     }
 
     addColaborador.mutate(
-      { nome: novoNome.trim(), funcao },
+      { nome: novoNome.trim(), funcao: funcao as any },
       {
         onSuccess: () => {
-          toast.success(`${funcao} adicionada!`);
+          toast.success(`${funcao === "Marketing" ? "Membro" : funcao} adicionado(a)!`);
           setNovoNome("");
         },
         onError: (error: any) => {
@@ -58,7 +64,7 @@ function EquipeCard({
   const handleDelete = (id: string, nome: string) => {
     deleteColaborador.mutate(id, {
       onSuccess: () => {
-        toast.success(`${nome} removida`);
+        toast.success(`${nome} removido(a)`);
       },
       onError: (error: any) => {
         toast.error("Erro ao remover: " + error.message);
@@ -67,57 +73,52 @@ function EquipeCard({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">{titulo}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Lista de colaboradores */}
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando...</p>
-          ) : colaboradores?.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma {funcao.toLowerCase()} cadastrada</p>
-          ) : (
-            colaboradores?.map((col) => (
-              <div key={col.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                <span className="text-sm font-medium">{col.nome}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(col.id, col.nome)}
-                  disabled={deleteColaborador.isPending}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
+    <div className="space-y-4">
+      {/* Lista de colaboradores */}
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        ) : colaboradores?.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum(a) {funcaoLabel} cadastrado(a)</p>
+        ) : (
+          colaboradores?.map((col) => (
+            <div key={col.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+              <span className="text-sm font-medium">{col.nome}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={() => handleDelete(col.id, col.nome)}
+                disabled={deleteColaborador.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
 
-        {/* Adicionar novo */}
-        <div className="flex gap-2">
-          <Input
-            placeholder={`Nome da ${funcao.toLowerCase()}`}
-            value={novoNome}
-            onChange={(e) => setNovoNome(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          />
-          <Button 
-            onClick={handleAdd} 
-            disabled={addColaborador.isPending}
-            size="icon"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Adicionar novo */}
+      <div className="flex gap-2">
+        <Input
+          placeholder={`Nome ${funcao === "Marketing" ? "do membro" : "da " + funcaoLabel}`}
+          value={novoNome}
+          onChange={(e) => setNovoNome(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+        />
+        <Button 
+          onClick={handleAdd} 
+          disabled={addColaborador.isPending}
+          size="icon"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
   );
 }
 
-function SaldosCaixasCard() {
+function SaldosCaixasSection() {
   const { data: caixas, isLoading } = useCaixas();
   const queryClient = useQueryClient();
   const [saldos, setSaldos] = useState<Record<string, number>>({});
@@ -159,52 +160,47 @@ function SaldosCaixasCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Saldos Iniciais dos Caixas</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando...</p>
-        ) : caixas?.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum caixa cadastrado</p>
-        ) : (
-          caixas?.map((caixa) => (
-            <div key={caixa.id} className="flex items-center gap-3">
-              <Label className="w-24 text-sm font-medium">{caixa.nome}</Label>
-              <div className="flex-1 flex items-center gap-2">
-                <span className="text-muted-foreground">R$</span>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={saldos[caixa.id] ?? 0}
-                  onChange={(e) =>
-                    setSaldos((prev) => ({
-                      ...prev,
-                      [caixa.id]: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  className="w-32"
-                />
-              </div>
-              <Button
-                size="sm"
-                onClick={() => handleUpdateSaldo(caixa.id, caixa.nome)}
-                disabled={salvando === caixa.id}
-              >
-                <Save className="h-4 w-4 mr-1" />
-                {salvando === caixa.id ? "Salvando..." : "Atualizar"}
-              </Button>
+    <div className="space-y-4">
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : caixas?.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhum caixa cadastrado</p>
+      ) : (
+        caixas?.map((caixa) => (
+          <div key={caixa.id} className="flex items-center gap-3">
+            <Label className="w-24 text-sm font-medium">{caixa.nome}</Label>
+            <div className="flex-1 flex items-center gap-2">
+              <span className="text-muted-foreground">R$</span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={saldos[caixa.id] ?? 0}
+                onChange={(e) =>
+                  setSaldos((prev) => ({
+                    ...prev,
+                    [caixa.id]: parseFloat(e.target.value) || 0,
+                  }))
+                }
+                className="w-32"
+              />
             </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
+            <Button
+              size="sm"
+              onClick={() => handleUpdateSaldo(caixa.id, caixa.nome)}
+              disabled={salvando === caixa.id}
+            >
+              <Save className="h-4 w-4 mr-1" />
+              {salvando === caixa.id ? "Salvando..." : "Atualizar"}
+            </Button>
+          </div>
+        ))
+      )}
+    </div>
   );
 }
 
-function TrocarCaixaCard() {
+function TrocarCaixaSection() {
   const { data: caixas, isLoading } = useCaixas();
   const { caixaSelecionado, setCaixaSelecionado } = useCaixa();
 
@@ -214,62 +210,51 @@ function TrocarCaixaCard() {
   };
 
   return (
-    <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <LogOut className="h-5 w-5 text-blue-600" />
-          Trocar de Caixa
-        </CardTitle>
-        <p className="text-sm text-muted-foreground mt-2">
-          Altere o caixa ativo sem precisar fazer login novamente
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando caixas...</p>
-        ) : caixas?.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum caixa disponível</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Caixa Atual</Label>
-              <div className="p-3 bg-white rounded-lg border border-blue-200">
-                <p className="font-semibold text-blue-900">
-                  {caixaSelecionado || "Nenhum caixa selecionado"}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="caixa-select">Selecione outro caixa:</Label>
-              <Select onValueChange={handleTrocarCaixa} value={caixaSelecionado || ""}>
-                <SelectTrigger id="caixa-select">
-                  <SelectValue placeholder="Escolha um caixa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {caixas?.map((caixa) => (
-                    <SelectItem key={caixa.id} value={caixa.nome}>
-                      <div className="flex items-center gap-2">
-                        <Wallet className="h-4 w-4" />
-                        {caixa.nome}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="pt-2 text-xs text-blue-700 bg-blue-50 p-2 rounded">
-              <p>✓ Caixa será salvo e mantido mesmo se você sair da sessão</p>
+    <div className="space-y-4">
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando caixas...</p>
+      ) : caixas?.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhum caixa disponível</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Caixa Atual</Label>
+            <div className="p-3 bg-white rounded-lg border border-blue-200">
+              <p className="font-semibold text-blue-900">
+                {caixaSelecionado || "Nenhum caixa selecionado"}
+              </p>
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          <div className="space-y-2">
+            <Label htmlFor="caixa-select">Selecione outro caixa:</Label>
+            <Select onValueChange={handleTrocarCaixa} value={caixaSelecionado || ""}>
+              <SelectTrigger id="caixa-select">
+                <SelectValue placeholder="Escolha um caixa" />
+              </SelectTrigger>
+              <SelectContent>
+                {caixas?.map((caixa) => (
+                  <SelectItem key={caixa.id} value={caixa.nome}>
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4" />
+                      {caixa.nome}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="pt-2 text-xs text-blue-700 bg-blue-50 p-2 rounded">
+            <p>✓ Caixa será salvo e mantido mesmo se você sair da sessão</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-function ItemCategoriesCard() {
+function ItemCategoriesSection() {
   const { data: categorias, isLoading, isError, error, refetch } = useItemCategories();
   const criarCategoria = useCreateItemCategory();
   const atualizarCategoria = useUpdateItemCategory();
@@ -293,7 +278,6 @@ function ItemCategoriesCard() {
     }
   }, [isError, error]);
 
-  // Se não houver categorias, tenta popular os padrões para não deixar o card vazio
   useEffect(() => {
     if (!isLoading && !isError && !seedAttempted && (!categorias || categorias.length === 0)) {
       setSeedAttempted(true);
@@ -319,18 +303,6 @@ function ItemCategoriesCard() {
     }
   }, [categorias, isLoading, isError, refetch, seedAttempted]);
 
-  const existingSlugs = useMemo(() => new Set(categorias?.map((c) => c.slug)), [categorias]);
-
-  const slugify = (value: string) =>
-    value
-      .toLowerCase()
-      .trim()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-");
-
   const handleCreate = () => {
     const nome = novoNome.trim();
     if (!nome) {
@@ -338,19 +310,8 @@ function ItemCategoriesCard() {
       return;
     }
 
-    const slug = slugify(nome);
-    if (!slug) {
-      toast.error("Não foi possível gerar o identificador");
-      return;
-    }
-
-    if (existingSlugs.has(slug)) {
-      toast.error("Já existe uma categoria com esse nome");
-      return;
-    }
-
     criarCategoria.mutate(
-      { nome, slug, tipo: "ambos" },
+      { nome, tipo: "ambos" },
       {
         onSuccess: () => {
           toast.success("Categoria criada");
@@ -438,46 +399,38 @@ function ItemCategoriesCard() {
   const categoriasUnificadas = categorias || [];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Tags className="h-5 w-5 text-blue-600" />
-          Categorias de Itens
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Renomeie ou crie novas categorias para compras e vendas; o identificador é gerado automaticamente. Clique no ícone azul para indicar categorias que precisam de valor/descrição (como itens grandes e itens médios).
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/30">
-          <div className="flex flex-col md:flex-row gap-2">
-            <Input
-              placeholder="Nova categoria"
-              value={novoNome}
-              onChange={(e) => setNovoNome(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            />
-            <Button onClick={handleCreate} disabled={criarCategoria.isPending}>
-              <Plus className="h-4 w-4 mr-1" />
-              Adicionar
-            </Button>
-          </div>
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Renomeie ou crie novas categorias para compras e vendas; o identificador é gerado automaticamente. Clique no ícone azul para indicar categorias que precisam de valor/descrição.
+      </p>
+      
+      <div className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/30">
+        <div className="flex flex-col md:flex-row gap-2">
+          <Input
+            placeholder="Nova categoria"
+            value={novoNome}
+            onChange={(e) => setNovoNome(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          />
+          <Button onClick={handleCreate} disabled={criarCategoria.isPending}>
+            <Plus className="h-4 w-4 mr-1" />
+            Adicionar
+          </Button>
         </div>
+      </div>
 
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando categorias...</p>
-        ) : isError ? (
-          <p className="text-sm text-destructive">Erro ao carregar categorias. Verifique a conexão e tente novamente.</p>
-        ) : categoriasUnificadas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma categoria disponível</p>
-        ) : (
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-muted-foreground">Categorias</h4>
-            {categoriasUnificadas.map((cat) => renderCategoriaLinha(cat.id))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando categorias...</p>
+      ) : isError ? (
+        <p className="text-sm text-destructive">Erro ao carregar categorias. Verifique a conexão e tente novamente.</p>
+      ) : categoriasUnificadas.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhuma categoria disponível</p>
+      ) : (
+        <div className="space-y-3">
+          {categoriasUnificadas.map((cat) => renderCategoriaLinha(cat.id))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -486,73 +439,106 @@ export default function Configuracoes() {
 
   return (
     <MainLayout title="Configurações">
-      <div className="space-y-6">
-        {/* Seção: Trocar Caixa (para Admin) */}
+      <Accordion type="multiple" className="space-y-4">
+        {/* Admin: Trocar Caixa */}
         {isAdmin && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-blue-600" />
-              <h2 className="text-xl font-semibold">Gerenciar Caixa</h2>
-            </div>
-            <TrocarCaixaCard />
-          </div>
+          <AccordionItem value="trocar-caixa" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-blue-600" />
+                <span className="text-lg font-semibold">Trocar de Caixa</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <TrocarCaixaSection />
+            </AccordionContent>
+          </AccordionItem>
         )}
 
-        {/* Seção: Controle de Acesso (Apenas Admin) */}
+        {/* Admin: Controle de Acesso */}
         {isAdmin && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-blue-600" />
-              <h2 className="text-xl font-semibold">Controle de Acesso</h2>
-            </div>
-            <GestaoUsuariosCard />
-          </div>
+          <AccordionItem value="controle-acesso" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-blue-600" />
+                <span className="text-lg font-semibold">Controle de Acesso</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <GestaoUsuariosCard />
+            </AccordionContent>
+          </AccordionItem>
         )}
 
-        {/* Seção: Categorias de Itens (Apenas Admin) */}
+        {/* Admin: Categorias de Itens */}
         {isAdmin && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Tags className="h-5 w-5 text-blue-600" />
-              <h2 className="text-xl font-semibold">Categorias de Itens</h2>
-            </div>
-            <ItemCategoriesCard />
-          </div>
+          <AccordionItem value="categorias" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Tags className="h-5 w-5 text-blue-600" />
+                <span className="text-lg font-semibold">Categorias de Itens</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <ItemCategoriesSection />
+            </AccordionContent>
+          </AccordionItem>
         )}
 
-        {/* Seção: Reconciliação de Caixa (Apenas Admin) */}
+        {/* Admin: Reconciliação */}
         {isAdmin && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-orange-600" />
-              <h2 className="text-xl font-semibold">Manutenção de Caixa</h2>
-            </div>
-            <ReconciliacaoCaixaCard />
-          </div>
+          <AccordionItem value="reconciliacao" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-orange-600" />
+                <span className="text-lg font-semibold">Manutenção de Caixa</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <ReconciliacaoCaixaCard />
+            </AccordionContent>
+          </AccordionItem>
         )}
 
-        {/* Seção: Saldos dos Caixas */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
-            <h2 className="text-xl font-semibold">Saldos Iniciais dos Caixas</h2>
-          </div>
-          <SaldosCaixasCard />
-        </div>
+        {/* Saldos dos Caixas */}
+        <AccordionItem value="saldos" className="border rounded-lg px-4">
+          <AccordionTrigger className="hover:no-underline">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5" />
+              <span className="text-lg font-semibold">Saldos Iniciais dos Caixas</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-4">
+            <SaldosCaixasSection />
+          </AccordionContent>
+        </AccordionItem>
 
-        {/* Seção: Gerenciar Equipe */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            <h2 className="text-xl font-semibold">Gerenciar Equipe</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <EquipeCard titulo="Vendedoras" funcao="Vendedora" />
-            <EquipeCard titulo="Avaliadoras" funcao="Avaliadora" />
-          </div>
-        </div>
-      </div>
+        {/* Gerenciar Equipe */}
+        <AccordionItem value="equipe" className="border rounded-lg px-4">
+          <AccordionTrigger className="hover:no-underline">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              <span className="text-lg font-semibold">Gerenciar Equipe</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Vendedoras</h3>
+                <EquipeSection funcao="Vendedora" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Avaliadoras</h3>
+                <EquipeSection funcao="Avaliadora" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Equipe de Marketing</h3>
+                <EquipeSection funcao="Marketing" />
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </MainLayout>
   );
 }

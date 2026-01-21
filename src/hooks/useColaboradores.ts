@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface Colaborador {
   id: string;
   nome: string;
-  funcao: "Vendedora" | "Avaliadora";
+  funcao: "Vendedora" | "Avaliadora" | "Marketing";
   ativo: boolean;
   created_at: string;
 }
@@ -25,7 +25,7 @@ export function useColaboradores() {
   });
 }
 
-export function useColaboradoresByFuncao(funcao: "Vendedora" | "Avaliadora") {
+export function useColaboradoresByFuncao(funcao: "Vendedora" | "Avaliadora" | "Marketing") {
   return useQuery({
     queryKey: ["colaboradores", funcao],
     queryFn: async () => {
@@ -46,7 +46,7 @@ export function useAddColaborador() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ nome, funcao }: { nome: string; funcao: "Vendedora" | "Avaliadora" }) => {
+    mutationFn: async ({ nome, funcao }: { nome: string; funcao: "Vendedora" | "Avaliadora" | "Marketing" }) => {
       const { data, error } = await supabase
         .from("colaboradores")
         .insert({ nome, funcao, ativo: true })

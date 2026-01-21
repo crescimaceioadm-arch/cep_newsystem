@@ -105,8 +105,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setTimeout(() => {
             fetchProfile(currentSession.user.id);
           }, 0);
+          try {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            localStorage.setItem('session_date', todayStr);
+          } catch {}
         } else {
           setProfile(null);
+          try {
+            localStorage.removeItem('session_date');
+          } catch {}
         }
       }
     );
@@ -118,9 +125,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (existingSession?.user) {
         fetchProfile(existingSession.user.id);
+        try {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          localStorage.setItem('session_date', todayStr);
+        } catch {}
       } else {
         // Sem usuário logado - define cargo padrão como admin para dev
         setProfile({ id: 'dev', cargo: 'admin' });
+        try {
+          localStorage.removeItem('session_date');
+        } catch {}
       }
       setLoading(false);
     });

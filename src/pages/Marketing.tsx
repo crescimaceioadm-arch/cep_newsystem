@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
+import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 
 type MarketingItem = {
   id: string;
@@ -34,7 +35,7 @@ type MarketingItem = {
 };
 
 const categoryOptions = ["Reels", "Divulgação", "Stories", "Feed", "Carrossel"];
-const responsavelOptions = ["Duda", "Rose", "Melissa", "Rayane"];
+
 
 // Tipos de postagem padrão (como na planilha)
 const tiposPostagemPadrao = [
@@ -66,6 +67,13 @@ type CelulaData = {
 export default function Marketing() {
   const { cargo } = useUser();
   const queryClient = useQueryClient();
+
+  // Fetch Marketing team dynamically
+  const { data: marketingTeam } = useColaboradoresByFuncao("Marketing");
+  const responsavelOptions = useMemo(() => 
+    marketingTeam?.map(m => m.nome) || [], 
+    [marketingTeam]
+  );
 
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedItem, setSelectedItem] = useState<MarketingItem | null>(null);
@@ -475,9 +483,13 @@ export default function Marketing() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos</SelectItem>
-                    {responsavelOptions.map(resp => (
-                      <SelectItem key={resp} value={resp}>{resp}</SelectItem>
-                    ))}
+                    {responsavelOptions.length === 0 ? (
+                      <SelectItem value="__none" disabled>Nenhum membro</SelectItem>
+                    ) : (
+                      responsavelOptions.map(resp => (
+                        <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -556,7 +568,7 @@ export default function Marketing() {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {weekDays.map(dia => {
               const dayKey = format(dia, "yyyy-MM-dd");
-              const tarefas = tarefasPorDia[dayKey] || [];
+              const tarefas = tarefasFiltradasPorDia[dayKey] || [];
               const isHoje = isSameDay(dia, new Date());
 
               return (
@@ -809,9 +821,13 @@ export default function Marketing() {
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {responsavelOptions.map(resp => (
-                    <SelectItem key={resp} value={resp}>{resp}</SelectItem>
-                  ))}
+                  {responsavelOptions.length === 0 ? (
+                    <SelectItem value="__none" disabled>Nenhum membro de Marketing</SelectItem>
+                  ) : (
+                    responsavelOptions.map(resp => (
+                      <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -982,9 +998,13 @@ export default function Marketing() {
                                         <SelectValue placeholder="Selecione" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {responsavelOptions.map(resp => (
-                                          <SelectItem key={resp} value={resp}>{resp}</SelectItem>
-                                        ))}
+                                        {responsavelOptions.length === 0 ? (
+                                          <SelectItem value="__none" disabled>Nenhum membro de Marketing</SelectItem>
+                                        ) : (
+                                          responsavelOptions.map(resp => (
+                                            <SelectItem key={resp} value={resp}>{resp}</SelectItem>
+                                          ))
+                                        )}
                                       </SelectContent>
                                     </Select>
                                   </div>

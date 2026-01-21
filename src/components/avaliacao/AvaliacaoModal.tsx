@@ -422,10 +422,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
                     const showValor = cat.requer_valor;
                     return (
                       <div key={cat.id} className="space-y-2 p-3 border rounded-lg bg-muted/40">
-                        <div className="flex justify-between items-center">
                           <Label>{cat.nome}</Label>
-                          <span className="text-[11px] text-muted-foreground uppercase">{cat.slug}</span>
-                        </div>
                         <Input
                           type="number"
                           min={0}
