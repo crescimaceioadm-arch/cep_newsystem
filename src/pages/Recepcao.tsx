@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAtendimentos, useDeleteAtendimento, useUpdateAtendimento } from "@/hooks/useAtendimentos";
 import { useUser } from "@/contexts/UserContext";
@@ -41,10 +42,13 @@ import { toast } from "sonner";
 import type { Atendimento } from "@/types/database";
 
 export default function Recepcao() {
-  const { isAdmin } = useUser();
+  const { isAdmin, cargo } = useUser();
   const { data: atendimentos, isLoading, error } = useAtendimentos();
   const { mutate: deleteAtendimento, isPending: deletando } = useDeleteAtendimento();
   const updateAtendimento = useUpdateAtendimento();
+  const navigate = useNavigate();
+  
+  console.log("[Recepcao] isAdmin:", isAdmin, "cargo:", cargo);
   const [novoModalOpen, setNovoModalOpen] = useState(false);
   const [finalizarModalOpen, setFinalizarModalOpen] = useState(false);
   const [atendimentoSelecionado, setAtendimentoSelecionado] = useState<Atendimento | null>(null);
@@ -149,10 +153,15 @@ export default function Recepcao() {
             <h2 className="text-2xl font-bold text-foreground">Fila de Avaliação</h2>
             <p className="text-muted-foreground">Gerencie a entrada de clientes</p>
           </div>
-          <Button onClick={() => setNovoModalOpen(true)} className="gap-2">
-            <UserPlus className="h-4 w-4" />
-            Nova Avaliação
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button variant="outline" onClick={() => navigate("/recepcao/clientes")}>Ranking de clientes</Button>
+            )}
+            <Button onClick={() => setNovoModalOpen(true)} className="gap-2">
+              <UserPlus className="h-4 w-4" />
+              Nova Avaliação
+            </Button>
+          </div>
         </div>
 
         {/* Tabela de Avaliações */}

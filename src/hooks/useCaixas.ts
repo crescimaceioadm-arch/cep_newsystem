@@ -615,20 +615,32 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
     queryFn: async (): Promise<ResumoVendasPorCaixa> => {
       const hoje = new Date().toISOString().split("T")[0];
 
-      const { data, error } = await supabase
+      // 🔍 DEBUG: Log do que estamos procurando
+      console.log("[useResumoVendasPorCaixa] Buscando vendas para caixa:", caixaNome, "data:", hoje);
+
+      // 1️⃣ Busca SEM filtro de caixa primeiro para ver todos os dados
+      const { data: todasVendas, error: erroTodas } = await supabase
         .from("vendas")
-        .select("*")
-        .eq("caixa_origem", caixaNome);
+        .select("id, caixa_origem, created_at, valor_total_venda, metodo_pagto_1, valor_pagto_1, metodo_pagto_2, valor_pagto_2, metodo_pagto_3, valor_pagto_3")
+        .gte("created_at", `${hoje}T00:00:00`)
+        .lte("created_at", `${hoje}T23:59:59`);
 
-      if (error) throw error;
+      if (erroTodas) {
+        console.error("[useResumoVendasPorCaixa] Erro ao buscar vendas:", erroTodas);
+        throw erroTodas;
+      }
 
-      // Filtrar vendas de hoje pelo campo data_venda (YYYY-MM-DD)
-      const vendasHoje = data?.filter((venda) => {
-        const dataVenda = venda.data_venda || venda.created_at || "";
-        return dataVenda.startsWith(hoje);
-      }) || [];
+      console.log("[useResumoVendasPorCaixa] Total de vendas do dia:", todasVendas?.length || 0);
+      console.log("[useResumoVendasPorCaixa] Caixas disponíveis:", [...new Set((todasVendas || []).map(v => v.caixa_origem))]);
 
-      console.log("Vendas encontradas para", caixaNome, "hoje:", vendasHoje);
+      // 2️⃣ Filtra por caixa (case-insensitive)
+      const vendasCaixa = (todasVendas || []).filter((venda) => {
+        const caixaVenda = (venda.caixa_origem || "").trim().toLowerCase();
+        const caixaBuscada = (caixaNome || "").trim().toLowerCase();
+        return caixaVenda === caixaBuscada;
+      });
+
+      console.log("[useResumoVendasPorCaixa] Vendas encontradas para", caixaNome, ":", vendasCaixa.length);
 
       let totalDinheiro = 0;
       let totalPix = 0;
@@ -637,9 +649,11 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
       let totalGiraCredito = 0;
 
       const processarPagamento = (metodo: string | null, valor: number | null) => {
-        if (!metodo || !valor) return;
+        if (!metodo || !valor || valor <= 0) return;
         
-        const metodoLower = metodo.toLowerCase();
+        const metodoLower = (metodo || "").trim().toLowerCase();
+        
+        console.log("[processarPagamento] Processando:", metodoLower, "Valor:", valor);
         
         if (metodoLower === "dinheiro") {
           totalDinheiro += valor;
@@ -647,23 +661,23 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
           totalPix += valor;
         } else if (metodoLower === "débito" || metodoLower === "debito") {
           totalDebito += valor;
-        } else if (metodoLower.includes("crédito") || metodoLower.includes("credito")) {
-          // Exclui "gira crédito" que é tratado separadamente
-          if (!metodoLower.includes("gira")) {
-            totalCredito += valor;
-          }
-        }
-        
-        if (metodoLower === "gira crédito" || metodoLower === "gira credito") {
+        } else if (metodoLower === "gira crédito" || metodoLower === "gira credito") {
           totalGiraCredito += valor;
+        } else if (metodoLower.includes("crédito") || metodoLower.includes("credito")) {
+          // Crédito comum
+          totalCredito += valor;
         }
       };
 
-      vendasHoje.forEach((venda) => {
+      vendasCaixa.forEach((venda) => {
+        console.log("[useResumoVendasPorCaixa] Processando venda:", venda.id);
         processarPagamento(venda.metodo_pagto_1, venda.valor_pagto_1);
         processarPagamento(venda.metodo_pagto_2, venda.valor_pagto_2);
         processarPagamento(venda.metodo_pagto_3, venda.valor_pagto_3);
       });
+
+      const totalGeral = totalDinheiro + totalPix + totalDebito + totalCredito + totalGiraCredito;
+      console.log("[useResumoVendasPorCaixa] RESULTADO:", { totalDinheiro, totalPix, totalDebito, totalCredito, totalGiraCredito, totalGeral });
 
       return {
         totalDinheiro,
@@ -671,7 +685,7 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
         totalDebito,
         totalCredito,
         totalGiraCredito,
-      totalGeral: totalDinheiro + totalPix + totalDebito + totalCredito + totalGiraCredito,
+        totalGeral,
       };
     },
   });

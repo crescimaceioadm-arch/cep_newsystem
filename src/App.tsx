@@ -20,6 +20,7 @@ import Configuracoes from "./pages/Configuracoes";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Marketing from "./pages/Marketing";
+import ClientesInsights from "./pages/ClientesInsights";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
                 <Route path="/recepcao" element={<RequireRole><Recepcao /></RequireRole>} />
                 <Route path="/avaliacao" element={<RequireRole><Avaliacao /></RequireRole>} />
                 <Route path="/atendimentos/historico" element={<RequireRole><HistoricoAtendimentos /></RequireRole>} />
+                <Route path="/recepcao/clientes" element={<RequireRole><ClientesInsights /></RequireRole>} />
                 <Route path="/vendas" element={<RequireRole><Vendas /></RequireRole>} />
                 <Route path="/vendas/historico" element={<RequireRole><VendasHistorico /></RequireRole>} />
                 <Route path="/financeiro" element={<RequireRole><Financeiro /></RequireRole>} />
