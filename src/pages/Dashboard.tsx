@@ -534,6 +534,7 @@ export default function Dashboard() {
       const finalizadosPeriodo = allAtendimentos.filter((a) => a.status === "finalizado");
 
       const ehDinheiro = (a: any) => classificarPagamento(a) === "dinheiro";
+      const ehGira = (a: any) => classificarPagamento(a) === "gira";
 
       // Classificação única por avaliação com precedência: Grandes > Enxoval > Brinquedos > Só roupas/sapatos > Outras > Outros
       const classificarAvaliacao = (a: any): string => {
@@ -562,18 +563,25 @@ export default function Dashboard() {
         gruposMap.set(cat, arr);
       });
 
-      const totalGrupo = (lista: any[]) =>
-        lista.filter(ehDinheiro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
+      const totalGrupo = (lista: any[], filtro: (a: any) => boolean) =>
+        lista.filter(filtro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
 
       const getAvaliacoesPorGrupo = (lista: any[]) =>
         lista.filter(ehDinheiro).map(a => ({
-          cliente: a.cliente_nome || "Sem nome",
-          data: a.hora_encerramento ? format(parseISO(a.hora_encerramento), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
+          cliente: a.nome_cliente || a.cliente_nome || "Sem nome",
+          data: a.hora_encerramento ? format(parseISO(a.hora_encerramento), "dd/MM/yyyy", { locale: ptBR }) : "",
           valor: Number(a.valor_total_negociado || 0),
           pagamento_1_metodo: a.pagamento_1_metodo,
           pagamento_2_metodo: a.pagamento_2_metodo,
           pagamento_3_metodo: a.pagamento_3_metodo,
-          pagamento_4_metodo: a.pagamento_4_metodo
+          pagamento_4_metodo: a.pagamento_4_metodo,
+          qtd_baby: a.qtd_baby || 0,
+          qtd_1_a_16: a.qtd_1_a_16 || 0,
+          qtd_calcados: a.qtd_calcados || 0,
+          qtd_brinquedos: a.qtd_brinquedos || 0,
+          qtd_itens_medios: a.qtd_itens_medios || 0,
+          qtd_itens_grandes: a.qtd_itens_grandes || 0,
+          descricao_itens: a.descricao_itens || ""
         }));
 
       // Ordem solicitada de exibição
@@ -590,14 +598,19 @@ export default function Dashboard() {
         const lista = gruposMap.get(categoria) || [];
         return {
           categoria,
-          total: totalGrupo(lista),
-          quantidade: lista.filter(ehDinheiro).length,
-          detalhes: getAvaliacoesPorGrupo(lista)
+          totalDinheiro: totalGrupo(lista, ehDinheiro),
+          qtdDinheiro: lista.filter(ehDinheiro).length,
+          detalhes: getAvaliacoesPorGrupo(lista),
+          totalGira: totalGrupo(lista, ehGira),
+          qtdGira: lista.filter(ehGira).length,
         };
       });
 
-      const totalGeral = rows.reduce((acc, r) => acc + r.total, 0);
-      return { rows, totalGeral };
+      const totalGeralDinheiro = rows.reduce((acc, r) => acc + r.totalDinheiro, 0);
+      const totalGeralGira = rows.reduce((acc, r) => acc + r.totalGira, 0);
+      const totalQtdDinheiro = rows.reduce((acc, r) => acc + r.qtdDinheiro, 0);
+      const totalQtdGira = rows.reduce((acc, r) => acc + r.qtdGira, 0);
+      return { rows, totalGeralDinheiro, totalGeralGira, totalQtdDinheiro, totalQtdGira };
     }, [allAtendimentos]);
 
 
@@ -1066,6 +1079,8 @@ export default function Dashboard() {
                       <TableHead>Categoria</TableHead>
                       <TableHead className="text-right">Total em dinheiro</TableHead>
                       <TableHead className="text-right">Nº avaliações</TableHead>
+                      <TableHead className="text-right">Total Gira Crédito</TableHead>
+                      <TableHead className="text-right">Nº avaliações Gira</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1086,70 +1101,76 @@ export default function Dashboard() {
                           <TableRow key={row.categoria} className="cursor-pointer hover:bg-gray-50" onClick={toggleExpanded}>
                             <TableCell className="flex items-center gap-2">
                               <ChevronDown 
-                                                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                                            />
-                                                            {row.categoria}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-semibold">{formatCurrency(row.total)}</TableCell>
-                                                        <TableCell className="text-right">{row.quantidade}</TableCell>
-                                                    </TableRow>
-                                                    {isExpanded && row.detalhes && row.detalhes.length > 0 && (
-                                                        <TableRow className="bg-gray-50/50">
-                                                            <TableCell colSpan={3} className="p-4">
-                                                                <div className="space-y-3">
-                                                                    <h4 className="font-semibold text-sm text-gray-700">Avaliações nesta categoria:</h4>
-                                                                    <div className="overflow-x-auto">
-                                                                        <Table className="text-sm">
-                                                                            <TableHeader>
-                                                                                <TableRow className="bg-white border-b border-gray-200">
-                                                                                    <TableHead className="text-xs">Cliente</TableHead>
-                                                                                    <TableHead className="text-xs">Data</TableHead>
-                                                                                    <TableHead className="text-xs">Métodos de Pagamento</TableHead>
-                                                                                    <TableHead className="text-xs text-right">Valor</TableHead>
-                                                                                </TableRow>
-                                                                            </TableHeader>
-                                                                            <TableBody>
-                                                                                {row.detalhes.map((detalhe, idx) => (
-                                                                                    <TableRow key={idx} className="border-b border-gray-100 hover:bg-gray-100/50">
-                                                                                        <TableCell className="text-xs text-gray-700">{detalhe.cliente}</TableCell>
-                                                                                        <TableCell className="text-xs text-gray-700">{detalhe.data}</TableCell>
-                                                                                        <TableCell className="text-xs text-gray-700">
-                                                                                            <div className="space-y-1">
-                                                                                                {detalhe.pagamento_1_metodo && <div>1: {detalhe.pagamento_1_metodo}</div>}
-                                                                                                {detalhe.pagamento_2_metodo && <div>2: {detalhe.pagamento_2_metodo}</div>}
-                                                                                                {detalhe.pagamento_3_metodo && <div>3: {detalhe.pagamento_3_metodo}</div>}
-                                                                                                {detalhe.pagamento_4_metodo && <div>4: {detalhe.pagamento_4_metodo}</div>}
-                                                                                            </div>
-                                                                                        </TableCell>
-                                                                                        <TableCell className="text-xs text-right font-medium text-gray-800">{formatCurrency(detalhe.valor)}</TableCell>
-                                                                                    </TableRow>
-                                                                                ))}
-                                                                                <TableRow className="bg-gray-100 font-semibold">
-                                                                                    <TableCell colSpan={3} className="text-xs">Subtotal da categoria</TableCell>
-                                                                                    <TableCell className="text-xs text-right">{formatCurrency(row.total)}</TableCell>
-                                                                                </TableRow>
-                                                                            </TableBody>
-                                                                        </Table>
-                                                                    </div>
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    )}
-                                                    {isExpanded && (!row.detalhes || row.detalhes.length === 0) && (
-                                                        <TableRow className="bg-gray-50/50">
-                                                            <TableCell colSpan={3} className="p-4 text-center text-sm text-gray-500">
-                                                                Nenhuma avaliação em dinheiro nesta categoria no período selecionado.
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    )}
-                                                </>
-                                            );
-                                        })}
-                                        <TableRow>
-                                            <TableCell className="font-medium">Total</TableCell>
-                                            <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeral)}</TableCell>
-                                            <TableCell className="text-right">{tabelaGastos.rows.reduce((a, r) => a + r.quantidade, 0)}</TableCell>
+                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                              />
+                              {row.categoria}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">{formatCurrency(row.totalDinheiro)}</TableCell>
+                            <TableCell className="text-right">{row.qtdDinheiro}</TableCell>
+                            <TableCell className="text-right font-semibold text-yellow-700">{formatCurrency(row.totalGira)}</TableCell>
+                            <TableCell className="text-right">{row.qtdGira}</TableCell>
+                          </TableRow>
+                          {isExpanded && row.detalhes && row.detalhes.length > 0 && (
+                            <TableRow className="bg-gray-50/50">
+                              <TableCell colSpan={5} className="p-4">
+                                <div className="space-y-3">
+                                  <h4 className="font-semibold text-sm text-gray-700">Avaliações em dinheiro nesta categoria:</h4>
+                                  <div className="overflow-x-auto">
+                                    <Table className="text-sm">
+                                      <TableHeader>
+                                        <TableRow className="bg-white border-b border-gray-200">
+                                          <TableHead className="text-xs">Cliente</TableHead>
+                                          <TableHead className="text-xs">Data</TableHead>
+                                          <TableHead className="text-xs">Qtd. Itens</TableHead>
+                                          <TableHead className="text-xs">Descrição dos Itens</TableHead>
+                                          <TableHead className="text-xs text-right">Valor</TableHead>
                                         </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {row.detalhes.map((detalhe, idx) => (
+                                          <TableRow key={idx} className="border-b border-gray-100 hover:bg-gray-100/50">
+                                            <TableCell className="text-xs text-gray-700">{detalhe.cliente}</TableCell>
+                                            <TableCell className="text-xs text-gray-700">{detalhe.data}</TableCell>
+                                            <TableCell className="text-xs text-gray-700">
+                                              {detalhe.qtd_baby > 0 && <div>Baby: {detalhe.qtd_baby}</div>}
+                                              {detalhe.qtd_1_a_16 > 0 && <div>1 a 16: {detalhe.qtd_1_a_16}</div>}
+                                              {detalhe.qtd_calcados > 0 && <div>Calçados: {detalhe.qtd_calcados}</div>}
+                                              {detalhe.qtd_brinquedos > 0 && <div>Brinquedos: {detalhe.qtd_brinquedos}</div>}
+                                              {detalhe.qtd_itens_medios > 0 && <div>Enxoval: {detalhe.qtd_itens_medios}</div>}
+                                              {detalhe.qtd_itens_grandes > 0 && <div>Grandes: {detalhe.qtd_itens_grandes}</div>}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-gray-700">{detalhe.descricao_itens}</TableCell>
+                                            <TableCell className="text-xs text-right font-medium text-gray-800">{formatCurrency(detalhe.valor)}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                        <TableRow className="bg-gray-100 font-semibold">
+                                          <TableCell colSpan={4} className="text-xs">Subtotal da categoria</TableCell>
+                                          <TableCell className="text-xs text-right">{formatCurrency(row.totalDinheiro)}</TableCell>
+                                        </TableRow>
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {isExpanded && (!row.detalhes || row.detalhes.length === 0) && (
+                            <TableRow className="bg-gray-50/50">
+                              <TableCell colSpan={5} className="p-4 text-center text-sm text-gray-500">
+                                Nenhuma avaliação em dinheiro nesta categoria no período selecionado.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })}
+                    <TableRow>
+                      <TableCell className="font-medium">Total</TableCell>
+                      <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeralDinheiro)}</TableCell>
+                      <TableCell className="text-right">{tabelaGastos.totalQtdDinheiro}</TableCell>
+                      <TableCell className="text-right font-bold text-yellow-700">{formatCurrency(tabelaGastos.totalGeralGira)}</TableCell>
+                      <TableCell className="text-right">{tabelaGastos.totalQtdGira}</TableCell>
+                    </TableRow>
                                     </TableBody>
                                 </Table>
                             </div>
