@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRelatorioMovimentacoesManual } from "@/hooks/useCaixas";
+import { useAtendimentosDinheiroFinalizados } from "@/hooks/useAtendimentosDinheiroFinalizados";
 import { Search, ArrowDown, ArrowUp, ArrowLeftRight, FileText, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -25,15 +26,25 @@ export function RelatorioMovimentacoesCard() {
     date.setDate(date.getDate() - 7);
     return date.toISOString().split("T")[0];
   });
+  const [dataFim, setDataFim] = useState(() => {
+    // Padrão: hoje
+    const date = new Date();
+    return date.toISOString().split("T")[0];
+  });
   const [termoBusca, setTermoBusca] = useState("");
   const [termoBuscaAtivo, setTermoBuscaAtivo] = useState("");
   const [tiposAtivos, setTiposAtivos] = useState<string[]>(["entrada", "saida", "transferencia_entre_caixas"]);
 
+
   const { data: movimentacoes, isLoading, error } = useRelatorioMovimentacoesManual(
     dataInicio,
+    dataFim,
     termoBuscaAtivo,
     tiposAtivos
   );
+
+  // Hook para avaliações pagas em dinheiro e finalizadas
+  const { data: avaliacoesDinheiro, isLoading: loadingAvaliacao } = useAtendimentosDinheiroFinalizados(dataInicio, dataFim);
 
   const handleBuscar = () => {
     setTermoBuscaAtivo(termoBusca);
@@ -58,34 +69,55 @@ export function RelatorioMovimentacoesCard() {
   };
 
   const exportarCSV = () => {
-    if (!movimentacoes || movimentacoes.length === 0) {
-      alert("Não há dados para exportar");
-      return;
-    }
+    // Unifica saídas manuais e avaliações pagas em dinheiro
+    const saidas = (movimentacoes || []).filter(mov => mov.tipo === "saida");
+    const avaliacoes = (avaliacoesDinheiro || []).map(att => {
+      // Data: usar hora_encerramento ou hora_chegada
+      const data = format(new Date(att.hora_encerramento || att.hora_chegada), "dd/MM/yyyy HH:mm", { locale: ptBR });
+      // Descrição: "Pagamento avaliação - Cliente"
+      const descricao = `Pagamento avaliação - ${(att.nome_cliente || "Cliente").replace(/,/g, ";")}`;
+      // Valor: soma dos pagamentos em dinheiro (negativo, pois é saída)
+      let valor = 0;
+      if (att.pagamento_1_metodo?.toLowerCase() === "dinheiro") valor += att.pagamento_1_valor || 0;
+      if (att.pagamento_2_metodo?.toLowerCase() === "dinheiro") valor += att.pagamento_2_valor || 0;
+      if (att.pagamento_3_metodo?.toLowerCase() === "dinheiro") valor += att.pagamento_3_valor || 0;
+      return {
+        data,
+        descricao,
+        valor: -Math.abs(valor),
+      };
+    });
+
+    // Linhas de saídas manuais
+    const linhasSaidas = saidas.map((mov) => {
+      const data = format(new Date(mov.data_hora), "dd/MM/yyyy HH:mm", { locale: ptBR });
+      const descricao = (mov.motivo || "").replace(/,/g, ";").replace(/\n/g, " ");
+      const valor = -Math.abs(mov.valor).toFixed(2);
+      return `${data},"${descricao}",${valor}`;
+    });
+
+    // Linhas de avaliações
+    const linhasAvaliacoes = avaliacoes.map((a) => {
+      return `${a.data},"${a.descricao}",${a.valor.toFixed(2)}`;
+    });
 
     // Cabeçalho do CSV
     const cabecalho = "Data,Descrição,Valor\n";
-
-    // Linhas de dados
-    const linhas = movimentacoes.map((mov) => {
-      const data = format(new Date(mov.data_hora), "dd/MM/yyyy HH:mm", { locale: ptBR });
-      const descricao = (mov.motivo || "").replace(/,/g, ";").replace(/\n/g, " "); // Remove vírgulas e quebras de linha
-      const valor = mov.tipo === "saida" ? `-${mov.valor.toFixed(2)}` : mov.valor.toFixed(2);
-      return `${data},"${descricao}",${valor}`;
-    }).join("\n");
-
-    // Criar o conteúdo CSV
+    const linhas = [...linhasSaidas, ...linhasAvaliacoes].sort().join("\n");
     const csvContent = cabecalho + linhas;
 
-    // Criar o blob e fazer download
+    // Nome do arquivo com datas do filtro
+    const dataInicioStr = dataInicio || "inicio";
+    const dataFimStr = dataFim || "fim";
+    const nomeArquivo = `movimentacoes_saidas_avaliacoes_${dataInicioStr}_a_${dataFimStr}.csv`;
+
+    // Download
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    
     link.setAttribute("href", url);
-    link.setAttribute("download", `movimentacoes_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`);
+    link.setAttribute("download", nomeArquivo);
     link.style.visibility = "hidden";
-    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -149,22 +181,26 @@ export function RelatorioMovimentacoesCard() {
               Consulta de entradas, saídas e transferências registradas manualmente
             </CardDescription>
           </div>
-          <Button 
-            onClick={exportarCSV} 
-            variant="outline" 
-            size="sm"
-            disabled={!movimentacoes || movimentacoes.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
+          <div className="flex flex-col items-end">
+            <Button 
+              onClick={exportarCSV} 
+              variant="outline" 
+              size="sm"
+              disabled={!movimentacoes || movimentacoes.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              CSV avaliações e movimentações em dinheiro
+            </Button>
+            {/* Se o texto do botão ficar muito grande, pode-se optar por um comentário explicativo abaixo: */}
+            {/* <span className="text-xs text-muted-foreground mt-1">Inclui saídas manuais e avaliações pagas em dinheiro</span> */}
+          </div>
         </div>
       </CardHeader>
 
       <CardContent>
         {/* Filtros */}
         <div className="space-y-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Data Inicial */}
             <div className="space-y-2">
               <Label htmlFor="dataInicio">Data Inicial</Label>
@@ -173,6 +209,16 @@ export function RelatorioMovimentacoesCard() {
                 type="date"
                 value={dataInicio}
                 onChange={(e) => setDataInicio(e.target.value)}
+              />
+            </div>
+            {/* Data Final */}
+            <div className="space-y-2">
+              <Label htmlFor="dataFim">Data Final</Label>
+              <Input
+                id="dataFim"
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
               />
             </div>
 

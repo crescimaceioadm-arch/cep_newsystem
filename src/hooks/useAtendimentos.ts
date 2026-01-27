@@ -203,6 +203,7 @@ export function useFinalizarAtendimento() {
 
         if (caixaError) {
           console.error("[useFinalizarAtendimento] Erro ao buscar caixa Avaliação:", caixaError);
+          toast.error("⚠️ Avaliação finalizada, mas não foi possível registrar no caixa. Contate o administrador.");
           // Não lançar erro para não impedir a finalização do atendimento
         } else if (caixaAvaliacao) {
           // Registrar movimentação como SAÍDA (origem é o caixa Avaliação)
@@ -218,6 +219,7 @@ export function useFinalizarAtendimento() {
 
           if (movError) {
             console.error("[useFinalizarAtendimento] Erro ao registrar movimentação:", movError);
+            toast.error("⚠️ Avaliação finalizada, mas não foi possível registrar no caixa. Contate o administrador.");
           } else {
             console.log("[useFinalizarAtendimento] ✅ Movimentação registrada com sucesso no caixa Avaliação");
           }

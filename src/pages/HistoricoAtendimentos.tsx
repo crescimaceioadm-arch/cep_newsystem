@@ -236,15 +236,19 @@ export default function HistoricoAtendimentos() {
     // Criar o conteúdo CSV
     const csvContent = cabecalho + linhas;
 
+    // Gerar datas do filtro para nome do arquivo
+    let dataInicioStr = filtroDataInicio ? format(filtroDataInicio, "yyyy-MM-dd") : "inicio";
+    let dataFimStr = filtroDataFim ? format(filtroDataFim, "yyyy-MM-dd") : "fim";
+
     // Criar o blob e fazer download
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    
+
     link.setAttribute("href", url);
-    link.setAttribute("download", `historico_avaliacoes_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`);
+    link.setAttribute("download", `historico_avaliacoes_${dataInicioStr}_a_${dataFimStr}.csv`);
     link.style.visibility = "hidden";
-    
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

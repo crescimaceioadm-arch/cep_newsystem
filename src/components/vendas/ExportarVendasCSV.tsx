@@ -241,11 +241,21 @@ export function ExportarVendasCSV() {
         type: "text/csv;charset=utf-8;",
       });
 
+      // Gerar datas do filtro para nome do arquivo
+      let dataInicioStr = mes === "all" ? `${ano}-01-01` : `${ano}-${mes}-01`;
+      let dataFimStr;
+      if (mes === "all") {
+        dataFimStr = `${ano}-12-31`;
+      } else {
+        const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate();
+        dataFimStr = `${ano}-${mes}-${ultimoDia.toString().padStart(2, "0")}`;
+      }
+
       // Download
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Input_Fat_Controle_Financeiro_${ano}.csv`;
+      link.download = `historico_vendas_${dataInicioStr}_a_${dataFimStr}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -266,7 +276,7 @@ export function ExportarVendasCSV() {
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <FileSpreadsheet className="h-4 w-4" />
-          Exportar CSV
+            Exportar CSV Faturamento total
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">

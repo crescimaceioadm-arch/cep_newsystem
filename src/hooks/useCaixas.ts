@@ -1070,11 +1070,12 @@ export function useRejeitarFechamento() {
  */
 export function useRelatorioMovimentacoesManual(
   dataInicio?: string,
+  dataFim?: string,
   termoBusca?: string,
   tiposFiltro?: string[]
 ) {
   return useQuery({
-    queryKey: ["relatorio_movimentacoes_manual", dataInicio, termoBusca, tiposFiltro],
+    queryKey: ["relatorio_movimentacoes_manual", dataInicio, dataFim, termoBusca, tiposFiltro],
     queryFn: async () => {
       // Determinar tipos a buscar
       const tiposBusca = tiposFiltro && tiposFiltro.length > 0 
@@ -1095,6 +1096,11 @@ export function useRelatorioMovimentacoesManual(
       if (dataInicio) {
         const dataInicioTimestamp = new Date(dataInicio + "T00:00:00").toISOString();
         query = query.gte("data_hora", dataInicioTimestamp);
+      }
+      // Filtro por data final
+      if (dataFim) {
+        const dataFimTimestamp = new Date(dataFim + "T23:59:59").toISOString();
+        query = query.lte("data_hora", dataFimTimestamp);
       }
 
       // Filtro por termo de busca (case-insensitive, ignora acentos)
