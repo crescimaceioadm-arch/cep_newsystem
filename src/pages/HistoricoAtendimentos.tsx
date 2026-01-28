@@ -43,7 +43,7 @@ import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
 import { ClipboardList, CalendarIcon, RefreshCw, Trash2, Eye, Pencil, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, convertToLocalTime } from "@/lib/utils";
 import { toast } from "sonner";
 
 type StatusAtendimento = 'aguardando' | 'em_avaliacao' | 'aguardando_pagamento' | 'finalizado' | 'recusado';
@@ -70,7 +70,7 @@ export default function HistoricoAtendimentos() {
   const atendimentosFiltrados = atendimentos?.filter((atendimento) => {
     // Filtro por período
     if (filtroDataInicio || filtroDataFim) {
-      const dataAtendimento = new Date(atendimento.hora_chegada || atendimento.created_at || "");
+      const dataAtendimento = convertToLocalTime(atendimento.hora_chegada || atendimento.created_at) || new Date();
       
       if (filtroDataInicio) {
         const inicio = new Date(filtroDataInicio);
@@ -198,6 +198,16 @@ export default function HistoricoAtendimentos() {
       { label: "Itens Médios", qtd: atendimento.qtd_itens_medios },
       { label: "Itens Grandes", qtd: atendimento.qtd_itens_grandes },
     ];
+
+    // Adicionar itens dinâmicos se existirem
+    if (atendimento.itens && Array.isArray(atendimento.itens)) {
+      atendimento.itens.forEach((item: any) => {
+        itens.push({
+          label: item.categoria?.nome || 'Item',
+          qtd: item.quantidade
+        });
+      });
+    }
 
     return itens.filter((i) => (i.qtd ?? 0) > 0);
   };

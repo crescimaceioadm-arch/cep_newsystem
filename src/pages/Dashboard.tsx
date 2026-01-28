@@ -8,6 +8,7 @@ import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard,
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoque } from "@/hooks/useEstoque";
 import { useUser } from "@/contexts/UserContext";
+import { convertToLocalTime } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -152,6 +153,31 @@ export default function Dashboard() {
         .gte("hora_encerramento", inicioMes.toISOString())
         .lte("hora_encerramento", endOfDay(fimMes).toISOString());
 
+      // 2b. Buscar itens de todas as avaliações (para classificação por bolsa/fralda)
+      const { data: itens } = await supabase
+        .from("atendimento_itens")
+        .select("*, item_categories(id, slug, nome)");
+
+      const itensByAtendimento = new Map<string, any[]>();
+      (itens || []).forEach((it: any) => {
+        const list = itensByAtendimento.get(it.atendimento_id) || [];
+        list.push({
+          id: it.id,
+          categoria_id: it.categoria_id,
+          quantidade: it.quantidade,
+          valor_total: it.valor_total,
+          categoria: it.item_categories,
+        });
+        itensByAtendimento.set(it.atendimento_id, list);
+      });
+
+      // Mapear atendimentos com seus itens
+      const mapearComItens = (lista: any[]) =>
+        (lista || []).map((a: any) => ({
+          ...a,
+          itens: itensByAtendimento.get(a.id) || [],
+        }));
+
       // 3. Busca Vendas (Novo código)
       const { data: vendas } = await supabase
         .from("vendas")
@@ -159,8 +185,8 @@ export default function Dashboard() {
                 .gte("created_at", inicio.toISOString())
                 .lte("created_at", endOfDay(fim).toISOString());
 
-    setAllAtendimentos([...(atendFinalizados || []), ...(atendRecusados || []), ...(atendOutros || [])]);
-      setAllAtendimentosMesInteiro(atendFinalizadosMes || []); // Novo: sempre o mês inteiro
+    setAllAtendimentos([...mapearComItens(atendFinalizados), ...mapearComItens(atendRecusados), ...mapearComItens(atendOutros)]);
+      setAllAtendimentosMesInteiro(mapearComItens(atendFinalizadosMes)); // Novo: sempre o mês inteiro
       setAllVendas(vendas || []);
       setLoading(false);
     }
@@ -454,7 +480,8 @@ export default function Dashboard() {
     // === PICOS DE VENDAS POR HORÁRIO ===
     const vendasPorHora = new Map();
     allVendas.forEach(venda => {
-      const hora = new Date(venda.created_at).getHours();
+      const dataLocal = convertToLocalTime(venda.created_at);
+      const hora = dataLocal ? dataLocal.getHours() : 0;
       const faixaHoraria = `${hora}h`;
       const valor = Number(venda.valor_total_venda || 0);
       vendasPorHora.set(faixaHoraria, (vendasPorHora.get(faixaHoraria) || 0) + valor);
@@ -494,7 +521,8 @@ export default function Dashboard() {
   const picosHorariosFiltrados = useMemo(() => {
     const vendasPorHora = new Map();
     allVendas.forEach(venda => {
-      const hora = new Date(venda.created_at).getHours();
+      const dataLocal = convertToLocalTime(venda.created_at);
+      const hora = dataLocal ? dataLocal.getHours() : 0;
       const faixaHoraria = `${hora}h`;
       const valor = Number(venda.valor_total_venda || 0);
       vendasPorHora.set(faixaHoraria, (vendasPorHora.get(faixaHoraria) || 0) + valor);
@@ -536,20 +564,31 @@ export default function Dashboard() {
       const ehDinheiro = (a: any) => classificarPagamento(a) === "dinheiro";
       const ehGira = (a: any) => classificarPagamento(a) === "gira";
 
-      // Classificação única por avaliação com precedência: Grandes > Enxoval > Brinquedos > Só roupas/sapatos > Outras > Outros
+      // Classificação única por avaliação com precedência: Grandes > Enxoval > Brinquedos > Bolsa/Fralda > Só roupas/sapatos > Outras > Outros
       const classificarAvaliacao = (a: any): string => {
         const hasGrandes = (a.qtd_itens_grandes || 0) > 0;
         const hasEnxoval = (a.qtd_itens_medios || 0) > 0; // Enxoval
         const hasBrinquedos = (a.qtd_brinquedos || 0) > 0;
         const roupasSapatosQtd = (a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0);
         const hasRoupasOuSapatos = roupasSapatosQtd > 0;
+        
+        // Verificar itens dinâmicos (bolsa, fralda, etc.)
+        let hasBolsaOuFralda = false;
+        if (a.itens && Array.isArray(a.itens)) {
+          hasBolsaOuFralda = a.itens.some((item: any) => {
+            const cat = item.categoria;
+            const slug = cat?.slug || "";
+            return slug.includes("bolsa") || slug.includes("fralda");
+          });
+        }
 
-        const hasQualquerItem = hasGrandes || hasEnxoval || hasBrinquedos || hasRoupasOuSapatos;
+        const hasQualquerItem = hasGrandes || hasEnxoval || hasBrinquedos || hasRoupasOuSapatos || hasBolsaOuFralda;
 
         if (!hasQualquerItem) return "Outros (sem item registrado)";
         if (hasGrandes) return "Com Itens grandes";
         if (hasEnxoval) return "Com Enxoval";
         if (hasBrinquedos) return "Com Brinquedos";
+        if (hasBolsaOuFralda) return "Bolsa/Fralda";
         if (hasRoupasOuSapatos) return "Só roupas/sapatos";
         return "Com outras categorias";
       };
@@ -581,7 +620,8 @@ export default function Dashboard() {
           qtd_brinquedos: a.qtd_brinquedos || 0,
           qtd_itens_medios: a.qtd_itens_medios || 0,
           qtd_itens_grandes: a.qtd_itens_grandes || 0,
-          descricao_itens: a.descricao_itens || ""
+          itens: a.itens || [],
+          descricao_itens: a.descricao_itens_extra || ""
         }));
 
       // Ordem solicitada de exibição
@@ -590,8 +630,8 @@ export default function Dashboard() {
         "Com Itens grandes",
         "Com Enxoval",
         "Com Brinquedos",
+        "Bolsa/Fralda",
         "Com outras categorias",
-        "Outros (sem item registrado)",
       ];
 
       const rows = order.map(categoria => {
@@ -1137,7 +1177,14 @@ export default function Dashboard() {
                                               {detalhe.qtd_calcados > 0 && <div>Calçados: {detalhe.qtd_calcados}</div>}
                                               {detalhe.qtd_brinquedos > 0 && <div>Brinquedos: {detalhe.qtd_brinquedos}</div>}
                                               {detalhe.qtd_itens_medios > 0 && <div>Enxoval: {detalhe.qtd_itens_medios}</div>}
-                                              {detalhe.qtd_itens_grandes > 0 && <div>Grandes: {detalhe.qtd_itens_grandes}</div>}
+                                              {detalhe.qtd_itens_grandes > 0 && <div>Itens Grandes: {detalhe.qtd_itens_grandes}</div>}
+                                              {Array.isArray(detalhe.itens) && detalhe.itens.map((item: any, idx: number) => {
+                                                const slug = item.categoria?.slug || "";
+                                                const isCategoryLegacy = ["baby", "1a16", "calcados", "brinquedos", "itens_medios", "itens_grandes"].includes(slug);
+                                                return !isCategoryLegacy && item?.quantidade > 0 && (
+                                                  <div key={idx}>{item.categoria?.nome || 'Item'}: {item.quantidade}</div>
+                                                );
+                                              })}
                                             </TableCell>
                                             <TableCell className="text-xs text-gray-700">{detalhe.descricao_itens}</TableCell>
                                             <TableCell className="text-xs text-right font-medium text-gray-800">{formatCurrency(detalhe.valor)}</TableCell>
@@ -1463,7 +1510,7 @@ export default function Dashboard() {
                                 {/* Quadro de Gasto em dinheiro por tipo de avaliação */}
                                 <Card className="mt-6 border shadow">
                                   <CardHeader>
-                                    <CardTitle className="text-base font-bold">Gasto em dinheiro por tipo de avaliação</CardTitle>
+                                    <CardTitle className="text-base font-bold">Avaliações por tipo de pagamento e itens</CardTitle>
                                     <div className="text-sm text-muted-foreground">Período: {periodo?.from && periodo?.to ? `${format(periodo.from, "dd/MM/yyyy", { locale: ptBR })} — ${format(periodo.to, "dd/MM/yyyy", { locale: ptBR })}` : "Mês atual"}</div>
                                   </CardHeader>
                                   <CardContent>

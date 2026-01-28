@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useVendasHistorico } from "@/hooks/useVendasHistorico";
+import { convertToLocalTime } from "@/lib/utils";
 
 export function ExportarCartoesCSV({ vendasFiltradas }: { vendasFiltradas: any[] }) {
   const exportar = () => {
@@ -21,13 +22,20 @@ export function ExportarCartoesCSV({ vendasFiltradas }: { vendasFiltradas: any[]
       pagamentos.forEach((p) => {
         if (!p.metodo || !p.valor || p.valor <= 0) return;
         const metodoNorm = (p.metodo || "").toLowerCase();
+        // Excluir "gira crédito" - incluir apenas crédito e débito
+        if (
+          metodoNorm.includes("gira")
+        ) {
+          return; // pula "gira crédito"
+        }
         if (
           metodoNorm.includes("credito") ||
           metodoNorm.includes("crédito") ||
           metodoNorm.includes("debito") ||
           metodoNorm.includes("débito")
         ) {
-          const data = format(new Date(venda.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR });
+          const dataLocal = convertToLocalTime(venda.created_at);
+          const data = dataLocal ? format(dataLocal, "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-";
           const forma = p.metodo;
           const bandeira = p.bandeira || "-";
           const valor = p.valor.toFixed(2).replace(".", ",");

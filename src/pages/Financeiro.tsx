@@ -62,6 +62,7 @@ import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, Trend
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { convertToLocalTime } from "@/lib/utils";
 
 // Componente para Card de Caixa com saldo final calculado
 function CaixaCard({ 
@@ -1062,7 +1063,10 @@ export default function Financeiro() {
                               return (
                                 <TableRow key={mov.id} className="hover:bg-gray-50">
                                   <TableCell className="whitespace-nowrap">
-                                    {mov.data_hora ? format(new Date(mov.data_hora), "dd/MM HH:mm", { locale: ptBR }) : "-"}
+                                    {mov.data_hora ? (() => {
+                                      const dataLocal = convertToLocalTime(mov.data_hora);
+                                      return dataLocal ? format(dataLocal, "dd/MM HH:mm", { locale: ptBR }) : "-";
+                                    })() : "-"}
                                   </TableCell>
                                   <TableCell className="font-medium">{descricao}</TableCell>
                                   <TableCell className="text-sm text-muted-foreground max-w-xs truncate">

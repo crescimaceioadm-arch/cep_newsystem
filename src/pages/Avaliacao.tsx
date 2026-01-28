@@ -14,6 +14,7 @@ import {
 import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
 import { Atendimento } from "@/types/database";
 import { ClientePreferenciaPaymentBadge } from "@/components/ClientePreferenciaPaymentBadge";
+import { convertToLocalTime } from "@/lib/utils";
 
 export default function Avaliacao() {
   const { data, isLoading, error } = useAtendimentosByStatus("aguardando_avaliacao");
@@ -62,10 +63,13 @@ export default function Avaliacao() {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {new Date(a.hora_chegada).toLocaleTimeString("pt-BR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {(() => {
+                        const dataLocal = convertToLocalTime(a.hora_chegada);
+                        return dataLocal ? dataLocal.toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }) : "-";
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

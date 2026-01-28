@@ -18,6 +18,7 @@ import { useAtendimentosDinheiroFinalizados } from "@/hooks/useAtendimentosDinhe
 import { Search, ArrowDown, ArrowUp, ArrowLeftRight, FileText, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { convertToLocalTime } from "@/lib/utils";
 
 export function RelatorioMovimentacoesCard() {
   const [dataInicio, setDataInicio] = useState(() => {
@@ -73,7 +74,8 @@ export function RelatorioMovimentacoesCard() {
     const saidas = (movimentacoes || []).filter(mov => mov.tipo === "saida");
     const avaliacoes = (avaliacoesDinheiro || []).map(att => {
       // Data: usar hora_encerramento ou hora_chegada
-      const data = format(new Date(att.hora_encerramento || att.hora_chegada), "dd/MM/yyyy HH:mm", { locale: ptBR });
+      const dataLocal = convertToLocalTime(att.hora_encerramento || att.hora_chegada) || new Date();
+      const data = format(dataLocal, "dd/MM/yyyy HH:mm", { locale: ptBR });
       // Descrição: "Pagamento avaliação - Cliente"
       const descricao = `Pagamento avaliação - ${(att.nome_cliente || "Cliente").replace(/,/g, ";")}`;
       // Valor: soma dos pagamentos em dinheiro (negativo, pois é saída)
@@ -90,7 +92,8 @@ export function RelatorioMovimentacoesCard() {
 
     // Linhas de saídas manuais
     const linhasSaidas = saidas.map((mov) => {
-      const data = format(new Date(mov.data_hora), "dd/MM/yyyy HH:mm", { locale: ptBR });
+      const dataLocal = convertToLocalTime(mov.data_hora) || new Date();
+      const data = format(dataLocal, "dd/MM/yyyy HH:mm", { locale: ptBR });
       const descricao = (mov.motivo || "").replace(/,/g, ";").replace(/\n/g, " ");
       const valor = -Math.abs(mov.valor).toFixed(2);
       return `${data},"${descricao}",${valor}`;
@@ -347,9 +350,10 @@ export function RelatorioMovimentacoesCard() {
                       return (
                         <TableRow key={mov.id}>
                           <TableCell className="whitespace-nowrap">
-                            {format(new Date(mov.data_hora), "dd/MM/yyyy HH:mm", {
-                              locale: ptBR,
-                            })}
+                            {(() => {
+                              const dataLocal = convertToLocalTime(mov.data_hora);
+                              return dataLocal ? format(dataLocal, "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-";
+                            })()}
                           </TableCell>
                           <TableCell>
                             <Badge variant={getTipoBadgeVariant(mov.tipo) as any}>

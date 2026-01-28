@@ -17,7 +17,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Check } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -36,14 +35,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useVendasHistorico, useExcluirVenda, Venda } from "@/hooks/useVendasHistorico";
 import { EditarVendaModal } from "@/components/vendas/EditarVendaModal";
 import { ExportarVendasCSV } from "@/components/vendas/ExportarVendasCSV";
 import { ExportarCartoesCSV } from "@/components/vendas/ExportarCartoesCSV";
-import { History, Search, CalendarIcon, Pencil, Trash2, RefreshCw } from "lucide-react";
+import { History, Search, CalendarIcon, Pencil, Trash2, RefreshCw, CreditCard } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, convertToLocalTime } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 
 export default function VendasHistorico() {
@@ -51,14 +57,14 @@ export default function VendasHistorico() {
   const [filtroDataInicio, setFiltroDataInicio] = useState<Date | undefined>(undefined);
   const [filtroDataFim, setFiltroDataFim] = useState<Date | undefined>(undefined);
   const [filtroCaixa, setFiltroCaixa] = useState("");
-  const [filtroModoPagto, setFiltroModoPagto] = useState<string[]>(["todos"]);
-  const [openPagto, setOpenPagto] = useState(false);
+  const [filtroModoPagto, setFiltroModoPagto] = useState("");
   const { data: vendas, isLoading, refetch } = useVendasHistorico();
   const { mutate: excluirVenda, isPending: excluindo } = useExcluirVenda();
 
   // Estado para modais
   const [vendaParaEditar, setVendaParaEditar] = useState<Venda | null>(null);
   const [vendaParaExcluir, setVendaParaExcluir] = useState<Venda | null>(null);
+  const [mostrarTotaisCartoes, setMostrarTotaisCartoes] = useState(false);
 
 
   // Extrair lista dinâmica de caixas
@@ -81,10 +87,10 @@ export default function VendasHistorico() {
       return false;
     }
 
-    // Filtro por modo de pagamento (multi)
-    if (filtroModoPagto.length && !filtroModoPagto.includes("todos")) {
+    // Filtro por modo de pagamento (único)
+    if (filtroModoPagto && filtroModoPagto !== "todos") {
       const metodos = [venda.metodo_pagto_1, venda.metodo_pagto_2, venda.metodo_pagto_3].map(m => String(m || "").toLowerCase());
-      if (!filtroModoPagto.some(filtro => metodos.some(m => m.includes(filtro.toLowerCase())))) {
+      if (!metodos.some(m => m.includes(filtroModoPagto.toLowerCase()))) {
         return false;
       }
     }
@@ -124,6 +130,41 @@ export default function VendasHistorico() {
     return metodos.length > 0 ? metodos.join(", ") : "-";
   };
 
+  // Calcular totais de crédito e débito
+  const calcularTotaisCartoes = () => {
+    let totalCredito = 0;
+    let totalDebito = 0;
+    let totalGeral = 0;
+
+    vendasFiltradas?.forEach((venda) => {
+      const pagamentos = [
+        { metodo: venda.metodo_pagto_1, valor: venda.valor_pagto_1 },
+        { metodo: venda.metodo_pagto_2, valor: venda.valor_pagto_2 },
+        { metodo: venda.metodo_pagto_3, valor: venda.valor_pagto_3 },
+      ];
+
+      pagamentos.forEach((p) => {
+        if (!p.metodo || !p.valor || p.valor <= 0) return;
+        const metodoNorm = (p.metodo || "").toLowerCase();
+        
+        // Excluir "gira crédito"
+        if (metodoNorm.includes("gira")) {
+          return;
+        }
+
+        if (metodoNorm.includes("credito") || metodoNorm.includes("crédito")) {
+          totalCredito += p.valor;
+          totalGeral += p.valor;
+        } else if (metodoNorm.includes("debito") || metodoNorm.includes("débito")) {
+          totalDebito += p.valor;
+          totalGeral += p.valor;
+        }
+      });
+    });
+
+    return { totalCredito, totalDebito, totalGeral };
+  };
+
   return (
     <MainLayout title="Histórico de Vendas">
       <div className="space-y-6">
@@ -136,6 +177,15 @@ export default function VendasHistorico() {
           <div className="flex items-center gap-2">
             {isAdmin && <ExportarVendasCSV />}
             {isAdmin && <ExportarCartoesCSV vendasFiltradas={vendasFiltradas || []} />}
+            {isAdmin && (
+              <Button 
+                variant="outline" 
+                onClick={() => setMostrarTotaisCartoes(true)}
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Totais Cartões
+              </Button>
+            )}
             <Button variant="outline" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Atualizar
@@ -220,60 +270,22 @@ export default function VendasHistorico() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Filtro por Modo de Pagamento (multi) */}
+              {/* Filtro por Modo de Pagamento (único) */}
               <div className="space-y-2">
                 <Label htmlFor="filtroModoPagto">Modo de Pagamento</Label>
-                <Popover open={openPagto} onOpenChange={setOpenPagto}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                    >
-                      {filtroModoPagto.length === 0 || filtroModoPagto.includes("todos")
-                        ? "Todos"
-                        : filtroModoPagto.map(
-                            v => metodosDisponiveis.find(m => m === v) || v
-                          ).join(", ")}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-56 p-2">
-                    <div className="flex flex-col gap-1 max-h-60 overflow-auto">
-                      <label className="flex items-center gap-2 cursor-pointer px-2 py-1 rounded hover:bg-accent"
-                        onClick={() => setFiltroModoPagto(["todos"])}>
-                        <input
-                          type="checkbox"
-                          checked={filtroModoPagto.includes("todos")}
-                          readOnly
-                        />
-                        <span>Todos</span>
-                      </label>
-                      {metodosDisponiveis.map(metodo => (
-                        <label
-                          key={metodo}
-                          className="flex items-center gap-2 cursor-pointer px-2 py-1 rounded hover:bg-accent"
-                          onClick={e => {
-                            e.stopPropagation();
-                            if (filtroModoPagto.includes("todos")) {
-                              setFiltroModoPagto([metodo]);
-                            } else if (filtroModoPagto.includes(metodo)) {
-                              const next = filtroModoPagto.filter(m => m !== metodo);
-                              setFiltroModoPagto(next.length === 0 ? ["todos"] : next);
-                            } else {
-                              setFiltroModoPagto([...filtroModoPagto, metodo]);
-                            }
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={filtroModoPagto.includes(metodo)}
-                            readOnly
-                          />
-                          <span className="capitalize">{metodo}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                <Select value={filtroModoPagto || "todos"} onValueChange={(value) => setFiltroModoPagto(value === "todos" ? "" : value)}>
+                  <SelectTrigger id="filtroModoPagto">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os métodos</SelectItem>
+                    {metodosDisponiveis.map(metodo => (
+                      <SelectItem key={metodo} value={metodo}>
+                        <span className="capitalize">{metodo}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -342,7 +354,10 @@ export default function VendasHistorico() {
                     <TableRow key={venda.id}>
                       <TableCell>
                         {venda.created_at
-                          ? format(new Date(venda.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                          ? (() => {
+                              const dataLocal = convertToLocalTime(venda.created_at);
+                              return dataLocal ? format(dataLocal, "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-";
+                            })()
                           : "-"}
                       </TableCell>
                       <TableCell>{venda.vendedora_nome || "-"}</TableCell>
@@ -429,6 +444,57 @@ export default function VendasHistorico() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog de Totais de Cartões */}
+      <Dialog open={mostrarTotaisCartoes} onOpenChange={setMostrarTotaisCartoes}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Totais de Crédito e Débito
+            </DialogTitle>
+            <DialogDescription>
+              Valores das vendas em cartão (exceto gira crédito) no período filtrado
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {(() => {
+              const { totalCredito, totalDebito, totalGeral } = calcularTotaisCartoes();
+              return (
+                <>
+                  <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                    <span className="font-medium text-blue-900">💳 Crédito:</span>
+                    <span className="text-xl font-bold text-blue-700">
+                      R$ {totalCredito.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                    <span className="font-medium text-green-900">💵 Débito:</span>
+                    <span className="text-xl font-bold text-green-700">
+                      R$ {totalDebito.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-4 bg-gray-100 rounded-lg border-2 border-gray-300">
+                    <span className="font-bold text-gray-900">Total Geral:</span>
+                    <span className="text-2xl font-bold text-gray-900">
+                      R$ {totalGeral.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {vendasFiltradas && vendasFiltradas.length > 0 && (
+                    <p className="text-sm text-muted-foreground text-center">
+                      Baseado em {vendasFiltradas.length} venda(s) filtrada(s)
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

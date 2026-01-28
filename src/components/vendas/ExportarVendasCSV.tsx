@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { convertToLocalTime } from "@/lib/utils";
 
 const MESES = [
   { value: "all", label: "Todos os meses" },
@@ -125,8 +126,8 @@ export function ExportarVendasCSV() {
       const totaisPorMes: TotaisPorMes = {};
 
       vendas.forEach((venda) => {
-        const dataVenda = new Date(venda.created_at);
-        const mesKey = `${(dataVenda.getMonth() + 1).toString().padStart(2, "0")}/${ano}`;
+        const dataLocal = convertToLocalTime(venda.created_at) || new Date(venda.created_at);
+        const mesKey = `${(dataLocal.getMonth() + 1).toString().padStart(2, "0")}/${ano}`;
 
         if (!totaisPorMes[mesKey]) {
           totaisPorMes[mesKey] = {};
