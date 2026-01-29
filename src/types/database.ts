@@ -1,7 +1,10 @@
 export type StatusAtendimento = 
-  | 'aguardando_avaliacao' 
+  | 'aguardando' 
+  | 'em_avaliacao'
   | 'aguardando_pagamento' 
-  | 'finalizado';
+  | 'finalizado'
+  | 'recusado'     // Recusado pela loja
+  | 'recusou';     // Recusado pelo cliente
 
 export interface ItemCategoria {
   id: string;

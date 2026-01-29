@@ -471,10 +471,13 @@ export function useRecusarAvaliacao() {
     }) => {
       console.log("[useRecusarAvaliacao] Recusando atendimento:", data);
 
+      // Definir status baseado no motivo: loja -> "recusado", cliente -> "recusou"
+      const status: StatusAtendimento = data.motivo_recusa === "loja" ? "recusado" : "recusou";
+
       const { error } = await supabase
         .from("atendimentos")
         .update({
-          status: "recusado" as StatusAtendimento,
+          status: status,
           motivo_recusa: data.motivo_recusa,
           avaliadora_nome: data.avaliadora_nome || null,
         })

@@ -230,3 +230,68 @@ Avaliações de Ricardo e Bruno foram corretamente classificadas como "Bolsa/Fra
 - Solução é extensível: novos tipos de itens dinâmicos aparecerão automaticamente
 
 --- COMMIT FEITO ---
+
+---
+
+## 📅 28/01/2026 - 00:45
+
+### 📊 Melhoria: Filtro padrão "Hoje" + Cards e gráfico de rosca sempre mostram dados do mês
+
+**Necessidade:**  
+Dashboard estava com filtro padrão do mês inteiro, mas usuário queria:
+1. Filtro padrão em "Hoje" (data atual)
+2. Cards "Vendas - Mês" e "Ticket Médio - Mês" sempre mostrarem dados do mês inteiro (não filtrados)
+3. Gráfico de rosca (donut) também sempre mostrar dados do mês inteiro
+
+**Causa:**  
+O Dashboard usava um único conjunto de métricas (`salesMetrics`) calculado com base no período filtrado. Não havia separação entre métricas mensais fixas e métricas filtradas.
+
+**Solução Implementada:**
+
+1. **Mudança do filtro padrão:**
+   - Estado `periodo` agora inicia com `from: startOfDay(hoje), to: startOfDay(hoje)`
+   - Antes era: `from: inicioMes, to: fimMes`
+
+2. **Separação de dados e métricas:**
+   - Criado novo estado `allVendasMesInteiro` para armazenar vendas do mês completo
+   - Criado `allAtendimentosMesInteiro` para atendimentos do mês completo
+   - Estado `allVendas` e `allAtendimentos` continuam sendo filtrados pelo período selecionado
+
+3. **Novo conjunto de métricas mensais:**
+   - Criado `salesMetricsMes` useMemo que sempre usa `allVendasMesInteiro`
+   - Contém: `totalVendidoMes`, `vendedorasData`, `pecasMes`, `ticketMedioGeral`, etc.
+   - Independente do filtro de período
+
+4. **Atualização de componentes:**
+   - Cards "Vendas - Mês" e "Ticket Médio - Mês": usam `salesMetricsMes`
+   - Gráfico de rosca (donut): usa `allAtendimentosMesInteiro` e `salesMetricsMes`
+   - Gráficos de vendedoras: usam `salesMetricsMes.vendedorasData`
+   - Gráfico "Vendas x Compras por Categoria": usa `salesMetricsMes.pecasMes`
+   - Barras de progresso das vendedoras: usam `salesMetricsMes.vendedorasData`
+
+5. **Migração completa de variáveis:**
+   - Substituídas 18 referências de `salesMetrics` para `salesMetricsMes`
+   - Incluindo gráficos BarChart, cálculos de max(), arrays de dados
+
+**Arquivos Alterados:**
+
+- `src/pages/Dashboard.tsx`
+  - Linha 73: Mudança de filtro padrão para "hoje"
+  - Linha 64: Novo estado `allVendasMesInteiro`
+  - Linha 62: Novo estado `allAtendimentosMesInteiro`
+  - Linhas 149-191: fetchData() agora carrega 2 conjuntos de dados (mês e filtrado)
+  - Linhas 325-527: Novo useMemo `salesMetricsMes` com dados fixos do mês
+  - Linhas 551-569: donutResumoMes agora usa `allAtendimentosMesInteiro`
+  - Linhas 745, 766, 780-784: Gráficos de vendedoras (seção caixa) usando salesMetricsMes
+  - Linhas 966-1080: Cards usando salesMetricsMes
+  - Linhas 1373, 1394, 1408, 1432, 1446: Gráficos de vendedoras (seção admin) usando salesMetricsMes
+  - Linhas 1501-1506: Gráfico de categorias usando salesMetricsMes.pecasMes
+
+**Observações:**
+- Filtro de período agora afeta apenas componentes que devem ser filtrados
+- Cards e gráficos "do mês" são independentes do filtro
+- Usuário pode filtrar por "hoje", "semana", "mês" ou período customizado
+- Métricas mensais permanecem estáveis mostrando sempre o mês completo
+- Solução é extensível e mantém separação clara de responsabilidades
+
+--- COMMIT FEITO ---

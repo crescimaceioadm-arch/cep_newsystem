@@ -64,7 +64,8 @@ export default function Dashboard() {
   const [allAtendimentos, setAllAtendimentos] = useState<any[]>([]);
   const [abaSelecionada, setAbaSelecionada] = useState<string>("equipe");
   const [allAtendimentosMesInteiro, setAllAtendimentosMesInteiro] = useState<any[]>([]); // Novo: sempre o mês inteiro
-  const [allVendas, setAllVendas] = useState<any[]>([]); // Estado Novo para Vendas
+  const [allVendas, setAllVendas] = useState<any[]>([]); // Estado para Vendas filtradas por período
+  const [allVendasMesInteiro, setAllVendasMesInteiro] = useState<any[]>([]); // Vendas do mês inteiro (não segue filtro)
   const [loading, setLoading] = useState(true);
   const { data: estoque } = useEstoque();
 
@@ -72,8 +73,8 @@ export default function Dashboard() {
   const inicioMes = startOfMonth(hoje);
   const fimMes = endOfMonth(hoje);
 
-  // Seletor de período (mês atual por padrão)
-  const [periodo, setPeriodo] = useState<DateRange>({ from: inicioMes, to: fimMes });
+  // Seletor de período (hoje por padrão)
+  const [periodo, setPeriodo] = useState<DateRange>({ from: startOfDay(hoje), to: startOfDay(hoje) });
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
     // Faixas rápidas: hoje, semana, mês
@@ -178,16 +179,24 @@ export default function Dashboard() {
           itens: itensByAtendimento.get(a.id) || [],
         }));
 
-      // 3. Busca Vendas (Novo código)
+      // 3. Busca Vendas do período filtrado
       const { data: vendas } = await supabase
         .from("vendas")
         .select("*")
                 .gte("created_at", inicio.toISOString())
                 .lte("created_at", endOfDay(fim).toISOString());
 
+      // 4. Busca Vendas do mês inteiro (sempre, independente do filtro)
+      const { data: vendasMes } = await supabase
+        .from("vendas")
+        .select("*")
+        .gte("created_at", inicioMes.toISOString())
+        .lte("created_at", endOfDay(fimMes).toISOString());
+
     setAllAtendimentos([...mapearComItens(atendFinalizados), ...mapearComItens(atendRecusados), ...mapearComItens(atendOutros)]);
       setAllAtendimentosMesInteiro(mapearComItens(atendFinalizadosMes)); // Novo: sempre o mês inteiro
       setAllVendas(vendas || []);
+      setAllVendasMesInteiro(vendasMes || []);
       setLoading(false);
     }
     fetchData();
@@ -312,14 +321,15 @@ export default function Dashboard() {
   // LÓGICA 2: VENDAS (NOVA LÓGICA EXPANDIDA)
   // ==================================================================================
   
-  const salesMetrics = useMemo(() => {
-    const vendasHoje = allVendas.filter(v => isSameDay(parseISO(v.created_at), hoje));
+  // Métricas do mês inteiro (sempre fixo, não segue filtro)
+  const salesMetricsMes = useMemo(() => {
+    const vendasHoje = allVendasMesInteiro.filter(v => isSameDay(parseISO(v.created_at), hoje));
 
     // === KPIs PRINCIPAIS ===
     const totalVendidoHoje = vendasHoje.reduce((acc, curr) => acc + Number(curr.valor_total_venda || 0), 0);
-    const totalVendidoMes = allVendas.reduce((acc, curr) => acc + Number(curr.valor_total_venda || 0), 0);
+    const totalVendidoMes = allVendasMesInteiro.reduce((acc, curr) => acc + Number(curr.valor_total_venda || 0), 0);
     const qtdVendasHoje = vendasHoje.length;
-    const qtdVendasMes = allVendas.length;
+    const qtdVendasMes = allVendasMesInteiro.length;
     
     // === CONTAGEM DE PEÇAS POR CATEGORIA ===
     const contarPecasPorCategoria = (lista: any[]) => ({
@@ -332,7 +342,7 @@ export default function Dashboard() {
     });
     
     const pecasHoje = contarPecasPorCategoria(vendasHoje);
-    const pecasMes = contarPecasPorCategoria(allVendas);
+    const pecasMes = contarPecasPorCategoria(allVendasMesInteiro);
     
     const totalPecasHoje = Object.values(pecasHoje).reduce((a, b) => a + b, 0);
     const totalPecasMes = Object.values(pecasMes).reduce((a, b) => a + b, 0);
@@ -343,7 +353,7 @@ export default function Dashboard() {
     // === VENDAS POR VENDEDORA (DIA E MÊS) ===
     const vendedorasMap = new Map();
     
-    allVendas.forEach(venda => {
+    allVendasMesInteiro.forEach(venda => {
         const nome = venda.vendedora_nome || "Sem Vendedora";
         const valor = Number(venda.valor_total_venda || 0);
         const ehHoje = isSameDay(parseISO(venda.created_at), hoje);
@@ -373,7 +383,7 @@ export default function Dashboard() {
     let totalGiraCreditoMes = 0;
     let totalGiraCreditoHoje = 0;
     
-    allVendas.forEach(venda => {
+    allVendasMesInteiro.forEach(venda => {
       const ehHoje = isSameDay(parseISO(venda.created_at), hoje);
       let valorGiraVenda = 0;
       
@@ -445,7 +455,7 @@ export default function Dashboard() {
       debito: 0
     };
 
-    allVendas.forEach(venda => {
+    allVendasMesInteiro.forEach(venda => {
       [
         { metodo: venda.metodo_pagto_1, valor: venda.valor_pagto_1 },
         { metodo: venda.metodo_pagto_2, valor: venda.valor_pagto_2 },
@@ -479,7 +489,7 @@ export default function Dashboard() {
 
     // === PICOS DE VENDAS POR HORÁRIO ===
     const vendasPorHora = new Map();
-    allVendas.forEach(venda => {
+    allVendasMesInteiro.forEach(venda => {
       const dataLocal = convertToLocalTime(venda.created_at);
       const hora = dataLocal ? dataLocal.getHours() : 0;
       const faixaHoraria = `${hora}h`;
@@ -515,7 +525,7 @@ export default function Dashboard() {
       pagamentosMes,
       porcentagensPagamentosMes
     };
-  }, [allVendas, hoje]);
+  }, [allVendasMesInteiro, hoje]);
 
   // === PICOS DE HORÁRIOS FILTRADO POR PERÍODO ===
   const picosHorariosFiltrados = useMemo(() => {
@@ -538,12 +548,12 @@ export default function Dashboard() {
     });
   }, [allVendas]);
 
-    // Totais para o donut: vendas vs gastos em dinheiro (avaliações) - FILTRA POR PERÍODO
+    // Totais para o donut: vendas vs gastos em dinheiro (avaliações) - SEMPRE DO MÊS INTEIRO
     const donutResumoMes = useMemo(() => {
-        const totalVendasMes = salesMetrics.totalVendidoMes;
+        const totalVendasMes = salesMetricsMes.totalVendidoMes;
         
-        // Usar os atendimentos do PERÍODO FILTRADO
-        const totalGastosDinheiroMes = allAtendimentos
+        // Usar os atendimentos do MÊS INTEIRO (não filtrado)
+        const totalGastosDinheiroMes = allAtendimentosMesInteiro
             .filter((a) => a.status === "finalizado")
             .reduce((acc, a) => acc + (classificarPagamento(a) === "dinheiro" ? Number(a.valor_total_negociado || 0) : 0), 0);
 
@@ -555,7 +565,7 @@ export default function Dashboard() {
         ];
 
         return { totalVendasMes, totalGastosDinheiroMes, percentual, data };
-    }, [salesMetrics.totalVendidoMes, allAtendimentos]);
+    }, [salesMetricsMes.totalVendidoMes, allAtendimentosMesInteiro]);
 
     // Tabela de gasto em dinheiro por grupos de avaliações (com base no período selecionado)
     const tabelaGastos = useMemo(() => {
@@ -732,7 +742,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesMetrics.vendedorasData}>
+                  <BarChart data={salesMetricsMes.vendedorasData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
                     <YAxis />
@@ -753,7 +763,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesMetrics.vendedorasData}>
+                  <BarChart data={salesMetricsMes.vendedorasData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
                     <YAxis />
@@ -767,11 +777,11 @@ export default function Dashboard() {
           
           {/* === DESEMPENHO POR VENDEDORA (VISUAL E COMPARATIVO) === */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {salesMetrics.vendedorasData.map((vendedora, index) => {
-              const maxValorMes = Math.max(...salesMetrics.vendedorasData.map(v => v.valorMes));
-              const maxQtdMes = Math.max(...salesMetrics.vendedorasData.map(v => v.qtdMes));
-              const maxValorHoje = Math.max(...salesMetrics.vendedorasData.map(v => v.valorHoje));
-              const maxQtdHoje = Math.max(...salesMetrics.vendedorasData.map(v => v.qtdHoje));
+            {salesMetricsMes.vendedorasData.map((vendedora, index) => {
+              const maxValorMes = Math.max(...salesMetricsMes.vendedorasData.map(v => v.valorMes));
+              const maxQtdMes = Math.max(...salesMetricsMes.vendedorasData.map(v => v.qtdMes));
+              const maxValorHoje = Math.max(...salesMetricsMes.vendedorasData.map(v => v.valorHoje));
+              const maxQtdHoje = Math.max(...salesMetricsMes.vendedorasData.map(v => v.qtdHoje));
               const isClienteNaoAtendido = vendedora.nome.toLowerCase().includes('cliente não atendido');
               
               return (
@@ -953,44 +963,44 @@ export default function Dashboard() {
               <CardTitle className="text-xs font-medium text-blue-700">💰 Vendas - Mês</CardTitle>
             </CardHeader>
             <CardContent className="pb-3">
-              <div className="text-xl font-bold text-blue-900">{formatCurrency(salesMetrics.totalVendidoMes)}</div>
-              <p className="text-[10px] text-blue-600 mt-0.5">{salesMetrics.qtdVendasMes} vendas</p>
+              <div className="text-xl font-bold text-blue-900">{formatCurrency(salesMetricsMes.totalVendidoMes)}</div>
+              <p className="text-[10px] text-blue-600 mt-0.5">{salesMetricsMes.qtdVendasMes} vendas</p>
               
               {/* Barra de distribuição de pagamentos */}
               <div className="mt-3 w-full h-6 bg-blue-50 rounded overflow-hidden flex">
-                {salesMetrics.porcentagensPagamentosMes.giraCredito > 0 && (
+                {salesMetricsMes.porcentagensPagamentosMes.giraCredito > 0 && (
                   <div 
                     className="bg-orange-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.giraCredito}%` }}
-                    title={`Gira-crédito: ${salesMetrics.porcentagensPagamentosMes.giraCredito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.giraCredito)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentosMes.giraCredito}%` }}
+                    title={`Gira-crédito: ${salesMetricsMes.porcentagensPagamentosMes.giraCredito.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosMes.giraCredito)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentosMes.dinheiro > 0 && (
+                {salesMetricsMes.porcentagensPagamentosMes.dinheiro > 0 && (
                   <div 
                     className="bg-green-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.dinheiro}%` }}
-                    title={`Dinheiro: ${salesMetrics.porcentagensPagamentosMes.dinheiro.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.dinheiro)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentosMes.dinheiro}%` }}
+                    title={`Dinheiro: ${salesMetricsMes.porcentagensPagamentosMes.dinheiro.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosMes.dinheiro)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentosMes.pix > 0 && (
+                {salesMetricsMes.porcentagensPagamentosMes.pix > 0 && (
                   <div 
                     className="bg-teal-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.pix}%` }}
-                    title={`Pix: ${salesMetrics.porcentagensPagamentosMes.pix.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.pix)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentosMes.pix}%` }}
+                    title={`Pix: ${salesMetricsMes.porcentagensPagamentosMes.pix.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosMes.pix)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentosMes.todosCreditos > 0 && (
+                {salesMetricsMes.porcentagensPagamentosMes.todosCreditos > 0 && (
                   <div 
                     className="bg-blue-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.todosCreditos}%` }}
-                    title={`Créditos: ${salesMetrics.porcentagensPagamentosMes.todosCreditos.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.todosCreditos)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentosMes.todosCreditos}%` }}
+                    title={`Créditos: ${salesMetricsMes.porcentagensPagamentosMes.todosCreditos.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosMes.todosCreditos)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentosMes.debito > 0 && (
+                {salesMetricsMes.porcentagensPagamentosMes.debito > 0 && (
                   <div 
                     className="bg-purple-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentosMes.debito}%` }}
-                    title={`Débito: ${salesMetrics.porcentagensPagamentosMes.debito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosMes.debito)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentosMes.debito}%` }}
+                    title={`Débito: ${salesMetricsMes.porcentagensPagamentosMes.debito.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosMes.debito)})`}
                   />
                 )}
               </div>
@@ -1002,44 +1012,44 @@ export default function Dashboard() {
               <CardTitle className="text-xs font-medium text-green-700">💵 Vendas - Hoje</CardTitle>
             </CardHeader>
             <CardContent className="pb-3">
-              <div className="text-xl font-bold text-green-900">{formatCurrency(salesMetrics.totalVendidoHoje)}</div>
-              <p className="text-[10px] text-green-600 mt-0.5">{salesMetrics.qtdVendasHoje} vendas</p>
+              <div className="text-xl font-bold text-green-900">{formatCurrency(salesMetricsMes.totalVendidoHoje)}</div>
+              <p className="text-[10px] text-green-600 mt-0.5">{salesMetricsMes.qtdVendasHoje} vendas</p>
               
               {/* Barra de distribuição de pagamentos */}
               <div className="mt-3 w-full h-6 bg-green-50 rounded overflow-hidden flex">
-                {salesMetrics.porcentagensPagamentos.giraCredito > 0 && (
+                {salesMetricsMes.porcentagensPagamentos.giraCredito > 0 && (
                   <div 
                     className="bg-orange-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentos.giraCredito}%` }}
-                    title={`Gira-crédito: ${salesMetrics.porcentagensPagamentos.giraCredito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.giraCredito)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentos.giraCredito}%` }}
+                    title={`Gira-crédito: ${salesMetricsMes.porcentagensPagamentos.giraCredito.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosHoje.giraCredito)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentos.dinheiro > 0 && (
+                {salesMetricsMes.porcentagensPagamentos.dinheiro > 0 && (
                   <div 
                     className="bg-green-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentos.dinheiro}%` }}
-                    title={`Dinheiro: ${salesMetrics.porcentagensPagamentos.dinheiro.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.dinheiro)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentos.dinheiro}%` }}
+                    title={`Dinheiro: ${salesMetricsMes.porcentagensPagamentos.dinheiro.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosHoje.dinheiro)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentos.pix > 0 && (
+                {salesMetricsMes.porcentagensPagamentos.pix > 0 && (
                   <div 
                     className="bg-teal-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentos.pix}%` }}
-                    title={`Pix: ${salesMetrics.porcentagensPagamentos.pix.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.pix)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentos.pix}%` }}
+                    title={`Pix: ${salesMetricsMes.porcentagensPagamentos.pix.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosHoje.pix)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentos.todosCreditos > 0 && (
+                {salesMetricsMes.porcentagensPagamentos.todosCreditos > 0 && (
                   <div 
                     className="bg-blue-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentos.todosCreditos}%` }}
-                    title={`Créditos: ${salesMetrics.porcentagensPagamentos.todosCreditos.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.todosCreditos)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentos.todosCreditos}%` }}
+                    title={`Créditos: ${salesMetricsMes.porcentagensPagamentos.todosCreditos.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosHoje.todosCreditos)})`}
                   />
                 )}
-                {salesMetrics.porcentagensPagamentos.debito > 0 && (
+                {salesMetricsMes.porcentagensPagamentos.debito > 0 && (
                   <div 
                     className="bg-purple-300 transition-all duration-500"
-                    style={{ width: `${salesMetrics.porcentagensPagamentos.debito}%` }}
-                    title={`Débito: ${salesMetrics.porcentagensPagamentos.debito.toFixed(1)}% (${formatCurrency(salesMetrics.pagamentosHoje.debito)})`}
+                    style={{ width: `${salesMetricsMes.porcentagensPagamentos.debito}%` }}
+                    title={`Débito: ${salesMetricsMes.porcentagensPagamentos.debito.toFixed(1)}% (${formatCurrency(salesMetricsMes.pagamentosHoje.debito)})`}
                   />
                 )}
               </div>
@@ -1051,7 +1061,7 @@ export default function Dashboard() {
               <CardTitle className="text-xs font-medium text-purple-700">🎯 Ticket Médio - Mês</CardTitle>
             </CardHeader>
             <CardContent className="pb-3">
-              <div className="text-xl font-bold text-purple-900">{formatCurrency(salesMetrics.ticketMedioGeral)}</div>
+              <div className="text-xl font-bold text-purple-900">{formatCurrency(salesMetricsMes.ticketMedioGeral)}</div>
               <p className="text-[10px] text-purple-600 mt-0.5">Média por venda</p>
             </CardContent>
           </Card>
@@ -1062,7 +1072,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="pb-3">
               <div className="text-xl font-bold text-teal-900">
-                {formatCurrency(salesMetrics.qtdVendasHoje > 0 ? salesMetrics.totalVendidoHoje / salesMetrics.qtdVendasHoje : 0)}
+                {formatCurrency(salesMetricsMes.qtdVendasHoje > 0 ? salesMetricsMes.totalVendidoHoje / salesMetricsMes.qtdVendasHoje : 0)}
               </div>
               <p className="text-[10px] text-teal-600 mt-0.5">Média de hoje</p>
             </CardContent>
@@ -1360,7 +1370,7 @@ export default function Dashboard() {
                         </CardHeader>
                         <CardContent className="h-[300px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={salesMetrics.vendedorasData}>
+                                <BarChart data={salesMetricsMes.vendedorasData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                     <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
                                     <YAxis />
@@ -1381,7 +1391,7 @@ export default function Dashboard() {
                         </CardHeader>
                         <CardContent className="h-[300px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={salesMetrics.vendedorasData}>
+                                <BarChart data={salesMetricsMes.vendedorasData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                     <XAxis dataKey="nome" angle={-15} textAnchor="end" height={80} />
                                     <YAxis />
@@ -1395,7 +1405,7 @@ export default function Dashboard() {
                 
                 {/* === DESEMPENHO POR VENDEDORA (VISUAL E COMPARATIVO) === */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {salesMetrics.vendedorasData.map((vendedora, index) => (
+                    {salesMetricsMes.vendedorasData.map((vendedora, index) => (
                         <Card key={index} className="border-2 hover:shadow-lg transition-all">
                             <CardHeader className="pb-3">
                                 <CardTitle className="flex items-center gap-2">
@@ -1419,7 +1429,7 @@ export default function Dashboard() {
                                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                                             <div 
                                                 className="h-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-500"
-                                                style={{ width: `${Math.min((vendedora.valorMes / Math.max(...salesMetrics.vendedorasData.map(v => v.valorMes)) * 100), 100)}%` }}
+                                                style={{ width: `${Math.min((vendedora.valorMes / Math.max(...salesMetricsMes.vendedorasData.map(v => v.valorMes)) * 100), 100)}%` }}
                                             />
                                         </div>
                                     </div>
@@ -1433,7 +1443,7 @@ export default function Dashboard() {
                                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                                             <div 
                                                 className="h-full bg-gradient-to-r from-purple-400 to-purple-600 transition-all duration-500"
-                                                style={{ width: `${Math.min((vendedora.qtdMes / Math.max(...salesMetrics.vendedorasData.map(v => v.qtdMes)) * 100), 100)}%` }}
+                                                style={{ width: `${Math.min((vendedora.qtdMes / Math.max(...salesMetricsMes.vendedorasData.map(v => v.qtdMes)) * 100), 100)}%` }}
                                             />
                                         </div>
                                     </div>
@@ -1488,12 +1498,12 @@ export default function Dashboard() {
                     <CardContent className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={[
-                                { categoria: 'Baby', Vendas: salesMetrics.pecasMes.baby, Compras: metrics.comprasPorCat.baby },
-                                { categoria: 'Infantil', Vendas: salesMetrics.pecasMes.infantil, Compras: metrics.comprasPorCat.infantil },
-                                { categoria: 'Calçados', Vendas: salesMetrics.pecasMes.calcados, Compras: metrics.comprasPorCat.calcados },
-                                { categoria: 'Brinquedos', Vendas: salesMetrics.pecasMes.brinquedos, Compras: metrics.comprasPorCat.brinquedos },
-                                { categoria: 'Itens Médios', Vendas: salesMetrics.pecasMes.itens_medios, Compras: metrics.comprasPorCat.itens_medios },
-                                { categoria: 'Itens Grandes', Vendas: salesMetrics.pecasMes.itens_grandes, Compras: metrics.comprasPorCat.itens_grandes },
+                                { categoria: 'Baby', Vendas: salesMetricsMes.pecasMes.baby, Compras: metrics.comprasPorCat.baby },
+                                { categoria: 'Infantil', Vendas: salesMetricsMes.pecasMes.infantil, Compras: metrics.comprasPorCat.infantil },
+                                { categoria: 'Calçados', Vendas: salesMetricsMes.pecasMes.calcados, Compras: metrics.comprasPorCat.calcados },
+                                { categoria: 'Brinquedos', Vendas: salesMetricsMes.pecasMes.brinquedos, Compras: metrics.comprasPorCat.brinquedos },
+                                { categoria: 'Itens Médios', Vendas: salesMetricsMes.pecasMes.itens_medios, Compras: metrics.comprasPorCat.itens_medios },
+                                { categoria: 'Itens Grandes', Vendas: salesMetricsMes.pecasMes.itens_grandes, Compras: metrics.comprasPorCat.itens_grandes },
                             ]}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="categoria" angle={-15} textAnchor="end" height={80} />

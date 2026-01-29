@@ -10,6 +10,13 @@ export interface ClientePreferenciaPagemento {
   atualizado_em: string;
 }
 
+export interface ClienteRecusas {
+  nome_cliente: string;
+  total_avaliacoes: number;
+  total_recusadas: number;
+  percentual_recusadas: number;
+}
+
 export function useClientePreferenciaPagemento(nomeCliente: string | undefined) {
   return useQuery({
     queryKey: ["cliente_pagamento_preferencia", nomeCliente],
@@ -28,6 +35,50 @@ export function useClientePreferenciaPagemento(nomeCliente: string | undefined) 
       }
 
       return (data as ClientePreferenciaPagemento) || null;
+    },
+    enabled: !!nomeCliente,
+  });
+}
+
+export function useClienteRecusas(nomeCliente: string | undefined) {
+  return useQuery({
+    queryKey: ["cliente_recusas", nomeCliente],
+    queryFn: async () => {
+      if (!nomeCliente) return null;
+
+      const { data, error } = await supabase
+        .from("atendimentos")
+        .select("id, status")
+        .eq("nome_cliente", nomeCliente)
+        .eq("tipo_atendimento", "avaliacao")
+        .in("status", ["recusado", "recusou"]);
+
+      if (error) throw error;
+
+      // Contar total de avaliações
+      const { data: todasAvals, error: errorTotal } = await supabase
+        .from("atendimentos")
+        .select("id")
+        .eq("nome_cliente", nomeCliente)
+        .eq("tipo_atendimento", "avaliacao")
+        .eq("status", "finalizado");
+
+      if (errorTotal) throw errorTotal;
+
+      const totalRecusadas = data?.length || 0;
+      const totalFinalizadas = todasAvals?.length || 0;
+      const totalAvaliacoes = totalRecusadas + totalFinalizadas;
+
+      const percentualRecusadas = totalAvaliacoes > 0 
+        ? (totalRecusadas / totalAvaliacoes) * 100 
+        : 0;
+
+      return {
+        nome_cliente: nomeCliente,
+        total_avaliacoes: totalAvaliacoes,
+        total_recusadas: totalRecusadas,
+        percentual_recusadas: percentualRecusadas,
+      } as ClienteRecusas;
     },
     enabled: !!nomeCliente,
   });

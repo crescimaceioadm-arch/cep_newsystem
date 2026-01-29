@@ -46,7 +46,7 @@ import { ptBR } from "date-fns/locale";
 import { cn, convertToLocalTime } from "@/lib/utils";
 import { toast } from "sonner";
 
-type StatusAtendimento = 'aguardando' | 'em_avaliacao' | 'aguardando_pagamento' | 'finalizado' | 'recusado';
+type StatusAtendimento = 'aguardando' | 'em_avaliacao' | 'aguardando_pagamento' | 'finalizado' | 'recusado' | 'recusou';
 
 export default function HistoricoAtendimentos() {
   const [filtroDataInicio, setFiltroDataInicio] = useState<Date | undefined>(undefined);
@@ -119,6 +119,7 @@ export default function HistoricoAtendimentos() {
       aguardando_pagamento: { label: "Aguard. Pagamento", variant: "outline" },
       finalizado: { label: "Finalizado", variant: "default" },
       recusado: { label: "Recusado", variant: "destructive" },
+      recusou: { label: "Cliente recusou", variant: "destructive" },
     };
 
     const config = statusConfig[status] || { label: status, variant: "outline" as const };
@@ -129,6 +130,7 @@ export default function HistoricoAtendimentos() {
         className={cn(
           status === 'finalizado' && "bg-green-500 hover:bg-green-600 text-white",
           status === 'recusado' && "bg-red-500 hover:bg-red-600 text-white",
+          status === 'recusou' && "bg-red-900 hover:bg-red-950 text-white",
           (status === 'aguardando' || status === 'aguardando_pagamento') && "bg-yellow-500 hover:bg-yellow-600 text-white",
           status === 'em_avaliacao' && "bg-blue-500 hover:bg-blue-600 text-white"
         )}
