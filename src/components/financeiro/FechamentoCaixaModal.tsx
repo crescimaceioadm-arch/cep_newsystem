@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFechamentoCaixa, useResumoVendasPorCaixa, useSaldoFinalHoje, Caixa } from "@/hooks/useCaixas";
+import { convertToLocalTime } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 import { Banknote, CreditCard, Smartphone, Wallet, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -39,7 +40,11 @@ export function FechamentoCaixaModal({
     if (open) {
       setValorContado("");
       setJustificativa("");
-      const hoje = new Date().toISOString().split("T")[0];
+      // Usar data em Brasília, não UTC
+      const dataLocal = convertToLocalTime(new Date().toISOString());
+      const hoje = dataLocal 
+        ? `${dataLocal.getFullYear()}-${String(dataLocal.getMonth() + 1).padStart(2, '0')}-${String(dataLocal.getDate()).padStart(2, '0')}`
+        : new Date().toISOString().split("T")[0];
       setDataFechamento(hoje);
       refetch();
       refetchSaldo();

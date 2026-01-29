@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { addDays, format, isSameDay, parseISO, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { getDateTimeBrasilia } from "@/lib/utils";
 import { ArrowLeft, ArrowRight, Plus, CheckCircle2, Clock, User, Edit2, Trash2, Calendar } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -227,7 +228,7 @@ export default function Marketing() {
         .from("marketing_items")
         .update({
           produzido: true,
-          check_timestamp: new Date().toISOString(),
+          check_timestamp: getDateTimeBrasilia(),
           horario_real_postagem: horario,
         })
         .eq("id", id);

@@ -262,8 +262,16 @@ export default function Financeiro() {
     }
   };
 
-  // Usar caixaExtrato se definido, senão usar caixaSelecionado
-  const caixaParaExtrato = caixaExtrato || caixaSelecionado;
+  // Usar caixaExtrato se definido, senão usar caixaSelecionado, senão (se admin) usar primeiro caixa
+  const caixaParaExtrato = useMemo(() => {
+    if (caixaExtrato) return caixaExtrato;
+    if (caixaSelecionado) return caixaSelecionado;
+    // Se é admin e não há caixa selecionado, usar o primeiro caixa disponível
+    if (isAdmin && caixas && caixas.length > 0) {
+      return caixas[0].nome;
+    }
+    return null;
+  }, [caixaExtrato, caixaSelecionado, isAdmin, caixas]);
 
   // Buscar caixa atual
   const caixaAtual = useMemo(() => {
@@ -726,7 +734,7 @@ export default function Financeiro() {
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-3">
                   <CardTitle>Extrato do Caixa:</CardTitle>
-                  <Select value={caixaExtrato || caixaSelecionado || ""} onValueChange={setCaixaExtrato}>
+                  <Select value={caixaParaExtrato || ""} onValueChange={setCaixaExtrato}>
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="Selecione o caixa" />
                     </SelectTrigger>

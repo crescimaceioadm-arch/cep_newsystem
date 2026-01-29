@@ -106,7 +106,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             fetchProfile(currentSession.user.id);
           }, 0);
           try {
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayStr = getDateBrasilia();
             localStorage.setItem('session_date', todayStr);
           } catch {}
         } else {
@@ -126,7 +126,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (existingSession?.user) {
         fetchProfile(existingSession.user.id);
         try {
-          const todayStr = new Date().toISOString().slice(0, 10);
+          const todayStr = getDateBrasilia();
           localStorage.setItem('session_date', todayStr);
         } catch {}
       } else {

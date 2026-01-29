@@ -295,3 +295,195 @@ O Dashboard usava um único conjunto de métricas (`salesMetrics`) calculado com
 - Solução é extensível e mantém separação clara de responsabilidades
 
 --- COMMIT FEITO ---
+
+---
+
+## 📅 28/01/2026 - 22:00
+
+### 🎨 Melhorias: Badges de preferência de pagamento e taxa de recusa
+
+**Necessidade:**  
+Melhorar visualização das preferências de pagamento dos clientes e adicionar indicador de taxa de recusa nas telas de Cadastro e Avaliação.
+
+**Solução Implementada:**
+
+1. **Badge redesenhado com ícone dominante:**
+   - Ícone grande (70% maior) mostrando método preferido
+   - DollarSign para Dinheiro (verde), Orbit para Gira-crédito (laranja)
+   - Mostra porcentagem e quantidade (ex: "60% (3/5)")
+
+2. **Novo badge de taxa de recusa:**
+   - Aparece ao lado do badge de pagamento
+   - Mostra % de recusas com ícone AlertCircle
+   - Cor vermelha para alertar sobre clientes problemáticos
+
+3. **Hook `useClienteRecusas()` criado:**
+   - Busca atendimentos com status `recusado` ou `recusou`
+   - Calcula percentual de recusas sobre total de avaliações
+   - Retorna total_avaliacoes, total_recusadas, percentual_recusadas
+
+4. **Padronização de status:**
+   - Type `StatusAtendimento` atualizado com: aguardando, em_avaliacao, aguardando_pagamento, finalizado, recusado, recusou
+   - Diferenciação visual: "Recusado" (loja, red-500) vs "Cliente recusou" (red-900)
+   - Hook `useRecusarAvaliacao()` diferencia motivo: loja → "recusado", cliente → "recusou"
+
+5. **Cor do Gira-crédito alterada:**
+   - Mudado de verde para laranja para melhor distinção visual
+
+**Arquivos Alterados:**
+
+- `src/components/ClientePreferenciaPaymentBadge.tsx` (novo arquivo)
+  - Componente completo com 2 badges (pagamento + recusas)
+  - Imports: DollarSign, Orbit, Loader2, AlertCircle
+  - Props: nomeCliente, className, showRecusas
+
+- `src/hooks/useClientePreferenciaPagemento.ts`
+  - Linhas 40-90: Nova interface `ClienteRecusas` e hook `useClienteRecusas()`
+  - Query busca atendimentos com status IN ('recusado', 'recusou')
+  - Calcula percentual de recusas
+
+- `src/types/database.ts`
+  - Linha 50: Type StatusAtendimento expandido com 'recusado' e 'recusou'
+
+- `src/hooks/useAtendimentos.ts`
+  - Linhas 477-480: useRecusarAvaliacao() diferencia status baseado em motivo_recusa
+
+- `src/pages/HistoricoAtendimentos.tsx`
+  - Linha 50: Adicionado 'recusou' ao type local
+  - Linhas 115-140: getStatusBadge() diferencia visualmente os 2 tipos de recusa
+
+**Observações:**
+- Badges são condicionais: só aparecem quando há dados
+- Badge de recusas só mostra se total_recusadas > 0
+- Solução é reutilizável em qualquer parte do sistema
+- Mantém consistência visual com shadcn/ui
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 29/01/2026 - 14:00
+
+### 🔓 Melhoria: Admin pode ver extrato de qualquer caixa sem pré-seleção
+
+**Necessidade:**  
+Usuário admin não conseguia ver extrato de caixas na aba Financeiro sem estar logado como um caixa específico. O select existia mas não funcionava sem caixa pré-selecionado no login.
+
+**Causa:**  
+Componente Financeiro tinha fallback `caixaParaExtrato = caixaExtrato || caixaSelecionado` que exigia caixa do contexto. Se admin não selecionava caixa no login, extrato não aparecia.
+
+**Solução Implementada:**
+
+1. **Lógica de caixaParaExtrato refatorada:**
+   - useMemo que prioriza: caixaExtrato > caixaSelecionado > primeiro caixa (se admin)
+   - Admin agora vê automaticamente o primeiro caixa da lista
+   - Caixas específicos continuam vendo seu próprio caixa por padrão
+
+2. **Select atualizado:**
+   - Removido fallback para caixaSelecionado no value
+   - Agora usa diretamente `caixaParaExtrato` que já tem a lógica completa
+
+**Arquivos Alterados:**
+
+- `src/pages/Financeiro.tsx`
+  - Linhas 266-274: Novo useMemo com lógica de priorização
+  - Linha 737: Select agora usa `value={caixaParaExtrato || ""}`
+
+**Observações:**
+- Admin pode trocar de caixa livremente no dropdown
+- Caixas específicos mantém comportamento original
+- Extrato aparece automaticamente ao carregar página
+- Solução mantém compatibilidade com fluxo existente
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 29/01/2026 - 16:00
+
+### 🕐 Correção Crítica: Timezone UTC causando problemas em fechamentos e saldos
+
+**Necessidade:**  
+Sistema estava salvando fechamentos de caixa com data/hora em UTC (meia-noite = 00:00), que aparecia como 21:00 do dia anterior em Brasília. Isso causou:
+1. Fechamentos de 26/01 aparecendo como 25/01 às 21:00
+2. Hook `useSaldoInicial` buscando fechamento errado (do dia errado)
+3. Saldo de 27/01 mostrou R$400 quando deveria ser R$0
+
+**Causa Raiz:**  
+Todo o sistema usava `new Date().toISOString()` que retorna UTC, mas o banco PostgreSQL usa `TIMESTAMPTZ` (timezone-aware). Quando salvava apenas a data `2026-01-27`, assumia meia-noite UTC, que é 21:00 de 26/01 em Brasília.
+
+**Solução Implementada:**
+
+1. **Criadas funções auxiliares em `utils.ts`:**
+   - `getDateBrasilia()`: Retorna data atual em Brasília no formato YYYY-MM-DD
+   - `getDateTimeBrasilia()`: Retorna data/hora atual em Brasília no formato ISO
+   - Ambas usam `convertToLocalTime()` existente como base
+
+2. **Substituídos 11 usos de `new Date().toISOString()`:**
+   - useCaixas.ts: 5 substituições (fechamentos, saldos, resumos)
+   - useAtendimentos.ts: 1 substituição (hora chegada)
+   - FinalizarAtendimentoModal.tsx: 1 substituição (hora encerramento)
+   - UserContext.tsx: 2 substituições (session_date)
+   - InactivityContext.tsx: 1 substituição (verificação sessão)
+   - Marketing.tsx: 1 substituição (check_timestamp)
+   - FechamentoCaixaModal.tsx: já estava usando convertToLocalTime()
+
+3. **Impacto nas operações:**
+   - Fechamentos agora salvam com hora real de Brasília (ex: 18:30 em vez de 21:30 UTC)
+   - Hook `useSaldoInicial` busca fechamento do dia correto
+   - Registros de atendimento salvam com hora local
+   - Verificações de "hoje" são consistentes com timezone local
+
+4. **Script SQL de diagnóstico criado (não executado):**
+   - `20260129_corrigir_timezone_fechamentos.sql`
+   - Identifica fechamentos com timezone incorreto
+   - Corrige timestamps retroativos (opcional)
+   - Corrige valor_sistema do fechamento de 27/01 de R$400 para R$0
+
+**Arquivos Alterados:**
+
+- `src/lib/utils.ts`
+  - Linhas 39-72: Novas funções `getDateBrasilia()` e `getDateTimeBrasilia()`
+
+- `src/hooks/useCaixas.ts`
+  - Linha 1: Import de `getDateBrasilia`, `getDateTimeBrasilia`
+  - Linha 270: useSaldoFinalHoje() usa getDateBrasilia()
+  - Linha 515: Fechamento usa getDateBrasilia()
+  - Linha 549: useResumoVendasHoje() usa getDateBrasilia()
+  - Linha 616: useResumoVendasPorCaixa() usa getDateBrasilia()
+
+- `src/hooks/useAtendimentos.ts`
+  - Linha 4: Import de getDateTimeBrasilia
+  - Linha 91: Hora chegada usa getDateTimeBrasilia()
+
+- `src/components/recepcao/FinalizarAtendimentoModal.tsx`
+  - Linha 23: Import de getDateTimeBrasilia
+  - Linha 112: Hora encerramento usa getDateTimeBrasilia()
+
+- `src/components/financeiro/FechamentoCaixaModal.tsx`
+  - Linha 13: Import de convertToLocalTime
+  - Linhas 44-47: Data fechamento usa convertToLocalTime()
+
+- `src/contexts/UserContext.tsx`
+  - Linha 4: Import de getDateBrasilia
+  - Linhas 109, 129: session_date usa getDateBrasilia()
+
+- `src/contexts/InactivityContext.tsx`
+  - Linha 5: Import de getDateBrasilia
+  - Linha 61: Verificação de sessão usa getDateBrasilia()
+
+- `src/pages/Marketing.tsx`
+  - Linha 6: Import de getDateTimeBrasilia
+  - Linha 230: check_timestamp usa getDateTimeBrasilia()
+
+- `supabase/20260129_corrigir_timezone_fechamentos.sql` (novo arquivo)
+  - Script de diagnóstico e correção de dados históricos (não executado)
+
+**Observações:**
+- Dados históricos permanecem como estão (decisão do usuário)
+- Sistema agora usa timezone correto em todas operações críticas
+- Bug do R$400 foi identificado: fechamento de 27/01 não pegou movimentações devido ao timezone
+- Solução previne problemas futuros mas não altera registros passados
+- Todas as operações de data/hora agora são consistentes com Brasília
+
+---

@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getDateBrasilia, getDateTimeBrasilia } from "@/lib/utils";
 
 export interface Caixa {
   id: string;
@@ -267,7 +268,7 @@ export function useCaixas() {
  * Usa a mesma lógica do extrato: saldo_inicial + entradas - saídas
  */
 export function useSaldoFinalHoje(caixaId: string | null) {
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = getDateBrasilia();
   
   const { data: saldoInicialData, isLoading: loadingSaldoInicial } = useSaldoInicial(caixaId, hoje);
   const { data: movimentacoesPeriodo, isLoading: loadingMovimentacoes } = useMovimentacoesDinheiro(caixaId, hoje, hoje);
@@ -512,7 +513,7 @@ export function useFechamentoCaixa() {
       detalhesPagamentos?: DetalhesPagamentosFechamento;
     }) => {
       const diferenca = valorSistema - valorContado;
-      const dataParaSalvar = dataFechamento || new Date().toISOString().split("T")[0];
+      const dataParaSalvar = dataFechamento || getDateBrasilia();
 
       const { error } = await supabase.from("fechamentos_caixa").insert({
         caixa_id: caixaId,
@@ -546,7 +547,7 @@ export function useResumoVendasHoje() {
   return useQuery({
     queryKey: ["resumo_vendas_hoje"],
     queryFn: async () => {
-      const hoje = new Date().toISOString().split("T")[0];
+      const hoje = getDateBrasilia();
 
       const { data, error } = await supabase
         .from("vendas")
@@ -613,7 +614,7 @@ export function useResumoVendasPorCaixa(caixaNome: string | null) {
     queryKey: ["resumo_vendas_caixa", caixaNome],
     enabled: !!caixaNome,
     queryFn: async (): Promise<ResumoVendasPorCaixa> => {
-      const hoje = new Date().toISOString().split("T")[0];
+      const hoje = getDateBrasilia();
 
       // 🔍 DEBUG: Log do que estamos procurando
       console.log("[useResumoVendasPorCaixa] Buscando vendas para caixa:", caixaNome, "data:", hoje);

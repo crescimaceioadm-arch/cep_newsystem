@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Loader2, Plus, Trash2 } from "lucide-react";
 import type { Atendimento } from "@/types/database";
+import { getDateTimeBrasilia } from "@/lib/utils";
 
 interface FinalizarAtendimentoModalProps {
   open: boolean;
@@ -109,7 +110,7 @@ export function FinalizarAtendimentoModal({
       // Adicionado status: 'finalizado' e hora_encerramento
       const pagamentoData: any = {
         status: 'finalizado', // <--- Força a mudança de status
-        hora_encerramento: new Date().toISOString(), // <--- Grava a hora do fim
+        hora_encerramento: getDateTimeBrasilia(), // <--- Grava a hora do fim em Brasília
         valor_total_negociado: valorTotalNum,
         desconto_aplicado: descontoNum,
         

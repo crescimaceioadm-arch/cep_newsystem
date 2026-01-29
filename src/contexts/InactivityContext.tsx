@@ -58,7 +58,7 @@ export function InactivityProvider({ children }: { children: ReactNode }) {
     scheduleMidnightLogout();
 
     // Se abriu no dia seguinte, força logout
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getDateBrasilia();
     const storedDate = localStorage.getItem("session_date");
     if (storedDate && storedDate !== todayStr) {
       handleLogout();
