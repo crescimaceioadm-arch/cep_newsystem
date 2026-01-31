@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Atendimento, StatusAtendimento, ItemCategoria, AtendimentoItem } from "@/types/database";
+import { getDateTimeBrasilia } from "@/lib/utils";
 
 export function useAtendimentos() {
   return useQuery({
@@ -88,7 +89,7 @@ export function useCreateAtendimento() {
       nomeCliente: string;
       origemAvaliacao?: "presencial" | "whatsapp" | null;
     }) => {
-      const horaChegada = new Date().toISOString();
+      const horaChegada = getDateTimeBrasilia();
       const { data, error } = await supabase
         .from("atendimentos")
         .insert({ 
