@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
+import { useToast } from '@/hooks/use-toast';
+import { getDateBrasilia } from '@/lib/utils';
 
 export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral' | 'social_media';
 

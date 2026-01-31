@@ -9,9 +9,13 @@ import {
   History,
   ClipboardList,
   Megaphone,
-  LogOut
+  LogOut,
+  Package,
+  TrendingUp,
+  ChevronRight
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -40,7 +44,11 @@ const allMenuItems = [
   { title: "Histórico Vendas", url: "/vendas/historico", icon: History },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
-  { title: "Estoque", url: "/estoque", icon: Box },
+  { title: "Estoque", url: "/estoque", icon: Box, submenu: [
+    { title: "Gestão de Estoque", url: "/estoque" },
+    { title: "Itens Grandes", url: "/estoque/itens-grandes" },
+    { title: "Relatório Itens Grandes", url: "/estoque/itens-grandes/relatorio" },
+  ]},
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 
@@ -48,6 +56,7 @@ export function AppSidebar() {
   const { cargo } = useUser();
   const { limparCaixa } = useCaixa();
   const navigate = useNavigate();
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   
   // Filtra menu items baseado no cargo do usuário
   const menuItems = allMenuItems.filter(item => hasAccess(cargo, item.url));
@@ -87,20 +96,60 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      end={item.url === "/"} 
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-white/40 hover:text-slate-900 transition-colors"
-                      activeClassName="bg-white/50 text-slate-900 font-semibold hover:bg-white/50 hover:text-slate-900 shadow-sm"
-                    >
-                      <item.icon className="h-5 w-5" />
-                      <span className="font-medium">{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              {menuItems.map((item: any) => (
+                <div key={item.title}>
+                  {item.submenu ? (
+                    <>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton 
+                          onClick={() => setExpandedMenu(expandedMenu === item.title ? null : item.title)}
+                          className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:bg-white/40 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3">
+                            <item.icon className="h-5 w-5" />
+                            <span className="font-medium">{item.title}</span>
+                          </div>
+                          <ChevronRight 
+                            className={`h-4 w-4 transition-transform ${expandedMenu === item.title ? "rotate-90" : ""}`}
+                          />
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                      {expandedMenu === item.title && (
+                        <div className="ml-4 space-y-1 mt-1">
+                          {item.submenu.map((subitem: any) => (
+                            <SidebarMenuItem key={subitem.url}>
+                              <SidebarMenuButton asChild>
+                                <NavLink 
+                                  to={subitem.url} 
+                                  end={subitem.url === "/estoque"} 
+                                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-white/30 hover:text-slate-800 transition-colors"
+                                  activeClassName="bg-white/40 text-slate-800 font-semibold"
+                                >
+                                  <span>•</span>
+                                  <span>{subitem.title}</span>
+                                </NavLink>
+                              </SidebarMenuButton>
+                            </SidebarMenuItem>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild>
+                        <NavLink 
+                          to={item.url} 
+                          end={item.url === "/"} 
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-white/40 hover:text-slate-900 transition-colors"
+                          activeClassName="bg-white/50 text-slate-900 font-semibold hover:bg-white/50 hover:text-slate-900 shadow-sm"
+                        >
+                          <item.icon className="h-5 w-5" />
+                          <span className="font-medium">{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                </div>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>

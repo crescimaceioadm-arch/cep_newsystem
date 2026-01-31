@@ -108,7 +108,6 @@ export default function HistoricoAtendimentos() {
       
       if (!encontrou) return false;
     }
-
     return true;
   });
 

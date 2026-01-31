@@ -17,6 +17,7 @@ import { ExportarVendasCSV } from "@/components/vendas/ExportarVendasCSV";
 import { ShoppingCart, CreditCard, Loader2 } from "lucide-react";
 // CORREÇÃO 1: Usando o hook padrão do projeto em vez do Sonner (evita crash de Provider)
 import { useToast } from "@/hooks/use-toast";
+import { SeletorItemGrande, ItemGrandeSelecionado } from "@/components/vendas/SeletorItemGrande";
 import {
   Select,
   SelectContent,
@@ -53,6 +54,7 @@ export default function Vendas() {
 
   const [quantidades, setQuantidades] = useState<Record<string, number>>({});
   const [descricaoItensExtras, setDescricaoItensExtras] = useState("");
+  const [itensGrandesSelecionados, setItensGrandesSelecionados] = useState<ItemGrandeSelecionado[]>([]);
 
   const [valorTotal, setValorTotal] = useState<string>("");
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([{ metodo: "PIX", valor: "" }]);
@@ -150,6 +152,7 @@ export default function Vendas() {
       pagamentos: pagamentos.map(p => ({ ...p, valor: parseFloat(p.valor) || 0 })),
       vendedora_nome: vendedoraSelecionada || undefined,
       caixa_origem: caixaSelecionado || "Caixa 1",
+      itensGrandesSelecionados: itensGrandesSelecionados,
     }, {
       onSuccess: () => {
         const reset: Record<string, number> = {};
@@ -174,7 +177,7 @@ export default function Vendas() {
           <ExportarVendasCSV />
         </div>
       )}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
         {/* CARD PAGAMENTO */}
         <Card>
@@ -183,7 +186,7 @@ export default function Vendas() {
               <CreditCard className="h-5 w-5" /> Pagamento
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-4">
             
             <div className="space-y-2">
               <Label htmlFor="vendedora">Vendedora</Label>
@@ -219,7 +222,7 @@ export default function Vendas() {
                   min="0"
                   value={valorTotal}
                   onChange={(e) => setValorTotal(e.target.value)}
-                  className="pl-10 text-2xl font-bold h-14"
+                  className="pl-10 text-xl font-bold h-12"
                   placeholder="0,00"
                 />
               </div>
@@ -234,7 +237,7 @@ export default function Vendas() {
 
             <Separator />
 
-            <div className="space-y-2 p-4 rounded-lg bg-slate-50 border">
+            <div className="space-y-2 p-3 rounded-md bg-slate-50 border">
               <div className="flex justify-between text-sm">
                 <span>Total Venda:</span>
                 <span className="font-semibold">R$ {valorTotalNum.toFixed(2)}</span>
@@ -253,7 +256,7 @@ export default function Vendas() {
             <Button 
               onClick={() => handleFinalizarVenda()} 
               disabled={isPending || totalPecas === 0}
-              className="w-full h-14 text-lg"
+              className="w-full h-12 text-base"
               size="lg"
             >
               {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Processando...</> : "Finalizar Venda"}
@@ -268,11 +271,11 @@ export default function Vendas() {
               <ShoppingCart className="h-5 w-5" /> Itens da Venda
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {categoriasVenda.length === 0 ? (
               <p className="text-sm text-muted-foreground">Cadastre categorias de venda em Configurações.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {categoriasVenda.map((cat) => (
                   <div key={cat.id} className="space-y-2">
                     <Label>{cat.nome}</Label>
@@ -285,7 +288,7 @@ export default function Vendas() {
                         setQuantidades((prev) => ({ ...prev, [cat.id]: Number.isNaN(val) ? 0 : val }));
                       }}
                       placeholder="0"
-                      className="text-center text-lg font-semibold"
+                      className="text-center text-base font-semibold h-10"
                     />
                     <span className="text-xs text-muted-foreground">
                       Estoque: {getEstoqueCategoria(cat.id, cat.nome, cat.slug)}
@@ -296,7 +299,15 @@ export default function Vendas() {
             )}
 
             <Separator />
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
+
+            {/* ITENS GRANDES */}
+            <SeletorItemGrande
+              itensSelecionados={itensGrandesSelecionados}
+              onChange={setItensGrandesSelecionados}
+            />
+
+            <Separator />
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-md border">
               <span className="font-medium">Total de Peças:</span>
               <span className="text-2xl font-bold">{totalPecas}</span>
             </div>

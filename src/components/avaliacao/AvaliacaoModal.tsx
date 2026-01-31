@@ -23,6 +23,7 @@ import { useSaveAvaliacao, useRecusarAvaliacao } from "@/hooks/useAtendimentos";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { toast } from "@/hooks/use-toast";
 import { useItemCategories } from "@/hooks/useItemCategories";
+import { ItemGrandeInput, ItemGrandeFormData } from "@/components/avaliacao/ItemGrandeInput";
 
 interface AvaliacaoModalProps {
   atendimento: Atendimento | null;
@@ -76,7 +77,21 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
     () => (categorias || []).filter((c) => c.ativo !== false && (c.tipo === "compra" || c.tipo === "ambos")),
     [categorias]
   );
+  const categoriasCompraOrdenadas = React.useMemo(() => {
+    const lista = [...categoriasCompra];
+    const idxGrandes = lista.findIndex((c) => c.slug === "itens_grandes");
+    const idxBolsa = lista.findIndex((c) =>
+      (c.slug || "").includes("bolsa") || (c.nome || "").toLowerCase().includes("bolsa")
+    );
+    if (idxGrandes > -1 && idxBolsa > -1 && idxGrandes !== idxBolsa + 1) {
+      const [grand] = lista.splice(idxGrandes, 1);
+      const insertAt = Math.min(idxBolsa + 1, lista.length);
+      lista.splice(insertAt, 0, grand);
+    }
+    return lista;
+  }, [categoriasCompra]);
   const [itemQuantities, setItemQuantities] = useState<Record<string, { quantidade: number; valor_total?: number | null }>>({});
+  const [itensGrandes, setItensGrandes] = useState<ItemGrandeFormData[]>([]);
 
   // Quando abrir em modo de edição, carrega os dados da avaliação
   React.useEffect(() => {
@@ -157,7 +172,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
   const requiresDescription = Object.entries(itemQuantities).some(
     ([catId, entry]) => {
       const cat = categoriasCompra.find((c) => c.id === catId);
-      return cat?.requer_descricao && (entry.quantidade || 0) > 0;
+      return cat?.requer_descricao && cat.slug !== "itens_grandes" && (entry.quantidade || 0) > 0;
     }
   );
   const isDescriptionValid = !requiresDescription || formData.descricao_itens_extra.trim().length > 0;
@@ -238,7 +253,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
     if (!isDescriptionValid) {
       toast({
         title: "Campo obrigatório",
-        description: "Descreva os itens grandes e Enxoval",
+        description: "Descreva os itens obrigatórios",
         variant: "destructive",
       });
       return;
@@ -249,7 +264,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
       const cat = categoriasCompra.find((c) => c.id === catId);
       const hasQuantity = (entry.quantidade || 0) > 0;
       const hasValue = entry.valor_total != null && entry.valor_total > 0;
-      return cat?.requer_valor && hasQuantity && !hasValue;
+      return cat?.requer_valor && cat.slug !== "itens_grandes" && hasQuantity && !hasValue;
     });
 
     if (itemsWithMissingValue.length > 0) {
@@ -286,6 +301,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
       isEditing,
       itens: [] as Array<{ categoria_id: string; quantidade: number; valor_total?: number | null }>,
       origem_avaliacao: atendimento.origem_avaliacao ?? null,
+      itensGrandes: itensGrandes,
     };
 
     categoriasCompra.forEach((cat) => {
@@ -379,12 +395,12 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg overflow-y-auto max-h-[90vh]">
+      <DialogContent className="max-w-5xl overflow-y-auto max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Editar Avaliação: " : "Avaliar: "}{atendimento.nome_cliente}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2 mb-4">
+        <div className="space-y-1 mb-3">
           <Label htmlFor="avaliadora">Avaliadora</Label>
           <Select value={avaliadoraSelecionada} onValueChange={setAvaliadoraSelecionada} disabled={isEditing}>
             <SelectTrigger disabled={isEditing}>
@@ -412,22 +428,23 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
 
         {!isRecusando ? (
           <>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 py-2">
               {categoriasCompra.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Cadastre categorias de compra em Configurações.</p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {categoriasCompra.map((cat) => {
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {categoriasCompraOrdenadas.map((cat) => {
                     const entry = itemQuantities[cat.id] || { quantidade: 0, valor_total: null };
-                    const showValor = cat.requer_valor;
+                    const showValor = cat.requer_valor && cat.slug !== "itens_grandes";
                     return (
-                      <div key={cat.id} className="space-y-2 p-3 border rounded-lg bg-muted/40">
-                          <Label>{cat.nome}</Label>
+                      <div key={cat.id} className="space-y-1.5 p-2.5 border rounded-md bg-muted/30">
+                          <Label className="text-sm">{cat.nome}</Label>
                         <Input
                           type="number"
                           min={0}
                           value={entry.quantidade || 0}
                           onChange={(e) => handleItemChange(cat.id, parseInt(e.target.value) || 0, entry.valor_total)}
+                          className="h-10"
                         />
                         {showValor && (
                           <div className="space-y-1">
@@ -438,6 +455,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
                               step={0.01}
                               value={entry.valor_total ?? 0}
                               onChange={(e) => handleItemChange(cat.id, entry.quantidade, parseFloat(e.target.value) || 0)}
+                              className="h-10"
                             />
                           </div>
                         )}
@@ -451,13 +469,22 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
             {requiresDescription && (
               <div className="space-y-2">
                 <Label htmlFor="descricao_itens_extra" className="text-destructive">
-                  Descrição dos Itens Grandes/Médios *
+                  Descrição dos Itens *
                 </Label>
                 <Textarea
                   id="descricao_itens_extra"
-                  placeholder="Descreva os itens grandes ou médios..."
+                  placeholder="Descreva os itens..."
                   value={formData.descricao_itens_extra}
                   onChange={(e) => handleChange("descricao_itens_extra", e.target.value)}
+                />
+              </div>
+            )}
+
+            {formData.qtd_itens_grandes > 0 && (
+              <div className="border-t pt-4 mt-4">
+                <ItemGrandeInput
+                  itens={itensGrandes}
+                  onChange={setItensGrandes}
                 />
               </div>
             )}

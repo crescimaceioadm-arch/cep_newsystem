@@ -4,6 +4,11 @@ import { Venda, Estoque, ItemCategoria } from "@/types/database";
 import { toast } from "sonner";
 import { registrarMovimentacaoCaixa } from "@/lib/registrarMovimentacaoCaixa";
 
+export interface ItemGrandeSelecionado {
+  id: string;
+  valor_venda: number;
+}
+
 export interface NovaVenda {
   qtd_baby_vendida: number;
   qtd_1_a_16_vendida: number;
@@ -16,6 +21,7 @@ export interface NovaVenda {
   vendedora_nome?: string;
   caixa_origem?: string;
   itens?: Array<{ categoria_id: string; quantidade: number }>;
+  itensGrandesSelecionados?: ItemGrandeSelecionado[];
 }
 
 export function useVendas() {
@@ -219,6 +225,23 @@ export function useFinalizarVenda() {
 
         if (itensPivot.length > 0) {
           await supabase.from("venda_itens").insert(itensPivot);
+        }
+
+        // Marcar itens grandes como vendidos
+        if (venda.itensGrandesSelecionados && venda.itensGrandesSelecionados.length > 0) {
+          const agora = new Date().toISOString();
+          for (const itemSelecionado of venda.itensGrandesSelecionados) {
+            await supabase
+              .from("itens_grandes_individuais")
+              .update({
+                status: "vendido",
+                valor_venda: itemSelecionado.valor_venda,
+                venda_id: vendaInserida.id,
+                data_saida: agora,
+                vendedora_nome: venda.vendedora_nome || null,
+              })
+              .eq("id", itemSelecionado.id);
+          }
         }
       }
 

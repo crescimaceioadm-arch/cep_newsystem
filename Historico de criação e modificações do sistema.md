@@ -486,4 +486,145 @@ Todo o sistema usava `new Date().toISOString()` que retorna UTC, mas o banco Pos
 - Solução previne problemas futuros mas não altera registros passados
 - Todas as operações de data/hora agora são consistentes com Brasília
 
+--- COMMIT FEITO ---
+
 ---
+
+## 📅 30/01/2026 - 15:00
+
+### 📦 Novo: Sistema completo de controle unitário de itens grandes
+
+**Necessidade:**  
+Sistema para rastrear individualmente itens grandes (carrinhos, berços, etc) desde a avaliação até a venda. Necessário:
+- Registrar cada item grande na avaliação com tipo, marca, descrição, valor compra
+- Gerenciar estoque de itens disponíveis
+- Marcar itens como vendido com valor_venda
+- Marcar itens como baixa (danificado/perdido)
+- Visualizar relatório com métricas (dias venda, margem)
+- Editar informações de itens
+- Deletar itens para limpeza de testes
+
+**Causa:**  
+Não havia rastreamento individual de itens grandes. Sistema anterior só permitia registrar quantidade, sem controle de estoque ou histórico de venda.
+
+**Solução Implementada:**
+
+1. **Banco de dados (3 tabelas):**
+   - `tipos_itens_grandes`: Carrinho, Berço, Cercadinho, etc (10 tipos pré-seeded)
+   - `marcas_itens_grandes`: Burigotto, Galzerano, Chicco, etc (11 marcas pré-seeded)
+   - `itens_grandes_individuais`: Registro individual com status (disponivel/vendido/baixa)
+   - Índices em status, tipo, marca, atendimento, venda
+   - Triggers para updated_at automático
+   - Função `delete_item_grande_individual()` para limpeza segura
+
+2. **TypeScript interfaces:**
+   - `TipoItemGrande`, `MarcaItemGrande`, `ItemGrandeIndividual` em `types/database.ts`
+   - Campos: id, tipo_id, marca_id, descricao, valor_compra, valor_venda, status
+   - Rastreamento: atendimento_id, avaliadora_nome, venda_id, vendedora_nome, datas
+
+3. **6 hooks CRUD completos:**
+   - `useTiposItensGrandes()`: Query, Create, Update, Delete
+   - `useMarcasItensGrandes()`: Query, Create, Update, Delete
+   - `useItensGrandesIndividuais()`: Query todos os itens
+   - `useItensGrandesDisponiveis()`: Query apenas disponíveis (para venda)
+   - `useCreateItensGrandes()`: Batch insert de itens na avaliação
+   - `useVenderItemGrande()`: Marca como vendido com valor_venda, venda_id, data_saida
+   - `useDarBaixaItemGrande()`: Marca como baixa com motivo
+   - `useUpdateItemGrande()`: Generic update (id, dados)
+   - `useDeleteItemGrande()`: Delete com confirmação
+
+4. **Componentes UI:**
+   - `ItemGrandeInput.tsx`: Form inline para adicionar itens na avaliação (Tipo, Marca, Descrição, Valor)
+   - `SeletorItemGrande.tsx`: Dropdown de itens disponíveis nas vendas com campo valor_venda
+   - `ItensGrandes.tsx`: Página de gestão com:
+     - 4 cards resumo (Disponível, Vendido, Baixa, Valor em Estoque)
+     - Busca + filtro por status
+     - Tabela completa com 11 colunas (tipo, marca, descrição, valores, datas, vendedora, etc)
+     - Ações: Eye (detalhes), Edit (editar descrição/valor), AlertTriangle (dar baixa), Trash (delete)
+     - 3 modais: Detalhes (read-only), Dar Baixa (textarea motivo), Edição (descrição + valor_venda)
+   - `RelatorioItensGrandes.tsx`: Página de relatório com:
+     - Cards resumo por tipo (dias_medio_venda, margem_media_percentual, quantidade_vendidos)
+     - Lista de itens vendidos com métricas
+     - Busca e filtros
+
+5. **Integração em workflows:**
+   - **Avaliação**: ItemGrandeInput apareça quando qtd_itens_grandes > 0
+   - **Vendas**: SeletorItemGrande adiciona itens selecionados, marca como vendido ao finalizar
+   - **Estoque**: Menu submenu sob "Estoque" com Gestão e Relatório
+   - **Configurações**: CRUD para Tipos e Marcas em abas separadas
+   - **Deletamento em cascata**: Itens apagados quando avaliação é deletada
+
+6. **Edição e exclusão:**
+   - Botão Edit abre modal com campos descricao e valor_venda
+   - Salvar atualiza via `useUpdateItemGrande` (wraps fields em `dados: {}`)
+   - Botão Delete com confirmação dialogo ("Tem certeza? Não pode ser desfeito")
+   - Query cache invalidado após operações
+
+**Arquivos Criados:**
+
+- `supabase/migrations/20260130_itens_grandes_individuais.sql`
+  - Migration completa com 3 tabelas, índices, triggers, seeds
+
+- `src/hooks/useItensGrandesIndividuais.ts`
+  - 9 hooks para CRUD e operações de estoque
+
+- `src/hooks/useTiposItensGrandes.ts`
+  - CRUD para tipos
+
+- `src/hooks/useMarcasItensGrandes.ts`
+  - CRUD para marcas
+
+- `src/components/avaliacao/ItemGrandeInput.tsx`
+  - Form inline para entrada de itens grandes
+
+- `src/components/vendas/SeletorItemGrande.tsx`
+  - Seletor dropdown com opção "Item grande não lançado"
+
+- `src/pages/ItensGrandes.tsx`
+  - Página completa de gestão
+
+- `src/pages/RelatorioItensGrandes.tsx`
+  - Página de relatório com métricas
+
+**Arquivos Alterados:**
+
+- `src/types/database.ts`
+  - Adicionadas 3 interfaces para tipos, marcas, itens individuais
+
+- `src/App.tsx`
+  - Linha: Route `/estoque/itens-grandes` e `/estoque/itens-grandes/relatorio`
+
+- `src/pages/Avaliacao.tsx`
+  - ItemGrandeInput integrado quando qtd_itens_grandes > 0
+  - State para gerenciar array de itens grandes
+  - Salva itens grandes junto com atendimento
+
+- `src/pages/Vendas.tsx`
+  - SeletorItemGrande adicionado na seção CARD ITENS
+  - State para itensGrandesSelecionados
+  - Loop marca cada item como vendido ao finalizar
+
+- `src/pages/Configuracoes.tsx`
+  - Novas abas para CRUD de Tipos e Marcas
+
+- `src/components/layout/AppSidebar.tsx`
+  - Menu "Estoque" com submenu expandível
+  - Submenu contém: Gestão de Estoque, Itens Grandes, Relatório Itens Grandes
+
+- `src/hooks/useAtendimentos.ts`
+  - Deletamento de itens_grandes_individuais ao deletar atendimento
+  - Invalidação de caches apropriados
+
+- `src/components/avaliacao/AvaliacaoModal.tsx`
+  - Renderização condicional de ItemGrandeInput
+
+**Observações:**
+- Sistema totalmente funcional e pronto para produção
+- Integração sem breaking changes em workflows existentes
+- Cascata de deletamento previne órfãos de dados
+- Edição permite correção de valores sem perder rastreamento
+- Deleção permite limpeza de testes sem afetar produção
+- Métricas calculadas em tempo real (dias_venda, margem_percentual)
+- Extensível: novos tipos/marcas podem ser adicionados via Configurações
+
+--- COMMIT FEITO ---

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getDateBrasilia } from "@/lib/utils";
 
 const INACTIVITY_TIMEOUT = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 

@@ -21,6 +21,8 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Marketing from "./pages/Marketing";
 import ClientesInsights from "./pages/ClientesInsights";
+import ItensGrandes from "./pages/ItensGrandes";
+import RelatorioItensGrandes from "./pages/RelatorioItensGrandes";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +48,8 @@ const App = () => (
                 <Route path="/financeiro" element={<RequireRole><Financeiro /></RequireRole>} />
                 <Route path="/marketing" element={<RequireRole><Marketing /></RequireRole>} />
                 <Route path="/estoque" element={<RequireRole><Estoque /></RequireRole>} />
+                <Route path="/estoque/itens-grandes" element={<RequireRole><ItensGrandes /></RequireRole>} />
+                <Route path="/estoque/itens-grandes/relatorio" element={<RequireRole><RelatorioItensGrandes /></RequireRole>} />
                 <Route path="/dashboard" element={<RequireRole><Dashboard /></RequireRole>} />
                 <Route path="/configuracoes" element={<RequireRole><Configuracoes /></RequireRole>} />
                 <Route path="*" element={<NotFound />} />

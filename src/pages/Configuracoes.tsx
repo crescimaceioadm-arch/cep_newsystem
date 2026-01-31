@@ -28,6 +28,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { useItemCategories, useCreateItemCategory, useUpdateItemCategory } from "@/hooks/useItemCategories";
+import { useTiposItensGrandes, useCreateTipoItemGrande, useUpdateTipoItemGrande, useDeleteTipoItemGrande } from "@/hooks/useTiposItensGrandes";
+import { useMarcasItensGrandes, useCreateMarcaItemGrande, useUpdateMarcaItemGrande, useDeleteMarcaItemGrande } from "@/hooks/useMarcasItensGrandes";
 
 function EquipeSection({ 
   funcao 
@@ -434,6 +436,248 @@ function ItemCategoriesSection() {
   );
 }
 
+// Seção de Tipos de Itens Grandes
+function TiposItensGrandesSection() {
+  const { data: tipos, isLoading } = useTiposItensGrandes();
+  const criarTipo = useCreateTipoItemGrande();
+  const atualizarTipo = useUpdateTipoItemGrande();
+  const deletarTipo = useDeleteTipoItemGrande();
+  const [novoTipo, setNovoTipo] = useState("");
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [nomeEdit, setNomeEdit] = useState("");
+
+  const handleCriar = () => {
+    if (!novoTipo.trim()) {
+      toast.error("Digite um nome válido");
+      return;
+    }
+    criarTipo.mutate(
+      { nome: novoTipo.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Tipo criado");
+          setNovoTipo("");
+        },
+        onError: (error: any) => toast.error("Erro: " + error.message),
+      }
+    );
+  };
+
+  const handleAtualizar = (id: string) => {
+    if (!nomeEdit.trim()) {
+      toast.error("Nome não pode ser vazio");
+      return;
+    }
+    atualizarTipo.mutate(
+      { id, dados: { nome: nomeEdit.trim() } },
+      {
+        onSuccess: () => {
+          toast.success("Tipo atualizado");
+          setEditandoId(null);
+        },
+        onError: (error: any) => toast.error("Erro: " + error.message),
+      }
+    );
+  };
+
+  const handleDeletar = (id: string, nome: string) => {
+    if (!confirm(`Excluir tipo "${nome}"?`)) return;
+    deletarTipo.mutate(id, {
+      onSuccess: () => toast.success("Tipo excluído"),
+      onError: (error: any) => toast.error("Erro: " + error.message),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Novo tipo (ex: Carrinho de Bebê)"
+          value={novoTipo}
+          onChange={(e) => setNovoTipo(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCriar()}
+        />
+        <Button onClick={handleCriar} disabled={criarTipo.isPending}>
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : tipos?.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhum tipo cadastrado</p>
+      ) : (
+        <div className="space-y-2">
+          {tipos?.map((tipo) => (
+            <div key={tipo.id} className="flex items-center gap-2 p-2 border rounded">
+              {editandoId === tipo.id ? (
+                <>
+                  <Input
+                    value={nomeEdit}
+                    onChange={(e) => setNomeEdit(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAtualizar(tipo.id)}
+                    className="flex-1"
+                  />
+                  <Button size="sm" onClick={() => handleAtualizar(tipo.id)}>
+                    Salvar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditandoId(null)}>
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 font-medium">{tipo.nome}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditandoId(tipo.id);
+                      setNomeEdit(tipo.nome);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => handleDeletar(tipo.id, tipo.nome)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Seção de Marcas de Itens Grandes
+function MarcasItensGrandesSection() {
+  const { data: marcas, isLoading } = useMarcasItensGrandes();
+  const criarMarca = useCreateMarcaItemGrande();
+  const atualizarMarca = useUpdateMarcaItemGrande();
+  const deletarMarca = useDeleteMarcaItemGrande();
+  const [novaMarca, setNovaMarca] = useState("");
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [nomeEdit, setNomeEdit] = useState("");
+
+  const handleCriar = () => {
+    if (!novaMarca.trim()) {
+      toast.error("Digite um nome válido");
+      return;
+    }
+    criarMarca.mutate(
+      { nome: novaMarca.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Marca criada");
+          setNovaMarca("");
+        },
+        onError: (error: any) => toast.error("Erro: " + error.message),
+      }
+    );
+  };
+
+  const handleAtualizar = (id: string) => {
+    if (!nomeEdit.trim()) {
+      toast.error("Nome não pode ser vazio");
+      return;
+    }
+    atualizarMarca.mutate(
+      { id, dados: { nome: nomeEdit.trim() } },
+      {
+        onSuccess: () => {
+          toast.success("Marca atualizada");
+          setEditandoId(null);
+        },
+        onError: (error: any) => toast.error("Erro: " + error.message),
+      }
+    );
+  };
+
+  const handleDeletar = (id: string, nome: string) => {
+    if (!confirm(`Excluir marca "${nome}"?`)) return;
+    deletarMarca.mutate(id, {
+      onSuccess: () => toast.success("Marca excluída"),
+      onError: (error: any) => toast.error("Erro: " + error.message),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Nova marca (ex: Burigotto)"
+          value={novaMarca}
+          onChange={(e) => setNovaMarca(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCriar()}
+        />
+        <Button onClick={handleCriar} disabled={criarMarca.isPending}>
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : marcas?.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhuma marca cadastrada</p>
+      ) : (
+        <div className="space-y-2">
+          {marcas?.map((marca) => (
+            <div key={marca.id} className="flex items-center gap-2 p-2 border rounded">
+              {editandoId === marca.id ? (
+                <>
+                  <Input
+                    value={nomeEdit}
+                    onChange={(e) => setNomeEdit(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAtualizar(marca.id)}
+                    className="flex-1"
+                  />
+                  <Button size="sm" onClick={() => handleAtualizar(marca.id)}>
+                    Salvar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditandoId(null)}>
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 font-medium">{marca.nome}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditandoId(marca.id);
+                      setNomeEdit(marca.nome);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => handleDeletar(marca.id, marca.nome)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Configuracoes() {
   const { isAdmin } = useUser();
 
@@ -484,7 +728,35 @@ export default function Configuracoes() {
             </AccordionContent>
           </AccordionItem>
         )}
+        {/* Tipos de Itens Grandes */}
+        {isAdmin && (
+          <AccordionItem value="tipos-itens-grandes" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Tags className="h-5 w-5 text-blue-600" />
+                <span className="text-lg font-semibold">Tipos de Itens Grandes</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <TiposItensGrandesSection />
+            </AccordionContent>
+          </AccordionItem>
+        )}
 
+        {/* Marcas de Itens Grandes */}
+        {isAdmin && (
+          <AccordionItem value="marcas-itens-grandes" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Tags className="h-5 w-5 text-green-600" />
+                <span className="text-lg font-semibold">Marcas de Itens Grandes</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <MarcasItensGrandesSection />
+            </AccordionContent>
+          </AccordionItem>
+        )}
         {/* Admin: Reconciliação */}
         {isAdmin && (
           <AccordionItem value="reconciliacao" className="border rounded-lg px-4">

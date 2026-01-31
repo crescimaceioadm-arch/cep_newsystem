@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Atendimento, StatusAtendimento, ItemCategoria, AtendimentoItem } from "@/types/database";
-import { getDateTimeBrasilia } from "@/lib/utils";
 
 export function useAtendimentos() {
   return useQuery({
@@ -89,7 +88,7 @@ export function useCreateAtendimento() {
       nomeCliente: string;
       origemAvaliacao?: "presencial" | "whatsapp" | null;
     }) => {
-      const horaChegada = getDateTimeBrasilia();
+      const horaChegada = new Date().toISOString();
       const { data, error } = await supabase
         .from("atendimentos")
         .insert({ 
@@ -259,6 +258,7 @@ interface AvaliacaoData {
   pagamento_3_valor?: number | null;
   isEditing?: boolean;
   itens?: Array<{ categoria_id: string; quantidade: number; valor_total?: number | null }>;
+  itensGrandes?: Array<{ tipo_id: string; marca_id: string; descricao: string; valor_compra: number }>;
 }
 
 export function useSaveAvaliacao() {
@@ -369,6 +369,28 @@ export function useSaveAvaliacao() {
 
       if (itensPivot.length > 0) {
         await supabase.from("atendimento_itens").insert(itensPivot);
+      }
+
+      // 1.0b Salvar itens grandes individuais (se houver)
+      if (data.itensGrandes && data.itensGrandes.length > 0) {
+        const { error: itensGrandesError } = await supabase
+          .from("itens_grandes_individuais")
+          .insert(
+            data.itensGrandes.map(item => ({
+              tipo_id: item.tipo_id,
+              marca_id: item.marca_id,
+              descricao: item.descricao,
+              valor_compra: item.valor_compra,
+              atendimento_id: data.id,
+              avaliadora_nome: data.avaliadora_nome || null,
+              status: 'disponivel',
+            }))
+          );
+
+        if (itensGrandesError) {
+          console.error("[useSaveAvaliacao] Erro ao salvar itens grandes:", itensGrandesError);
+          throw itensGrandesError;
+        }
       }
 
       // 1.1 Ajuste de dinheiro no caixa de Avaliação (se houve mudança para Dinheiro)
@@ -500,7 +522,18 @@ export function useDeleteAtendimento() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      // 1. Buscar o atendimento para verificar se há pagamento em dinheiro
+      // 1. Deletar itens grandes associados à avaliação
+      const { error: deleteItensGrandesError } = await supabase
+        .from("itens_grandes_individuais")
+        .delete()
+        .eq("atendimento_id", id);
+
+      if (deleteItensGrandesError) {
+        console.error("[useDeleteAtendimento] Erro ao deletar itens grandes:", deleteItensGrandesError);
+        throw deleteItensGrandesError;
+      }
+
+      // 2. Buscar o atendimento para verificar se há pagamento em dinheiro
       const { data: atendimento } = await supabase
         .from("atendimentos")
         .select("*")
@@ -508,7 +541,7 @@ export function useDeleteAtendimento() {
         .single();
 
       if (atendimento && atendimento.status === 'finalizado') {
-        // 2. Calcular total em dinheiro
+        // 3. Calcular total em dinheiro
         let valorDinheiro = 0;
         if (atendimento.pagamento_1_metodo?.toLowerCase() === 'dinheiro') {
           valorDinheiro += atendimento.pagamento_1_valor || 0;
@@ -520,7 +553,7 @@ export function useDeleteAtendimento() {
           valorDinheiro += atendimento.pagamento_3_valor || 0;
         }
 
-        // 3. Se houve pagamento em dinheiro, deletar a movimentação
+        // 4. Se houve pagamento em dinheiro, deletar a movimentação
         if (valorDinheiro > 0) {
           // Deletar a movimentação associada (motivo do frontend: "Pagamento avaliação - ...")
           await supabase
@@ -533,7 +566,7 @@ export function useDeleteAtendimento() {
         }
       }
 
-      // 4. Finalmente, deletar o atendimento
+      // 5. Finalmente, deletar o atendimento
       const { error } = await supabase
         .from("atendimentos")
         .delete()
@@ -549,6 +582,8 @@ export function useDeleteAtendimento() {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      queryClient.invalidateQueries({ queryKey: ["itens_grandes_individuais"] });
+      queryClient.invalidateQueries({ queryKey: ["itens_grandes_disponiveis"] });
     },
   });
 }

@@ -114,3 +114,49 @@ export interface FechamentoCaixa {
   created_at: string;
   created_by: string | null;
 }
+
+export interface TipoItemGrande {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarcaItemGrande {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItemGrandeIndividual {
+  id: string;
+  tipo_id: string;
+  marca_id: string;
+  descricao: string;
+  valor_compra: number;
+  valor_venda: number | null;
+  observacoes: string | null;
+  status: 'disponivel' | 'vendido' | 'baixa';
+  
+  // Entrada (compra)
+  atendimento_id: string | null;
+  data_entrada: string;
+  avaliadora_nome: string | null;
+  
+  // Saída (venda)
+  venda_id: string | null;
+  data_saida: string | null;
+  vendedora_nome: string | null;
+  
+  created_at: string;
+  updated_at: string;
+  
+  // Relacionamentos (para joins)
+  tipo?: TipoItemGrande;
+  marca?: MarcaItemGrande;
+}
