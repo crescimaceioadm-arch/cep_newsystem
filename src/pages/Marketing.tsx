@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
+import CalendarioEventosMarketing from "@/components/marketing/CalendarioEventosMarketing";
 
 type MarketingItem = {
   id: string;
@@ -169,6 +170,14 @@ export default function Marketing() {
     
     return dias;
   }, [tarefasPorDia, weekDays, filtroResponsavel, filtroDataProducao, filtroDataPostagem]);
+
+  const tarefasFiltradas = useMemo(
+    () => Object.values(tarefasFiltradasPorDia).flat(),
+    [tarefasFiltradasPorDia]
+  );
+  const totalTarefas = tarefasFiltradas.length;
+  const totalConcluidas = tarefasFiltradas.filter(t => t.produzido).length;
+  const totalPendentes = totalTarefas - totalConcluidas;
 
   // Mutation para criar/atualizar
   const upsertMutation = useMutation({
@@ -453,33 +462,70 @@ export default function Marketing() {
   return (
     <MainLayout title="Marketing - Gestão de Conteúdo">
       <div className="space-y-6">
-        {/* Header com navegação de semana */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">📅 {weekLabel}</h2>
-            <p className="text-sm text-muted-foreground">
-              Planejamento semanal de postagens
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setWeekStart(prev => addDays(prev, -7))}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            
+        {/* Calendário de Eventos de Marketing */}
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <Calendar className="h-5 w-5 text-blue-600" />
+          Eventos de Marketing
+        </div>
+        <CalendarioEventosMarketing />
+
+        {/* Header com navegação e resumo */}
+        <Card className="border-none shadow-sm bg-gradient-to-r from-blue-50 via-white to-orange-50">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">📅 {weekLabel}</h2>
+                <p className="text-sm text-muted-foreground">
+                  Planejamento semanal de postagens
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setWeekStart(prev => addDays(prev, -7))}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}
+                >
+                  Hoje
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setWeekStart(prev => addDays(prev, 7))}
+                >
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+                {!isSocialMedia && (
+                  <Button onClick={() => handleOpenForm()}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nova Tarefa
+                  </Button>
+                )}
+                {!isSocialMedia && (
+                  <Button onClick={handleOpenGridPlanning} variant="secondary">
+                    📋 Planejamento Grid
+                  </Button>
+                )}
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
 
         {/* Filtros */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[200px]">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="min-w-[200px]">
                 <Label htmlFor="filtro-responsavel" className="text-sm">Responsável</Label>
                 <Select value={filtroResponsavel} onValueChange={setFiltroResponsavel}>
-                  <SelectTrigger id="Filtradasfiltro-responsavel">
+                  <SelectTrigger id="filtro-responsavel">
                     <SelectValue placeholder="Todos" />
                   </SelectTrigger>
                   <SelectContent>
@@ -495,7 +541,7 @@ export default function Marketing() {
                 </Select>
               </div>
 
-              <div className="flex-1 min-w-[200px]">
+              <div className="min-w-[200px]">
                 <Label htmlFor="filtro-data-producao" className="text-sm">Data de Produção</Label>
                 <Input
                   id="filtro-data-producao"
@@ -505,7 +551,7 @@ export default function Marketing() {
                 />
               </div>
 
-              <div className="flex-1 min-w-[200px]">
+              <div className="min-w-[200px]">
                 <Label htmlFor="filtro-data-postagem" className="text-sm">Data de Postagem</Label>
                 <Input
                   id="filtro-data-postagem"
@@ -532,35 +578,6 @@ export default function Marketing() {
             </div>
           </CardContent>
         </Card>
-            <Button
-              variant="outline"
-              onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}
-            >
-              Hoje
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setWeekStart(prev => addDays(prev, 7))}
-            >
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            
-            {!isSocialMedia && (
-              <Button onClick={() => handleOpenForm()}>
-                <Plus className="h-4 w-4 mr-2" />
-                Nova Tarefa
-              </Button>
-            )}
-            
-            {!isSocialMedia && (
-              <Button onClick={handleOpenGridPlanning} variant="secondary">
-                📋 Planejamento Grid
-              </Button>
-            )}
-          </div>
-        </div>
 
         {/* Grid semanal - 5 colunas (Seg-Sex) */}
         {isLoading ? (

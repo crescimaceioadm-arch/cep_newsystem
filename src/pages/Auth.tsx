@@ -13,10 +13,17 @@ const Auth = () => {
   const navigate = useNavigate();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [authView, setAuthView] = useState<'sign_in' | 'update_password'>('sign_in');
+  const isRecoveryHash = () => (window.location.hash || '').includes('type=recovery');
 
   useEffect(() => {
     // Verifica se já está logado
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || isRecoveryHash()) {
+        setAuthView('update_password');
+        return;
+      }
+
       if (session) {
         navigate('/');
       }
@@ -25,7 +32,13 @@ const Auth = () => {
     // Checa sessão existente
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        if (isRecoveryHash()) {
+          setAuthView('update_password');
+          return;
+        }
         navigate('/');
+      } else if (isRecoveryHash()) {
+        setAuthView('update_password');
       }
     });
 
@@ -71,6 +84,7 @@ const Auth = () => {
         <CardContent>
           <SupabaseAuth
             supabaseClient={supabase}
+            view={authView}
             appearance={{
               theme: ThemeSupa,
               variables: {
@@ -134,7 +148,7 @@ const Auth = () => {
                 },
               },
             }}
-            redirectTo={`${window.location.origin}/`}
+            redirectTo={`${window.location.origin}/auth`}
           />
         </CardContent>
       </Card>

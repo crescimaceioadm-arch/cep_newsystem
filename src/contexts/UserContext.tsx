@@ -4,7 +4,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { getDateBrasilia } from '@/lib/utils';
 
-export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral' | 'social_media';
+export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral' | 'social_media' | 'mkt';
 
 interface UserProfile {
   id: string;
@@ -45,6 +45,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   social_media: [
     '/marketing', '/auth'
   ],
+  mkt: [
+    '/marketing', '/auth', '/dashboard'
+  ],
 };
 
 // Rota padrão por cargo (para redirecionamento)
@@ -54,6 +57,7 @@ export const DEFAULT_ROUTE: Record<UserRole, string> = {
   avaliadora: '/avaliacao',
   geral: '/vendas',
   social_media: '/marketing',
+  mkt: '/marketing',
 };
 
 export function UserProvider({ children }: { children: ReactNode }) {

@@ -160,3 +160,14 @@ export interface ItemGrandeIndividual {
   tipo?: TipoItemGrande;
   marca?: MarcaItemGrande;
 }
+
+// Evento de Marketing
+export interface EventoMarketing {
+  id: string;
+  data: string;
+  titulo: string;
+  descricao: string | null;
+  criado_por: string | null;
+  created_at: string;
+  updated_at: string;
+}

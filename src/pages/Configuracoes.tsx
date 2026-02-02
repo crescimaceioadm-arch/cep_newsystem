@@ -13,6 +13,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
 import { useCaixa } from "@/contexts/CaixaContext";
 import { GestaoUsuariosCard } from "@/components/configuracoes/GestaoUsuariosCard";
+import { ControlePerfisMenuCard } from "@/components/configuracoes/ControlePerfisMenuCard";
+import { GerenciamentoCargosCard } from "@/components/configuracoes/GerenciamentoCargosCard";
 import { ReconciliacaoCaixaCard } from "@/components/financeiro/ReconciliacaoCaixaCard";
 import {
   Select,
@@ -708,8 +710,38 @@ export default function Configuracoes() {
                 <span className="text-lg font-semibold">Controle de Acesso</span>
               </div>
             </AccordionTrigger>
-            <AccordionContent className="pt-4">
+            <AccordionContent className="pt-4 space-y-4">
               <GestaoUsuariosCard />
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
+        {/* Admin: Gerenciamento de Cargos */}
+        {isAdmin && (
+          <AccordionItem value="gerenciamento-cargos" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-purple-600" />
+                <span className="text-lg font-semibold">Gerenciamento de Cargos</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <GerenciamentoCargosCard />
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
+        {/* Admin: Controle de Menus por Perfil */}
+        {isAdmin && (
+          <AccordionItem value="controle-menus" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-green-600" />
+                <span className="text-lg font-semibold">Permissões de Menus</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <ControlePerfisMenuCard />
             </AccordionContent>
           </AccordionItem>
         )}

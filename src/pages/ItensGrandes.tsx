@@ -19,9 +19,18 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useItensGrandesIndividuais, useDarBaixaItemGrande, useUpdateItemGrande, useDeleteItemGrande } from "@/hooks/useItensGrandesIndividuais";
+import { useTiposItensGrandes } from "@/hooks/useTiposItensGrandes";
+import { useMarcasItensGrandes } from "@/hooks/useMarcasItensGrandes";
 import { Search, Eye, Edit, AlertTriangle, Package, Save, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -29,6 +38,8 @@ import { ptBR } from "date-fns/locale";
 
 export default function ItensGrandes() {
   const { data: itens, isLoading } = useItensGrandesIndividuais();
+  const { data: tipos } = useTiposItensGrandes();
+  const { data: marcas } = useMarcasItensGrandes();
   const darBaixa = useDarBaixaItemGrande();
   const atualizarItem = useUpdateItemGrande();
   const deletarItem = useDeleteItemGrande();
@@ -42,6 +53,9 @@ export default function ItensGrandes() {
   const [itemEdicao, setItemEdicao] = useState<any>(null);
   const [descricaoEdicao, setDescricaoEdicao] = useState("");
   const [valorVendaEdicao, setValorVendaEdicao] = useState("");
+  const [valorCompraEdicao, setValorCompraEdicao] = useState("");
+  const [tipoEdicao, setTipoEdicao] = useState("");
+  const [marcaEdicao, setMarcaEdicao] = useState("");
 
   const itensFiltrados = (itens || []).filter((item) => {
     if (filtroStatus !== "todos" && item.status !== filtroStatus) return false;
@@ -263,6 +277,9 @@ export default function ItensGrandes() {
                                 setItemEdicao(item);
                                 setDescricaoEdicao(item.descricao);
                                 setValorVendaEdicao(item.valor_venda ? item.valor_venda.toString() : "");
+                                setValorCompraEdicao(item.valor_compra ? item.valor_compra.toString() : "");
+                                setTipoEdicao(item.tipo_id);
+                                setMarcaEdicao(item.marca_id);
                                 setModoEdicao(true);
                               }}
                               title="Editar"
@@ -318,6 +335,9 @@ export default function ItensGrandes() {
         setItemEdicao(null);
         setDescricaoEdicao("");
         setValorVendaEdicao("");
+        setValorCompraEdicao("");
+        setTipoEdicao("");
+        setMarcaEdicao("");
       }}>
         <DialogContent>
           <DialogHeader>
@@ -327,12 +347,34 @@ export default function ItensGrandes() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-muted-foreground">Tipo</Label>
-                  <p className="font-medium">{itemEdicao.tipo?.nome}</p>
+                  <Label htmlFor="tipo-edit">Tipo</Label>
+                  <Select value={tipoEdicao} onValueChange={setTipoEdicao}>
+                    <SelectTrigger id="tipo-edit">
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tipos?.map((tipo) => (
+                        <SelectItem key={tipo.id} value={tipo.id}>
+                          {tipo.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Marca</Label>
-                  <p className="font-medium">{itemEdicao.marca?.nome}</p>
+                  <Label htmlFor="marca-edit">Marca</Label>
+                  <Select value={marcaEdicao} onValueChange={setMarcaEdicao}>
+                    <SelectTrigger id="marca-edit">
+                      <SelectValue placeholder="Selecione a marca" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {marcas?.map((marca) => (
+                        <SelectItem key={marca.id} value={marca.id}>
+                          {marca.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div>
@@ -346,8 +388,16 @@ export default function ItensGrandes() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-muted-foreground">Valor de Compra</Label>
-                  <p className="font-medium">R$ {itemEdicao.valor_compra.toFixed(2)}</p>
+                  <Label htmlFor="valor-compra-edit">Valor de Compra (R$)</Label>
+                  <Input
+                    id="valor-compra-edit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={valorCompraEdicao}
+                    onChange={(e) => setValorCompraEdicao(e.target.value)}
+                    placeholder="0.00"
+                  />
                 </div>
                 <div>
                   <Label htmlFor="valor-venda-edit">Valor de Venda (R$)</Label>
@@ -370,12 +420,18 @@ export default function ItensGrandes() {
             </Button>
             <Button
               onClick={() => {
-                if (!itemEdicao) return;
+                if (!itemEdicao || !tipoEdicao || !marcaEdicao) {
+                  toast.error("Informe tipo e marca");
+                  return;
+                }
                 atualizarItem.mutate(
                   {
                     id: itemEdicao.id,
                     dados: {
+                      tipo_id: tipoEdicao,
+                      marca_id: marcaEdicao,
                       descricao: descricaoEdicao,
+                      valor_compra: valorCompraEdicao ? parseFloat(valorCompraEdicao) : itemEdicao.valor_compra,
                       valor_venda: valorVendaEdicao ? parseFloat(valorVendaEdicao) : null,
                     },
                   },
@@ -386,6 +442,9 @@ export default function ItensGrandes() {
                       setItemEdicao(null);
                       setDescricaoEdicao("");
                       setValorVendaEdicao("");
+                      setValorCompraEdicao("");
+                      setTipoEdicao("");
+                      setMarcaEdicao("");
                     },
                     onError: (error: any) => toast.error("Erro: " + error.message),
                   }

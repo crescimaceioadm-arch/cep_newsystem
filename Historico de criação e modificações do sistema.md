@@ -59,6 +59,31 @@ O sistema registrava as movimentações corretamente, mas erros silenciosos (sem
 
 ---
 
+## 📅 02/02/2026 - 16:10
+
+### 🎨 Melhoria visual da tela de Marketing
+
+**Necessidade:**
+Deixar a tela de Marketing mais organizada e agradável visualmente, com melhor hierarquia e navegação.
+
+**Solução Implementada:**
+- Reorganização do topo com card de header e ações principais
+- Adicionado resumo da semana (total, concluídas, pendentes)
+- Filtros reposicionados e alinhados em grid responsivo
+- Ajuste de espaçamentos para leitura mais clara
+
+**Arquivos Alterados:**
+- `src/pages/Marketing.tsx`
+
+**Observações:**
+- Header com gradiente leve para destacar o período
+- Botões de navegação e ações agrupados
+- Filtros separados do header para reduzir ruído visual
+
+--- COMMIT FEITO ---
+
+---
+
 ## 📅 27/01/2026 - 21:15
 
 ### 🕐 Correção: Horas registradas incorretas no banco de dados (Timezone UTC)
@@ -628,3 +653,342 @@ Não havia rastreamento individual de itens grandes. Sistema anterior só permit
 - Extensível: novos tipos/marcas podem ser adicionados via Configurações
 
 --- COMMIT FEITO ---
+
+---
+
+## 📅 31/01/2026 - 10:15
+
+### ✏️ Melhoria: Permitir edição de tipo e marca nos itens grandes
+
+**Necessidade:**  
+No modo de edição dos itens grandes cadastrados, só era possível editar descrição e valor de venda. Usuário precisa poder trocar o tipo e a marca do item também.
+
+**Solução Implementada:**
+
+1. **Imports adicionados:**
+   - `useTiposItensGrandes` e `useMarcasItensGrandes` para carregar listas
+   - `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` do shadcn/ui
+
+2. **Estados expandidos:**
+   - `tipoEdicao`: Armazena ID do tipo selecionado
+   - `marcaEdicao`: Armazena ID da marca selecionada
+
+3. **Modal de edição atualizado:**
+   - Tipo e marca agora são campos editáveis com Select (dropdown)
+   - Descrição e valor de venda mantêm comportamento anterior
+   - Campos são preenchidos com valores atuais do item ao abrir modal
+
+4. **Validação de salvamento:**
+   - Verifica se tipo e marca foram selecionados
+   - Mostra toast de erro se faltarem campos obrigatórios
+
+5. **Reset de formulário:**
+   - Novos campos resetados ao fechar modal
+   - Mantém limpeza de estado consistente
+
+**Arquivos Alterados:**
+
+- `src/pages/ItensGrandes.tsx`
+  - Linhas 1-35: Imports de hooks e componentes UI
+  - Linhas 38-39: Estados `tipoEdicao` e `marcaEdicao`
+  - Linhas 66-67: Fetch de `tipos` e `marcas` via hooks
+  - Linhas 278-282: Inicialização de `tipoEdicao` e `marcaEdicao` ao abrir edição
+  - Linhas 330-331: Reset dos novos campos ao fechar modal
+  - Linhas 345-393: Modal redesenhado com campos Select para tipo e marca
+  - Linha 401: Validação de tipo e marca obrigatórios
+  - Linhas 409-414: Inclusão de `tipo_id` e `marca_id` no objeto de atualização
+  - Linhas 420-423: Reset de `tipoEdicao` e `marcaEdicao` após sucesso
+
+**Observações:**
+- Selects mostram todas as opções disponíveis em ordem (ordenado por campo `ordem`)
+- IDs são preservados corretamente para relacionamento com banco
+- Compatível com fluxo existente de edição
+- Dropdowns carregam dados em tempo real
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 31/01/2026 - 10:20
+
+### ✏️ Melhoria: Permitir edição do preço de compra nos itens grandes
+
+**Necessidade:**  
+Campo de valor de compra estava como read-only no modo de edição. Usuário precisa poder alterá-lo também.
+
+**Solução Implementada:**
+
+1. **Estado adicionado:**
+   - `valorCompraEdicao`: Armazena o valor de compra sendo editado
+
+2. **Modal de edição atualizado:**
+   - Valor de compra agora é um campo Input editável (não mais read-only)
+   - Valor de compra e venda aparecem lado a lado
+
+3. **Inicialização do estado:**
+   - Preenchido com valor atual do item ao abrir modal
+
+4. **Salvamento:**
+   - Incluído `valor_compra` no objeto de atualização
+   - Usa valor editado se preenchido, caso contrário mantém o original
+
+5. **Reset de formulário:**
+   - Campo resetado ao fechar modal
+
+**Arquivos Alterados:**
+
+- `src/pages/ItensGrandes.tsx`
+  - Linha 40: Estado `valorCompraEdicao` adicionado
+  - Linha 283: Inicialização de `valorCompraEdicao` ao abrir edição
+  - Linha 332: Reset de `valorCompraEdicao` ao fechar modal
+  - Linhas 390-399: Valor de compra convertido para Input editável
+  - Linha 433: Inclusão de `valor_compra` no objeto de atualização
+  - Linha 441: Reset de `valorCompraEdicao` após sucesso
+
+**Observações:**
+- Ambos os valores (compra e venda) agora são editáveis
+- Mantém validação de tipo e marca obrigatórios
+- Compatível com fluxo de atualização existente
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 31/01/2026 - 10:30
+
+### 🐛 Correção: Import faltante causava erro de referência no sistema
+
+**Necessidade:**  
+Sistema estava travado com erro no console: `ReferenceError: getDateBrasilia is not defined`. A aplicação não carregava e ficava completamente inacessível.
+
+**Causa Raiz:**  
+No arquivo `useAtendimentos.ts`, a função `getDateTimeBrasilia` estava sendo usada na linha 91 (criação de atendimento) mas não havia sido importada. O código havia sido modificado anteriormente para usar timezone de Brasília, mas o import foi esquecido.
+
+**Solução Implementada:**
+
+1. **Import corrigido:**
+   - Adicionado `import { getDateTimeBrasilia } from "@/lib/utils"` no início do arquivo
+   - Linha 91 já estava correta usando `getDateTimeBrasilia()` em vez de `new Date().toISOString()`
+
+2. **Validação:**
+   - Sistema voltou a funcionar normalmente após a correção
+   - Hora de chegada dos atendimentos agora registra corretamente em horário de Brasília
+
+**Arquivos Alterados:**
+
+- `src/hooks/useAtendimentos.ts`
+  - Linha 4: Adicionado import de `getDateTimeBrasilia`
+  - Linha 91: Mantido uso correto de `getDateTimeBrasilia()` (já estava implementado)
+
+**Observações:**
+- Erro crítico que impedia uso do sistema
+- Correção simples mas essencial para funcionamento
+- Problema detectado imediatamente após deploy
+- Relacionado à correção de timezone implementada anteriormente (29/01)
+- Sistema agora 100% consistente com timezone de Brasília
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 02/02/2026 - 11:00
+
+### 📅 Novo: Calendário visual de eventos de marketing com edição
+
+**Necessidade:**  
+Criar visualização de eventos diários organizados em formato de calendário semanal onde admin pode criar/editar eventos e demais perfis apenas visualizam. Facilita o planejamento visual de ações de marketing ao longo do mês.
+
+**Solução Implementada:**
+
+1. **Banco de dados:**
+   - Tabela `eventos_marketing` com campos: data, titulo, descricao, criado_por
+   - Índices em data e created_at para performance
+   - Trigger para updated_at automático
+   - RLS habilitado: todos visualizam, apenas autenticados gerenciam
+
+2. **Hooks CRUD completos:**
+   - `useEventosMarketing()`: Query por intervalo de datas
+   - `useEventosMarketingMes()`: Query específica do mês com semanas completas
+   - `useCreateEventoMarketing()`: Criar novo evento
+   - `useUpdateEventoMarketing()`: Atualizar evento existente
+   - `useDeleteEventoMarketing()`: Deletar evento com confirmação
+
+3. **Componente CalendarioEventosMarketing:**
+   - Visualização em tabela: linhas = semanas (5 semanas), colunas = dias (Seg-Dom)
+   - Navegação entre meses com botões de seta e botão "Hoje"
+   - Cada célula mostra a data e eventos do dia
+   - Eventos renderizados como cards com título e descrição truncada
+   - Hoje destacado com background azul
+   - Dias fora do mês atual em cinza
+
+4. **Permissões baseadas em perfil:**
+   - Admin: pode adicionar (+), editar (✏️) e excluir (🗑️) eventos
+   - Outros perfis: apenas visualização, botões de ação não aparecem
+   - Botões aparecem/somem com hover nos cards
+
+5. **Modal de edição:**
+   - Campos: Título (obrigatório), Descrição (opcional)
+   - Modo criação: mostra data selecionada no título
+   - Modo edição: preenche campos com dados atuais
+   - Validação de campos obrigatórios
+
+6. **UX otimizada:**
+   - Clique no "+" adiciona evento naquele dia
+   - Clique em editar/excluir no card do evento
+   - Confirmação antes de excluir
+   - Toasts de feedback para todas as ações
+   - Loading states durante operações
+
+**Arquivos Criados:**
+
+- `supabase/migrations/20260202_eventos_marketing.sql`
+  - Migration completa com tabela, índices, trigger, RLS
+  - Políticas separadas para visualização e gerenciamento
+
+- `src/hooks/useEventosMarketing.ts`
+  - 4 hooks: Query (intervalo e mês), Create, Update, Delete
+  - Invalidação automática de cache após mutações
+
+- `src/components/marketing/CalendarioEventosMarketing.tsx`
+  - Componente completo de calendário com 480 linhas
+  - Integração com date-fns para manipulação de datas
+  - Cards de eventos com hover effects
+  - Modal reutilizável para criar/editar
+
+**Arquivos Alterados:**
+
+- `src/types/database.ts`
+  - Adicionada interface `EventoMarketing` com todos os campos tipados
+
+- `src/pages/Marketing.tsx`
+  - Linha 24: Import do novo componente CalendarioEventosMarketing
+  - Linha 964: Componente inserido no topo da página, antes do planejamento semanal
+
+**Observações:**
+- Calendário sempre mostra 5 semanas completas (Seg-Dom) para cobrir qualquer mês
+- Primeira semana inicia na segunda-feira anterior ao dia 1 do mês
+- Eventos armazenados com data no formato YYYY-MM-DD
+- Query otimizada: busca apenas eventos do intervalo visível
+- Sistema extensível: fácil adicionar campos como cor, prioridade, anexos
+- Perfeitamente integrado com o sistema de permissões existente
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 02/02/2026 - 14:00
+
+### 🔐 Melhorias na gestão de usuários e controle de acesso
+
+**Necessidade:**
+Melhorar o gerenciamento de usuários com opções para resetar senha, editar acessos, permitir nomes ao criar usuários e definir menus por perfil.
+
+**Solução Implementada:**
+
+1. **Expansão da gestão de usuários (GestaoUsuariosCard):**
+   - Botão "Novo Usuário" no topo do card
+   - Modal para criar novo usuário com campos: Nome (obrigatório), Email (obrigatório), Cargo
+   - Email automático de reset de senha enviado ao novo usuário
+   - Botão "Lock" para resetar senha de usuário existente
+   - Email com link de reset enviado automaticamente
+   - Novos estados: mostrarNovoUsuario, novoEmail, novoNome, novoCargo, resetandoSenha
+
+2. **Novo componente: Controle de Menus por Perfil (ControlePerfisMenuCard):**
+   - Interface visual para selecionar qual perfil editar (5 opções: Admin, Caixa, Avaliadora, Geral, Social Media)
+   - Grade com 8 menus disponíveis com checkboxes e descrições
+   - Permissões padrão pré-configuradas por cargo
+   - Botão "Salvar" aparece apenas quando há alterações
+   - Resumo visual com contagem de menus ativos
+
+3. **Integração em Configurações:**
+   - Seção "Controle de Acesso" expandida com gestão de usuários
+   - Nova seção "Permissões de Menus" no accordion para definir acesso a menus por perfil
+
+4. **Banco de dados:**
+   - Tabela `perfil_menus` com cargo (UNIQUE), menus (TEXT[]), timestamps
+   - Índice em cargo, trigger para updated_at, RLS habilitado
+   - Permissões padrão inseridas automaticamente
+
+**Arquivos Criados:**
+- `supabase/migrations/20260202_perfil_menus.sql` - Tabela perfil_menus com índices, trigger, RLS
+- `src/components/configuracoes/ControlePerfisMenuCard.tsx` - Novo componente (350+ linhas)
+
+**Componentes Atualizados:**
+- `src/components/configuracoes/GestaoUsuariosCard.tsx` - Adicionado criar usuário, resetar senha
+- `src/pages/Configuracoes.tsx` - Import do novo componente + novo AccordionItem
+
+**Observações:**
+- Admin faz tudo: criar usuários, resetar senhas, editar menus, excluir usuários
+- Novos usuários recebem email para definir sua própria senha
+- Sistema extensível: fácil adicionar novos menus
+- Interface com cores, badges e descrições para cada menu
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 02/02/2026 - 15:30
+
+### 🎯 Sistema completo de gerenciamento dinâmico de cargos e perfis
+
+**Necessidade:**
+Permitir criar, editar e deletar cargos customizados sem precisar alterar código ou banco de dados manualmente.
+
+**Solução Implementada:**
+
+1. **Banco de dados (Tabela cargos):**
+   - Tabela `cargos` com: id, nome, descricao, cor, ativo, timestamps
+   - Nome único para evitar duplicatas
+   - Campo cor para armazenar classe Tailwind
+   - Índices em nome e ativo
+   - Trigger para updated_at automático
+   - RLS: todos visualizam, apenas admin gerencia
+
+2. **Hook useCargos.ts (CRUD completo):**
+   - `useCargos()`: Busca todos os cargos ordenados por nome
+   - `useCreateCargo()`: Criar novo cargo com nome, descrição, cor
+   - `useUpdateCargo()`: Atualizar cargo existente
+   - `useDeleteCargo()`: Deletar cargo
+   - Invalidação automática de cache após mutações
+   - Toasts de feedback para cada operação
+
+3. **Componente GerenciamentoCargosCard:**
+   - Lista todos os cargos com badge visual de cores
+   - Botão "Novo Cargo" para criar
+   - Botão editar (✏️) para cada cargo
+   - Botão deletar (🗑️) para cada cargo com confirmação
+   - Modal para criar/editar com:
+     * Campo Nome (obrigatório)
+     * Campo Descrição (opcional)
+     * Seletor visual de cores (10 opções)
+     * Pré-visualização da badge
+   - AlertDialog para confirmar exclusão
+   - Loading states durante operações
+   - Validações de entrada
+
+4. **10 Cores disponíveis:**
+   - Azul, Laranja, Verde, Roxo, Rosa, Vermelho, Amarelo, Índigo, Ciano, Cinza
+   - Cada cor com visualização em grid interativo
+
+5. **Integração em Configurações:**
+   - Nova seção "Gerenciamento de Cargos" no accordion
+   - Posicionada entre "Controle de Acesso" e "Permissões de Menus"
+
+**Arquivos Criados:**
+- `supabase/migrations/20260202_gerenciar_cargos.sql` - Tabela cargos
+- `src/hooks/useCargos.ts` - Hook CRUD
+- `src/components/configuracoes/GerenciamentoCargosCard.tsx` - Componente (280+ linhas)
+
+**Arquivos Alterados:**
+- `src/pages/Configuracoes.tsx` - Integração do novo componente
+
+**Observações:**
+- Admin cria/edita/deleta cargos customizados
+- Cargos padrão vêm pré-carregados
+- Sistema robusto com validações
+
+--- COMMIT FEITO ---
+
+
+
+
