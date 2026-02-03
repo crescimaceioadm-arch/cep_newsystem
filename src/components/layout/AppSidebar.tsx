@@ -36,7 +36,10 @@ import { toast } from "sonner";
 import { CaixaIndicator } from "./CaixaIndicator";
 
 const allMenuItems = [
-  { title: "Dashboard", url: "/", icon: BarChart3 },
+  { title: "Dashboard", url: "/", icon: BarChart3, submenu: [
+    { title: "Dashboard", url: "/" },
+    { title: "Perfil Vendas", url: "/perfil-vendas" },
+  ]},
   { title: "Cadastro", url: "/recepcao", icon: UserPlus },
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
   { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },

@@ -53,7 +53,7 @@ export async function registrarMovimentacaoCaixa({
     // 2. Buscar ID do caixa destino
     const { data: caixaData, error: caixaError } = await supabase
       .from("caixas")
-      .select("id, saldo_atual")
+      .select("id")
       .eq("nome", caixaOrigem)
       .single();
 
@@ -107,24 +107,6 @@ export async function registrarMovimentacaoCaixa({
     }
 
     console.log(`[registrarMovimentacaoCaixa] ✅ Movimentação inserida: id=${movimentacao.id}, valor=R$${totalDinheiro}`);
-
-    // 5. Atualizar saldo do caixa
-    const novoSaldo = (caixaData.saldo_atual || 0) + totalDinheiro;
-    const { error: saldoError } = await supabase
-      .from("caixas")
-      .update({ saldo_atual: novoSaldo })
-      .eq("id", caixaData.id);
-
-    if (saldoError) {
-      console.error(
-        `[registrarMovimentacaoCaixa] ⚠️ Movimentação inserida mas erro ao atualizar saldo:`,
-        saldoError
-      );
-      // NÃO retornar erro - movimentação foi criada com sucesso
-      // O saldo será corrigido no próximo fechamento ou reconciliação
-    } else {
-      console.log(`[registrarMovimentacaoCaixa] ✅ Saldo atualizado: ${caixaData.saldo_atual} + ${totalDinheiro} = ${novoSaldo}`);
-    }
 
     return {
       success: true,

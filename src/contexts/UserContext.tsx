@@ -31,7 +31,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: [
     '/', '/recepcao', '/recepcao/clientes', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
-    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing'
+    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing', '/perfil-vendas'
   ],
   caixa: [
     '/', '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth'
@@ -40,7 +40,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     '/recepcao', '/avaliacao', '/atendimentos/historico', '/auth'
   ],
   geral: [
-    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing'
+    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing', '/perfil-vendas'
   ],
   social_media: [
     '/marketing', '/auth'

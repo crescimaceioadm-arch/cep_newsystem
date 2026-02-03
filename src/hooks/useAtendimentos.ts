@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Atendimento, StatusAtendimento, ItemCategoria, AtendimentoItem } from "@/types/database";
 import { getDateTimeBrasilia } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function useAtendimentos() {
   return useQuery({

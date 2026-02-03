@@ -23,6 +23,7 @@ import Marketing from "./pages/Marketing";
 import ClientesInsights from "./pages/ClientesInsights";
 import ItensGrandes from "./pages/ItensGrandes";
 import RelatorioItensGrandes from "./pages/RelatorioItensGrandes";
+import PerfilVendas from "./pages/PerfilVendas";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ const App = () => (
                 <Route path="/estoque/itens-grandes" element={<RequireRole><ItensGrandes /></RequireRole>} />
                 <Route path="/estoque/itens-grandes/relatorio" element={<RequireRole><RelatorioItensGrandes /></RequireRole>} />
                 <Route path="/dashboard" element={<RequireRole><Dashboard /></RequireRole>} />
+                <Route path="/perfil-vendas" element={<RequireRole><PerfilVendas /></RequireRole>} />
                 <Route path="/configuracoes" element={<RequireRole><Configuracoes /></RequireRole>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

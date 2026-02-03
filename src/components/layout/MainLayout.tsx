@@ -1,5 +1,6 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { AlertaFechamentosFaltantes } from "@/components/financeiro/AlertaFechamentosFaltantes";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -17,6 +18,8 @@ export function MainLayout({ children, title }: MainLayoutProps) {
             <h1 className="text-xl font-semibold text-foreground">{title}</h1>
           </header>
           <div className="flex-1 p-6 overflow-auto">
+            {/* Alerta de fechamentos faltantes */}
+            <AlertaFechamentosFaltantes />
             {children}
           </div>
         </main>

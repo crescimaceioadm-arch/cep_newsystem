@@ -100,6 +100,29 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
           };
         }
 
+        // PRIORIDADE 1B: Se não houver aprovado, usar fechamento pendente do dia anterior
+        const { data: dataPendenteDia, error: errorPendenteDia } = await supabase
+          .from("fechamentos_caixa")
+          .select("*")
+          .eq("caixa_id", caixaId)
+          .eq("data_fechamento", diaAnterior)
+          .eq("status", "pendente_aprovacao")
+          .limit(1)
+          .maybeSingle();
+
+        if (errorPendenteDia && errorPendenteDia.code !== 'PGRST116') {
+          console.error("❌ [SALDO INICIAL] Erro ao buscar fechamento pendente (dia anterior):", errorPendenteDia);
+        }
+
+        if (dataPendenteDia) {
+          console.log("⚠️ [SALDO INICIAL] Fechamento pendente do dia anterior:", dataPendenteDia.valor_contado);
+          return {
+            valor: dataPendenteDia.valor_contado || 0,
+            fonte: "fechamento_pendente",
+            data_fechamento: dataPendenteDia.data_fechamento
+          };
+        }
+
         // PRIORIDADE 2: Buscar fechamento APROVADO mais recente antes da data
         const { data: dataFallback, error: errorFallback } = await supabase
           .from("fechamentos_caixa")
@@ -121,24 +144,34 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
           };
         }
 
-        // PRIORIDADE 3: Se não há fechamentos, buscar saldo_atual do caixa (definido nas configurações)
-        const { data: caixaData, error: caixaError } = await supabase
-          .from("caixas")
-          .select("saldo_atual")
-          .eq("id", caixaId)
-          .single();
+        // PRIORIDADE 2B: Se não houver aprovado, usar fechamento pendente mais recente antes da data
+        const { data: dataPendenteFallback, error: errorPendenteFallback } = await supabase
+          .from("fechamentos_caixa")
+          .select("*")
+          .eq("caixa_id", caixaId)
+          .eq("status", "pendente_aprovacao")
+          .lt("data_fechamento", dataInicio)
+          .order("data_fechamento", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (caixaData && !caixaError) {
-          console.log("✅ [SALDO INICIAL] Usando saldo das configurações:", caixaData.saldo_atual);
-          return { 
-            valor: caixaData.saldo_atual || 0, 
-            fonte: "configuracao",
-            data_fechamento: null 
+        if (errorPendenteFallback && errorPendenteFallback.code !== 'PGRST116') {
+          console.error("❌ [SALDO INICIAL] Erro ao buscar fechamento pendente (anterior):", errorPendenteFallback);
+        }
+
+        if (dataPendenteFallback) {
+          console.log("⚠️ [SALDO INICIAL] Fechamento pendente anterior encontrado:", dataPendenteFallback.valor_contado);
+          return {
+            valor: dataPendenteFallback.valor_contado || 0,
+            fonte: "fechamento_pendente_anterior",
+            data_fechamento: dataPendenteFallback.data_fechamento
           };
         }
 
-        console.log("⚠️ [SALDO INICIAL] Nenhum fechamento encontrado, usando 0");
-        return { valor: 0, fonte: "sem_fechamento", data_fechamento: null };
+        // PRIORIDADE 3: Sem fechamento = sem saldo inicial (erro de configuração)
+        console.log("❌ [SALDO INICIAL] ERRO: Nenhum fechamento encontrado! Caixa não tem saldo inicial.");
+        console.log("⚠️  O caixa deve ter pelo menos UM fechamento para funcionar corretamente.");
+        return { valor: 0, fonte: "erro_sem_fechamento", data_fechamento: null };
 
       } catch (error) {
         console.error("❌ [SALDO INICIAL] Erro crítico:", error);

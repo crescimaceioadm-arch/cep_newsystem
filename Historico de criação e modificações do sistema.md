@@ -989,6 +989,112 @@ Permitir criar, editar e deletar cargos customizados sem precisar alterar códig
 
 --- COMMIT FEITO ---
 
+---
 
+## 📅 02/02/2026 - 17:30
 
+### 🎨 Refinamento visual da tela de Marketing
 
+**Necessidade:**
+Remover elementos desnecessários e melhorar a legibilidade dos títulos dos eventos no calendário.
+
+**Solução Implementada:**
+
+1. **Remoção do resumo semanal:**
+   - Removidos os 3 cards de estatísticas (Total de tarefas, Concluídas, Pendentes)
+   - Foco maior no calendário de eventos
+
+2. **Melhoria nos títulos dos eventos:**
+   - Adicionado título "Eventos de Marketing" com ícone de calendário acima do componente
+   - Títulos dos eventos no calendário agora quebram linha em vez de truncar com "..."
+   - Melhor legibilidade em eventos com nomes longos
+
+**Arquivos Alterados:**
+
+- `src/pages/Marketing.tsx`
+  - Removida seção de resumo semanal (3 cards de estatísticas)
+  - Adicionado título da seção de eventos
+
+- `src/components/marketing/CalendarioEventosMarketing.tsx`
+  - Linha 231-233: Mudança de `truncate` para `whitespace-normal break-words` nos títulos dos eventos
+
+**Observações:**
+- Interface mais limpa e focada no calendário
+- Eventos com nomes longos agora são totalmente legíveis
+- Mantida toda a funcionalidade existente
+
+--- COMMIT FEITO ---
+
+---
+
+## 📅 02/02/2026 - 18:30
+
+### ❌ TENTATIVA FRUSTRADA: Sistema de Perfil de Vendas
+
+**Necessidade:**
+Criar submenu "Perfil Vendas" dentro do Dashboard (igual ao Estoque) com análises detalhadas de desempenho por vendedora.
+
+**Tentativas Realizadas:**
+
+1. **Primeira tentativa - Aba dentro do Dashboard:**
+   - Criada aba "Perfil Vendas" ao lado de "Performance das Equipes" e "Estoque"
+   - Adicionado useMemo `perfilVendasMetrics` calculando vendedorasData por período filtrado
+   - 5 gráficos: Total vendas, Quantidade, Categorias, P.A por categoria, Pico por hora
+   - Cards de vendedoras com P.A (Peças por Atendimento)
+   - **PROBLEMA:** Cliente queria SUBMENU, não aba
+
+2. **Segunda tentativa - Menu separado no sidebar:**
+   - Adicionado "Perfil Vendas" como item de menu no AppSidebar
+   - Criado arquivo PerfilVendas.tsx como página standalone
+   - Adicionada rota /perfil-vendas no App.tsx
+   - Menu não aparecia (problema de permissões)
+   - **PROBLEMA:** Cliente queria submenu do Dashboard, não menu separado
+
+3. **Terceira tentativa - Submenu do Dashboard:**
+   - Dashboard modificado para ter submenu igual ao Estoque
+   - Estrutura: Dashboard > { Dashboard, Perfil Vendas }
+   - Arquivo PerfilVendas.tsx restaurado
+   - Rota /perfil-vendas restaurada
+   - Permissões ajustadas para admin e geral apenas
+   - **RESULTADO:** Cliente rejeitou ("péssimo")
+
+**Correções de erros durante processo:**
+
+- `src/hooks/useAtendimentos.ts`: Adicionado import `toast` (faltava)
+- `src/components/financeiro/AlertaFechamentosFaltantes.tsx`: Corrigido `userProfile` → `profile` e `cargo`
+
+**Arquivos Alterados (múltiplas vezes):**
+
+- `src/pages/Dashboard.tsx`
+  - Adicionado/removido aba "perfil-vendas" 
+  - Adicionado useMemo `perfilVendasMetrics`
+  - TabsList com grid-cols-3 / grid-cols-2 / condicional
+  - 275 linhas de código de gráficos adicionadas
+
+- `src/pages/PerfilVendas.tsx`
+  - Criado, deletado, recriado (400+ linhas)
+
+- `src/App.tsx`
+  - Rota /perfil-vendas adicionada/removida/readicionada
+
+- `src/components/layout/AppSidebar.tsx`
+  - Menu "Perfil Vendas" adicionado/removido
+  - Submenu Dashboard adicionado
+
+- `src/contexts/UserContext.tsx`
+  - Permissões /perfil-vendas adicionadas/removidas/readicionadas para admin/geral
+
+**Observações:**
+- Múltiplas interpretações erradas da solicitação do cliente
+- 3 implementações completas descartadas
+- Sistema de permissões funciona corretamente
+- Código dos gráficos está pronto mas localização indefinida
+- Cliente pediu para parar ("pessimo!!! amanhã continuo")
+
+**Status Final:**
+- ❌ Funcionalidade não implementada conforme desejado
+- ✅ Código de gráficos existe no Dashboard (aba perfil-vendas comentada)
+- ✅ Submenu Dashboard configurado
+- ⏸️ Aguardando definição clara do cliente
+
+--- NÃO COMMITADO ---

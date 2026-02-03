@@ -58,6 +58,7 @@ import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaMod
 import { AprovacaoFechamentosCard } from "@/components/financeiro/AprovacaoFechamentosCard";
 import { RelatorioFechamentosCard } from "@/components/financeiro/RelatorioFechamentosCard";
 import { RelatorioMovimentacoesCard } from "@/components/financeiro/RelatorioMovimentacoesCard";
+import { RelatorioFechamentosCaixaCard } from "@/components/financeiro/RelatorioFechamentosCaixaCard";
 import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -321,7 +322,7 @@ export default function Financeiro() {
           caixaAtual,
           movimentacoes: movs,
           saldoInicial: 0,
-          saldoFinal: caixaAtual.saldo_atual,
+          saldoFinal: caixaAtual.saldo_atual || 0,
           totalEntradas: 0,
           totalSaidas: 0
         };
@@ -711,11 +712,12 @@ export default function Financeiro() {
               <AprovacaoFechamentosCard />
             </TabsContent>
           )}
-
+N
           {/* Aba Relatório (Admin Only) */}
           {isAdmin && (
             <TabsContent value="relatorio">
               <RelatorioFechamentosCard />
+              <RelatorioFechamentosCaixaCard />
             </TabsContent>
           )}
 
@@ -747,7 +749,7 @@ export default function Financeiro() {
                     </SelectContent>
                   </Select>
                 </div>
-                {extratoCalculado.caixaAtual && (
+                {extratoCalculado.caixaAtual && extratoCalculado.saldoFinal !== undefined && (
                   <div className="text-sm font-normal text-muted-foreground">
                     Saldo Atual: <span className="font-bold text-purple-600">R$ {extratoCalculado.saldoFinal.toFixed(2)}</span>
                   </div>
@@ -895,7 +897,7 @@ export default function Financeiro() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-2xl font-bold text-blue-900">
-                        R$ {extratoCalculado.saldoInicial.toFixed(2)}
+                        R$ {extratoCalculado.saldoInicial?.toFixed(2) ?? "0.00"}
                       </p>
                       {dataInicio && saldoInicialData?.fonte && (
                         <p className="text-xs text-blue-600 mt-1">
@@ -917,7 +919,7 @@ export default function Financeiro() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-2xl font-bold text-green-900">
-                        + R$ {extratoCalculado.totalEntradas.toFixed(2)}
+                        + R$ {extratoCalculado.totalEntradas?.toFixed(2) ?? "0.00"}
                       </p>
                       <p className="text-xs text-green-600 mt-1">
                         Vendas e recebimentos
@@ -935,7 +937,7 @@ export default function Financeiro() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-2xl font-bold text-red-900">
-                        - R$ {extratoCalculado.totalSaidas.toFixed(2)}
+                        - R$ {extratoCalculado.totalSaidas?.toFixed(2) ?? "0.00"}
                       </p>
                       <p className="text-xs text-red-600 mt-1">
                         Despesas e retiradas
@@ -953,7 +955,7 @@ export default function Financeiro() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-2xl font-bold text-purple-900">
-                        R$ {extratoCalculado.saldoFinal.toFixed(2)}
+                        R$ {extratoCalculado.saldoFinal?.toFixed(2) ?? "0.00"}
                       </p>
                       <p className="text-xs text-purple-600 mt-1">
                         Do período
@@ -988,7 +990,7 @@ export default function Financeiro() {
                               📊 SALDO INICIAL:
                             </TableCell>
                             <TableCell className="text-right text-blue-700 text-lg">
-                              R$ {extratoCalculado.saldoInicial.toFixed(2)}
+                              R$ {extratoCalculado.saldoInicial?.toFixed(2) ?? "0.00"}
                             </TableCell>
                             {isAdmin && <TableCell />}
                           </TableRow>
@@ -1132,7 +1134,7 @@ export default function Financeiro() {
                               🎯 SALDO FINAL:
                             </TableCell>
                             <TableCell className="text-right text-purple-700 text-lg">
-                              R$ {extratoCalculado.saldoFinal.toFixed(2)}
+                              R$ {extratoCalculado.saldoFinal?.toFixed(2) ?? "0.00"}
                             </TableCell>
                             {isAdmin && <TableCell />}
                           </TableRow>
