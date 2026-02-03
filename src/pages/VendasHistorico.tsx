@@ -345,6 +345,7 @@ export default function VendasHistorico() {
                     <TableHead>Vendedora</TableHead>
                     <TableHead>Caixa Origem</TableHead>
                     <TableHead className="text-right">Valor Total</TableHead>
+                    <TableHead>Produtos</TableHead>
                     <TableHead>Forma Pagto</TableHead>
                     <TableHead className="text-center">Ações</TableHead>
                   </TableRow>
@@ -364,6 +365,22 @@ export default function VendasHistorico() {
                       <TableCell>{venda.caixa_origem || "-"}</TableCell>
                       <TableCell className="text-right font-semibold">
                         R$ {venda.valor_total_venda?.toFixed(2) || "0.00"}
+                      </TableCell>
+                      <TableCell className="max-w-[220px]">
+                        {venda.itensResumo && venda.itensResumo.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {venda.itensResumo.map((item) => (
+                              <span
+                                key={item.slug}
+                                className="rounded-full border border-muted-foreground/30 px-2 py-0.5 text-[11px] font-semibold"
+                              >
+                                {item.nome}: {item.quantidade}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">Sem itens</span>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-[150px] truncate">
                         {getMetodoPagtoResumo(venda)}

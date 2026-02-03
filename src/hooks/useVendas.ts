@@ -35,23 +35,32 @@ export function useVendas() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      const { data: itens } = await supabase
-        .from("venda_itens")
-        .select("*, item_categories(*)");
 
+      const vendas = (data as Venda[]) || [];
+      const vendaIds = vendas.map((v) => v.id);
       const itensByVenda = new Map<string, any[]>();
-      (itens || []).forEach((it) => {
-        const list = itensByVenda.get(it.venda_id) || [];
-        list.push({
-          id: it.id,
-          categoria_id: it.categoria_id,
-          quantidade: it.quantidade,
-          categoria: it.item_categories as ItemCategoria | undefined,
-        });
-        itensByVenda.set(it.venda_id, list);
-      });
 
-      return (data as Venda[]).map((v) => ({
+      if (vendaIds.length > 0) {
+        const { data: itens, error: itensError } = await supabase
+          .from("venda_itens")
+          .select("id, venda_id, categoria_id, quantidade, item_categories(*)")
+          .in("venda_id", vendaIds);
+
+        if (itensError) throw itensError;
+
+        (itens || []).forEach((item) => {
+          const list = itensByVenda.get(item.venda_id) || [];
+          list.push({
+            id: item.id,
+            categoria_id: item.categoria_id,
+            quantidade: item.quantidade,
+            categoria: item.item_categories as ItemCategoria | undefined,
+          });
+          itensByVenda.set(item.venda_id, list);
+        });
+      }
+
+      return vendas.map((v) => ({
         ...v,
         itens: itensByVenda.get(v.id) || [],
       }));
@@ -75,23 +84,32 @@ export function useVendasHoje() {
         .lt("created_at", amanha.toISOString());
 
       if (error) throw error;
-      const { data: itens } = await supabase
-        .from("venda_itens")
-        .select("*, item_categories(*)");
 
+      const vendas = (data as Venda[]) || [];
+      const vendaIds = vendas.map((v) => v.id);
       const itensByVenda = new Map<string, any[]>();
-      (itens || []).forEach((it) => {
-        const list = itensByVenda.get(it.venda_id) || [];
-        list.push({
-          id: it.id,
-          categoria_id: it.categoria_id,
-          quantidade: it.quantidade,
-          categoria: it.item_categories as ItemCategoria | undefined,
-        });
-        itensByVenda.set(it.venda_id, list);
-      });
 
-      return (data as Venda[]).map((v) => ({
+      if (vendaIds.length > 0) {
+        const { data: itens, error: itensError } = await supabase
+          .from("venda_itens")
+          .select("id, venda_id, categoria_id, quantidade, item_categories(*)")
+          .in("venda_id", vendaIds);
+
+        if (itensError) throw itensError;
+
+        (itens || []).forEach((item) => {
+          const list = itensByVenda.get(item.venda_id) || [];
+          list.push({
+            id: item.id,
+            categoria_id: item.categoria_id,
+            quantidade: item.quantidade,
+            categoria: item.item_categories as ItemCategoria | undefined,
+          });
+          itensByVenda.set(item.venda_id, list);
+        });
+      }
+
+      return vendas.map((v) => ({
         ...v,
         itens: itensByVenda.get(v.id) || [],
       }));
@@ -167,7 +185,8 @@ export function useFinalizarVenda() {
         Number(venda.qtd_calcados_vendida) +
         Number(venda.qtd_brinquedos_vendida) +
         Number(venda.qtd_itens_medios_vendida) +
-        Number(venda.qtd_itens_grandes_vendida);
+        Number(venda.qtd_itens_grandes_vendida) +
+        (venda.itens || []).reduce((sum, item) => sum + item.quantidade, 0);
 
       const vendaData = {
         qtd_total_itens: totalItensCalculado,
@@ -193,7 +212,6 @@ export function useFinalizarVenda() {
         bandeira_cartao_3: venda.pagamentos[2]?.bandeira || null,
       };
 
-      console.log("Payload enviado:", vendaData);
       console.log("[useFinalizarVenda] Inserindo venda:", vendaData);
       const { data: vendaInserida, error: vendaError } = await supabase
         .from("vendas")

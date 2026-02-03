@@ -28,7 +28,21 @@ export interface Venda {
   qtd_brinquedos_vendida: number | null;
   qtd_itens_medios_vendida: number | null;
   qtd_itens_grandes_vendida: number | null;
+  itensResumo?: Array<{
+    categoria_id?: string;
+    slug: string;
+    nome: string;
+    quantidade: number;
+  }>;
 }
+
+type VendaPivotRow = {
+  id?: string;
+  venda_id: string;
+  categoria_id: string;
+  quantidade: number;
+  item_categories?: ItemCategoria | null;
+};
 
 export function useVendasHistorico() {
   return useQuery({
@@ -40,26 +54,89 @@ export function useVendasHistorico() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      const { data: itens } = await supabase
-        .from("venda_itens")
-        .select("*, item_categories(*)");
 
-      const itensByVenda = new Map<string, any[]>();
-      (itens || []).forEach((it) => {
-        const list = itensByVenda.get(it.venda_id) || [];
-        list.push({
-          id: it.id,
-          categoria_id: it.categoria_id,
-          quantidade: it.quantidade,
-          categoria: it.item_categories as ItemCategoria | undefined,
+      const vendas = (data as Venda[]) || [];
+      const vendaIds = vendas.map((v) => v.id);
+      const itensByVenda = new Map<string, VendaPivotRow[]>();
+
+      // Buscar itens em lotes de 100 para evitar URL muito grande
+      if (vendaIds.length > 0) {
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < vendaIds.length; i += BATCH_SIZE) {
+          const batch = vendaIds.slice(i, i + BATCH_SIZE);
+          const { data: itens, error: itensError } = await supabase
+            .from("venda_itens")
+            .select("id, venda_id, categoria_id, quantidade, item_categories(*)")
+            .in("venda_id", batch);
+
+          if (itensError) throw itensError;
+
+          (itens || []).forEach((item) => {
+            const list = itensByVenda.get(item.venda_id) || [];
+            list.push({
+              id: item.id,
+              venda_id: item.venda_id,
+              categoria_id: item.categoria_id,
+              quantidade: item.quantidade,
+              item_categories: item.item_categories as ItemCategoria | undefined,
+            });
+            itensByVenda.set(item.venda_id, list);
+          });
+        }
+      }
+
+      return vendas.map((venda) => {
+        const itensDaVenda = (itensByVenda.get(venda.id) || []).map((item) => ({
+          id: item.id,
+          categoria_id: item.categoria_id,
+          quantidade: item.quantidade,
+          categoria: item.item_categories || undefined,
+        }));
+        const resumoMap = new Map<string, {
+          categoria_id?: string;
+          slug: string;
+          nome: string;
+          quantidade: number;
+        }>();
+
+        const pushResumo = (slug: string, nome: string, quantidade: number, categoria_id?: string) => {
+          if (!quantidade || quantidade <= 0) return;
+          const atual = resumoMap.get(slug);
+          resumoMap.set(slug, {
+            slug,
+            nome,
+            categoria_id: categoria_id || atual?.categoria_id,
+            quantidade: quantidade + (atual?.quantidade || 0),
+          });
+        };
+
+        itensDaVenda.forEach((item) => {
+          const slug = item.categoria?.slug || item.categoria_id;
+          const nome = item.categoria?.nome || item.categoria_id;
+          pushResumo(slug, nome, item.quantidade || 0, item.categoria_id);
         });
-        itensByVenda.set(it.venda_id, list);
-      });
 
-      return (data as Venda[]).map((v) => ({
-        ...v,
-        itens: itensByVenda.get(v.id) || [],
-      }));
+        const legado = [
+          { slug: "baby", nome: "Baby", quantidade: venda.qtd_baby_vendida },
+          { slug: "1a16", nome: "1 a 16", quantidade: venda.qtd_1_a_16_vendida },
+          { slug: "calcados", nome: "Calçados", quantidade: venda.qtd_calcados_vendida },
+          { slug: "brinquedos", nome: "Brinquedos", quantidade: venda.qtd_brinquedos_vendida },
+          { slug: "itens_medios", nome: "Itens Médios", quantidade: venda.qtd_itens_medios_vendida },
+          { slug: "itens_grandes", nome: "Itens Grandes", quantidade: venda.qtd_itens_grandes_vendida },
+        ];
+
+        legado.forEach(({ slug, nome, quantidade }) => {
+          if (!quantidade || quantidade <= 0) return;
+          if (resumoMap.has(slug)) return;
+          pushResumo(slug, nome, quantidade || 0);
+        });
+
+        return {
+          ...venda,
+          itens: itensDaVenda,
+          itensResumo: Array.from(resumoMap.values()),
+        };
+      });
     },
   });
 }
@@ -102,9 +179,12 @@ export function useAtualizarVenda() {
         vendaAnterior = data as Venda | undefined;
       }
 
-      const { data: pivotAnterior } = await supabase
+      const { data: pivotAnterior, error: pivotAnteriorError } = await supabase
         .from("venda_itens")
-        .select("venda_id, categoria_id, quantidade");
+        .select("categoria_id, quantidade")
+        .eq("venda_id", id);
+
+      if (pivotAnteriorError) throw pivotAnteriorError;
 
       const { data: categorias } = await supabase
         .from("item_categories")
@@ -117,7 +197,7 @@ export function useAtualizarVenda() {
         if (c.ativo !== false) catBySlug.set(c.slug, c.id);
       });
 
-      const pivotAntigos = (pivotAnterior || []).filter((p) => p.venda_id === id);
+      const pivotAntigos = pivotAnterior || [];
 
       const buildMapa = (pivots: Array<{ categoria_id: string; quantidade: number }>, origem?: Venda) => {
         const mapa = new Map<string, number>();
@@ -146,6 +226,9 @@ export function useAtualizarVenda() {
       const { itens, ...dadosVenda } = dados;
       const mapaNovo = new Map<string, number>();
 
+      console.log('[useAtualizarVenda] itens recebidos:', itens);
+      console.log('[useAtualizarVenda] dadosVenda:', dadosVenda);
+
       const pushNovo = (slug: string, qtd?: number | null) => {
         if (!qtd || qtd <= 0) return;
         const cid = catBySlug.get(slug);
@@ -167,6 +250,8 @@ export function useAtualizarVenda() {
           mapaNovo.set(it.categoria_id, (mapaNovo.get(it.categoria_id) || 0) + it.quantidade);
         }
       });
+
+      console.log('[useAtualizarVenda] mapaNovo final:', Array.from(mapaNovo.entries()));
 
       // 3. Atualizar venda (tabela principal)
       const novoTotalItens = Array.from(mapaNovo.values()).reduce((sum, v) => sum + v, 0);

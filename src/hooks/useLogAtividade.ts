@@ -109,11 +109,9 @@ export function useRegistrarLog() {
         user_agent: userAgent,
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("log_atividades")
-        .insert([logData])
-        .select()
-        .single();
+        .insert([logData]);
 
       if (error) {
         console.error("Erro ao registrar log:", error);
@@ -122,7 +120,7 @@ export function useRegistrarLog() {
         return null;
       }
 
-      return data as LogAtividade;
+      return null;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["logs-atividades"] });

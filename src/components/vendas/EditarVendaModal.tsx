@@ -168,6 +168,10 @@ export function EditarVendaModal({ open, onOpenChange, venda }: EditarVendaModal
 
     const totalItens = Object.values(quantidades).reduce((sum, v) => sum + (v || 0), 0);
 
+    console.log('[EditarVendaModal] itensExtras:', itensExtras);
+    console.log('[EditarVendaModal] basePayload:', basePayload);
+    console.log('[EditarVendaModal] quantidades:', quantidades);
+
     atualizarVenda(
       {
         id: venda.id,
