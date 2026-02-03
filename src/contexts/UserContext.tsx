@@ -11,6 +11,7 @@ interface UserProfile {
   cargo: UserRole;
   nome?: string;
   email?: string;
+  precisa_mudar_senha?: boolean;
 }
 
 interface UserContextType {
@@ -31,16 +32,16 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: [
     '/', '/recepcao', '/recepcao/clientes', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
-    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing', '/perfil-vendas'
+    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing', '/performance-vendas', '/logs-atividades'
   ],
   caixa: [
-    '/', '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth'
+    '/', '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth', '/performance-vendas'
   ],
   avaliadora: [
     '/recepcao', '/avaliacao', '/atendimentos/historico', '/auth'
   ],
   geral: [
-    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing', '/perfil-vendas'
+    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing', '/performance-vendas'
   ],
   social_media: [
     '/marketing', '/auth'
@@ -71,31 +72,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, cargo, nome, email')
+        .select('id, cargo, nome, email, precisa_mudar_senha')
         .eq('id', userId)
         .maybeSingle();
 
       if (error) {
         console.warn('Erro ao buscar perfil:', error.message);
-        // Fallback para admin em caso de erro (desenvolvimento)
-        setProfile({ id: userId, cargo: 'admin' });
+        // Sem fallback para admin - força logout se perfil não carregar
+        setProfile(null);
         return;
       }
 
       if (data) {
         setProfile({
           id: data.id,
-          cargo: (data.cargo as UserRole) || 'admin',
+          cargo: (data.cargo as UserRole) || 'geral',
           nome: data.nome,
           email: data.email,
+          precisa_mudar_senha: data.precisa_mudar_senha || false,
         });
       } else {
-        // Perfil não existe, assume admin para desenvolvimento
-        setProfile({ id: userId, cargo: 'admin' });
+        // Perfil não existe - força logout
+        console.warn('Perfil não encontrado para usuário:', userId);
+        setProfile(null);
       }
     } catch (err) {
       console.error('Exceção ao buscar perfil:', err);
-      setProfile({ id: userId, cargo: 'admin' });
+      setProfile(null);
     }
   };
 
@@ -136,8 +139,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('session_date', todayStr);
         } catch {}
       } else {
-        // Sem usuário logado - define cargo padrão como admin para dev
-        setProfile({ id: 'dev', cargo: 'admin' });
+        setProfile(null);
         try {
           localStorage.removeItem('session_date');
         } catch {}
@@ -148,8 +150,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Cargo atual (fallback para admin)
-  const cargo: UserRole = profile?.cargo || 'admin';
+  // Cargo atual (fallback para 'geral' se não encontrado)
+  const cargo: UserRole = profile?.cargo || 'geral';
 
   const value: UserContextType = {
     user,

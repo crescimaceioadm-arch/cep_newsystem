@@ -253,10 +253,16 @@ export default function Vendas() {
               </div>
             </div>
 
+            {totalPecas === 0 && (
+              <div className="p-3 rounded-md bg-red-50 border border-red-200">
+                <p className="text-sm font-semibold text-red-700">⚠️ É obrigatório adicionar itens à venda</p>
+              </div>
+            )}
+
             <Button 
               onClick={() => handleFinalizarVenda()} 
               disabled={isPending || totalPecas === 0}
-              className="w-full h-12 text-base"
+              className={`w-full h-12 text-base ${totalPecas === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               size="lg"
             >
               {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Processando...</> : "Finalizar Venda"}

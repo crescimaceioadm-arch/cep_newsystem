@@ -12,7 +12,8 @@ import {
   LogOut,
   Package,
   TrendingUp,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -38,8 +39,9 @@ import { CaixaIndicator } from "./CaixaIndicator";
 const allMenuItems = [
   { title: "Dashboard", url: "/", icon: BarChart3, submenu: [
     { title: "Dashboard", url: "/" },
-    { title: "Perfil Vendas", url: "/perfil-vendas" },
+    { title: "Performance Vendas", url: "/dashboard/performance-vendas" },
   ]},
+  { title: "Performance Vendas", url: "/performance-vendas", icon: TrendingUp },
   { title: "Cadastro", url: "/recepcao", icon: UserPlus },
   { title: "Vendas/Caixa", url: "/vendas", icon: ShoppingCart },
   { title: "Avaliação", url: "/avaliacao", icon: ClipboardCheck },
@@ -53,6 +55,7 @@ const allMenuItems = [
     { title: "Relatório Itens Grandes", url: "/estoque/itens-grandes/relatorio" },
   ]},
   { title: "Configurações", url: "/configuracoes", icon: Settings },
+  { title: "Logs de Atividades", url: "/logs-atividades", icon: FileText },
 ];
 
 export function AppSidebar() {

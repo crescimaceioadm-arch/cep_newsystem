@@ -171,3 +171,20 @@ export interface EventoMarketing {
   created_at: string;
   updated_at: string;
 }
+
+// Log de Atividades (Auditoria)
+export interface LogAtividade {
+  id: string;
+  user_id: string | null;
+  user_nome: string;
+  user_cargo: string | null;
+  acao: string; // 'criar', 'editar', 'deletar', 'finalizar', 'cancelar', 'recusar', 'transferir', 'abrir', 'fechar', etc.
+  tabela_afetada: string; // 'clientes', 'vendas', 'atendimentos', 'movimentacoes_caixa', etc.
+  registro_id: string | null;
+  dados_antes: any | null; // JSON
+  dados_depois: any | null; // JSON
+  detalhes: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}

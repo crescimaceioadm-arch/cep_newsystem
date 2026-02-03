@@ -118,15 +118,29 @@ export function GestaoUsuariosCard() {
 
     setDeleting(usuarioParaExcluir.id);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', usuarioParaExcluir.id);
+      // Tentar chamar RPC para deletar de profiles e auth.users
+      const { data, error: rpcError } = await supabase.rpc('delete_user_complete', {
+        user_id: usuarioParaExcluir.id
+      });
 
-      if (error) throw error;
+      if (rpcError) {
+        // Se RPC falhar completamente, tentar fallback
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', usuarioParaExcluir.id);
+
+        if (profileError) throw profileError;
+        
+        toast.success('Usuário excluído com sucesso!');
+      } else if (data?.success === false) {
+        throw new Error(data?.message || 'Erro ao deletar usuário');
+      } else {
+        // RPC executou com sucesso
+        toast.success('Usuário excluído com sucesso!');
+      }
 
       setUsuarios(prev => prev.filter(u => u.id !== usuarioParaExcluir.id));
-      toast.success('Usuário excluído com sucesso!');
     } catch (err: any) {
       toast.error('Erro ao excluir usuário: ' + err.message);
     } finally {
@@ -140,10 +154,15 @@ export function GestaoUsuariosCard() {
 
     setResettandoSenha(true);
     try {
-      // Email automático desativado por enquanto
-      // Usuário deve resetar sua senha manualmente via perfil ou solicitar ao admin
+      // Reset via Supabase Auth (sem envio de email)
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        usuarioParaResetarSenha.email || '',
+        { redirectTo: `${window.location.origin}/auth` }
+      );
+
+      if (error) throw error;
       
-      toast.success(`Email de reset desativado. Solicite ao usuário que acesse sua conta ou entre em contato com o admin.`);
+      toast.success(`Link de reset será enviado para ${usuarioParaResetarSenha.email}. O usuário poderá criar uma nova senha.`);
       setUsuarioParaResetarSenha(null);
     } catch (err: any) {
       toast.error('Erro: ' + err.message);
@@ -160,8 +179,12 @@ export function GestaoUsuariosCard() {
 
     setSaving('novo');
     try {
-      // Criar usuário via signUp (cria em auth.users)
-      const senhaTemporaria = Math.random().toString(36).slice(-12);
+      // Guardar sessão atual do admin antes de criar novo usuário
+      const { data: sessionAtual } = await supabase.auth.getSession();
+      const adminSession = sessionAtual?.session;
+
+      // Senha padrão temporária
+      const senhaTemporaria = 'Temporaria@123';
       
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: novoEmail.trim(),
@@ -177,7 +200,7 @@ export function GestaoUsuariosCard() {
       if (signUpError) throw signUpError;
 
       if (authData?.user?.id) {
-        // Criar ou atualizar perfil do usuário com o ID do auth.users
+        // Criar ou atualizar perfil do usuário com flag de mudança obrigatória
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert({
@@ -185,13 +208,26 @@ export function GestaoUsuariosCard() {
             nome: novoNome.trim(),
             email: novoEmail.trim(),
             cargo: novoCargo,
+            precisa_mudar_senha: true, // Flag para forçar mudança no primeiro login
           }, {
             onConflict: 'id'
           });
 
         if (profileError) throw profileError;
 
-        toast.success(`✅ Usuário criado com sucesso!\n\nEmail: ${novoEmail}\nCargo: ${novoCargo}\nSenha: ${senhaTemporaria}\n\n⚠️ Compartilhe a senha acima com o novo usuário para que ele possa fazer login.`);
+        // ⚠️ signUp() faz login automático do novo usuário
+        // Fazer logout para restaurar sessão do admin
+        await supabase.auth.signOut();
+
+        // Restaurar sessão do admin
+        if (adminSession) {
+          await supabase.auth.setSession(adminSession);
+        } else {
+          // Se não conseguir restaurar, recarregar página
+          window.location.reload();
+        }
+
+        toast.success(`✅ Usuário criado com sucesso!\n\nEmail: ${novoEmail}\nCargo: ${novoCargo}\nSenha Temporária: Temporaria@123\n\n⚠️ Na próxima login, o usuário será obrigado a criar uma nova senha pessoal`);
         
         // Limpar formulário e carregar usuários
         setNovoEmail('');

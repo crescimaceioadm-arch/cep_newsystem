@@ -24,6 +24,8 @@ import ClientesInsights from "./pages/ClientesInsights";
 import ItensGrandes from "./pages/ItensGrandes";
 import RelatorioItensGrandes from "./pages/RelatorioItensGrandes";
 import PerfilVendas from "./pages/PerfilVendas";
+import PerformanceVendas from "./pages/PerformanceVendas";
+import LogsAtividades from "./pages/LogsAtividades";
 
 const queryClient = new QueryClient();
 
@@ -52,8 +54,10 @@ const App = () => (
                 <Route path="/estoque/itens-grandes" element={<RequireRole><ItensGrandes /></RequireRole>} />
                 <Route path="/estoque/itens-grandes/relatorio" element={<RequireRole><RelatorioItensGrandes /></RequireRole>} />
                 <Route path="/dashboard" element={<RequireRole><Dashboard /></RequireRole>} />
-                <Route path="/perfil-vendas" element={<RequireRole><PerfilVendas /></RequireRole>} />
+                <Route path="/dashboard/performance-vendas" element={<RequireRole><PerformanceVendas /></RequireRole>} />
+                <Route path="/performance-vendas" element={<RequireRole><PerformanceVendas /></RequireRole>} />
                 <Route path="/configuracoes" element={<RequireRole><Configuracoes /></RequireRole>} />
+                                <Route path="/logs-atividades" element={<RequireRole><LogsAtividades /></RequireRole>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </InactivityProvider>

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Venda, Estoque, ItemCategoria } from "@/types/database";
 import { toast } from "sonner";
 import { registrarMovimentacaoCaixa } from "@/lib/registrarMovimentacaoCaixa";
+import { useLogAtividade } from "@/hooks/useLogAtividade";
 
 export interface ItemGrandeSelecionado {
   id: string;
@@ -100,6 +101,7 @@ export function useVendasHoje() {
 
 export function useFinalizarVenda() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async (venda: NovaVenda) => {
@@ -312,11 +314,20 @@ export function useFinalizarVenda() {
       }
 
       console.log("[useFinalizarVenda] Venda finalizada com sucesso!");
-      return alertas;
+      return { alertas, vendaInserida };
     },
-    onSuccess: (alertas) => {
+    onSuccess: ({ alertas, vendaInserida }) => {
       queryClient.invalidateQueries({ queryKey: ["estoque"] });
       queryClient.invalidateQueries({ queryKey: ["vendas"] });
+      
+      log({
+        acao: "criar",
+        tabela_afetada: "vendas",
+        registro_id: vendaInserida.id,
+        dados_depois: vendaInserida,
+        detalhes: `Venda finalizada - R$ ${vendaInserida.valor_total_venda} - ${vendaInserida.vendedora_nome || 'Vendedora não informada'}`
+      });
+      
       if (alertas.length > 0) {
         toast.warning("Venda realizada! Atenção: estoque negativo em algumas categorias.");
       } else {

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getDateBrasilia, getDateTimeBrasilia } from "@/lib/utils";
+import { useLogAtividade } from "@/hooks/useLogAtividade";
 
 export interface Caixa {
   id: string;
@@ -421,6 +422,7 @@ export function useMovimentacoesCaixa() {
 
 export function useTransferenciaCaixa() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async ({
@@ -443,12 +445,17 @@ export function useTransferenciaCaixa() {
       });
 
       if (error) throw error;
-      return data;
+      return { data, origemNome, destinoNome, valor, motivo };
     },
-    onSuccess: () => {
+    onSuccess: ({ origemNome, destinoNome, valor, motivo }) => {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       toast.success("Transferência realizada com sucesso!");
+      log({
+        acao: "transferir",
+        tabela_afetada: "movimentacoes_caixa",
+        detalhes: `Transferência de ${origemNome} para ${destinoNome} - R$ ${valor} - ${motivo}`
+      });
     },
     onError: (error: Error) => {
       toast.error("Erro na transferência: " + error.message);
@@ -458,6 +465,7 @@ export function useTransferenciaCaixa() {
 
 export function useMovimentacaoManual() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async ({
@@ -504,11 +512,17 @@ export function useMovimentacaoManual() {
         .insert(movimentacao);
 
       if (movError) throw movError;
+      return { caixaNome, tipo, valor, motivo };
     },
-    onSuccess: () => {
+    onSuccess: ({ caixaNome, tipo, valor, motivo }) => {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       toast.success("Movimentação registrada com sucesso!");
+      log({
+        acao: tipo,
+        tabela_afetada: "movimentacoes_caixa",
+        detalhes: `Movimentação manual ${tipo} - ${caixaNome} - R$ ${valor} - ${motivo}`
+      });
     },
     onError: (error: Error) => {
       toast.error("Erro: " + error.message);
@@ -526,6 +540,7 @@ export interface DetalhesPagamentosFechamento {
 
 export function useFechamentoCaixa() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async ({
@@ -561,14 +576,21 @@ export function useFechamentoCaixa() {
       });
 
       if (error) throw error;
+      return { caixaId, valorSistema, valorContado, diferenca };
     },
-    onSuccess: () => {
+    onSuccess: ({ caixaId, valorSistema, valorContado, diferenca }) => {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["fechamentos_pendentes"] });
       queryClient.invalidateQueries({ queryKey: ["historico_fechamentos"] });
       queryClient.invalidateQueries({ queryKey: ["estatisticas_fechamentos"] });
       toast.success("Caixa fechado com sucesso!");
+      log({
+        acao: "fechar",
+        tabela_afetada: "fechamentos_caixa",
+        registro_id: caixaId,
+        detalhes: `Fechamento de caixa - Sistema: R$ ${valorSistema} / Contado: R$ ${valorContado} / Diferença: R$ ${diferenca}`
+      });
     },
     onError: (error: Error) => {
       toast.error("Erro ao fechar caixa: " + error.message);

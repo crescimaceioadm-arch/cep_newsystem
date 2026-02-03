@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ItemCategoria } from "@/types/database";
+import { useLogAtividade } from "@/hooks/useLogAtividade";
 
 export interface Venda {
   id: string;
@@ -86,6 +87,7 @@ export interface AtualizacaoVenda {
 
 export function useAtualizarVenda() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async ({ id, dados, vendaOriginal }: { id: string; dados: AtualizacaoVenda; vendaOriginal?: Venda }) => {
@@ -350,10 +352,21 @@ export function useAtualizarVenda() {
         }
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["vendas"] });
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes"] });
+      
+      // Log de auditoria
+      log({
+        acao: 'editar',
+        tabela_afetada: 'vendas',
+        registro_id: variables.id,
+        dados_antes: variables.vendaOriginal,
+        dados_depois: variables.dados,
+        detalhes: `Venda editada - Cliente: ${variables.dados.cliente_nome || variables.vendaOriginal?.cliente_nome || 'N/A'}, Vendedora: ${variables.dados.vendedora_nome || variables.vendaOriginal?.vendedora_nome || 'N/A'}, Valor: R$ ${variables.dados.valor_total_venda || variables.vendaOriginal?.valor_total_venda || 0}`,
+      });
+      
       toast.success("Venda atualizada com sucesso!");
     },
     onError: (error) => {

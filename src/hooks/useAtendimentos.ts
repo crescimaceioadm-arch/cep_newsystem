@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Atendimento, StatusAtendimento, ItemCategoria, AtendimentoItem } from "@/types/database";
 import { getDateTimeBrasilia } from "@/lib/utils";
 import { toast } from "sonner";
+import { useLogAtividade } from "@/hooks/useLogAtividade";
 
 export function useAtendimentos() {
   return useQuery({
@@ -81,6 +82,7 @@ export function useAtendimentosByStatus(status: StatusAtendimento) {
 
 export function useCreateAtendimento() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async ({
@@ -105,8 +107,15 @@ export function useCreateAtendimento() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
+      log({
+        acao: "criar",
+        tabela_afetada: "atendimentos",
+        registro_id: data.id,
+        dados_depois: data,
+        detalhes: `Atendimento criado para ${data.nome_cliente} (${data.origem_avaliacao || 'presencial'})`
+      });
     },
   });
 }
@@ -140,6 +149,7 @@ export function useUpdateAtendimento() {
 
 export function useFinalizarAtendimento() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async ({ 
@@ -230,11 +240,18 @@ export function useFinalizarAtendimento() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      log({
+        acao: "finalizar",
+        tabela_afetada: "atendimentos",
+        registro_id: data.id,
+        dados_depois: data,
+        detalhes: `Atendimento finalizado - ${data.nome_cliente} - R$ ${data.valor_total_negociado}`
+      });
     },
   });
 }
@@ -265,6 +282,7 @@ interface AvaliacaoData {
 
 export function useSaveAvaliacao() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async (data: AvaliacaoData) => {
@@ -477,16 +495,30 @@ export function useSaveAvaliacao() {
       }
 
       console.log("[useSaveAvaliacao] Avaliação salva com sucesso!");
+      
+      return { atendimentoAtual, atendimentoId: data.id };
     },
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
       queryClient.invalidateQueries({ queryKey: ["estoque"] });
+      
+      // Log de auditoria
+      const atendAnterior = _result?.atendimentoAtual as any;
+      log({
+        acao: 'editar',
+        tabela_afetada: 'atendimentos',
+        registro_id: variables.id,
+        dados_antes: atendAnterior,
+        dados_depois: variables,
+        detalhes: `Avaliação editada - Cliente: ${atendAnterior?.nome_cliente || 'N/A'}, Avaliadora: ${variables.avaliadora_nome || 'N/A'}`,
+      });
     },
   });
 }
 
 export function useRecusarAvaliacao() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async (data: { 
@@ -512,19 +544,36 @@ export function useRecusarAvaliacao() {
         console.error("[useRecusarAvaliacao] Erro:", error);
         throw error;
       }
+      
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
+      log({
+        acao: "recusar",
+        tabela_afetada: "atendimentos",
+        registro_id: data.id,
+        dados_depois: data,
+        detalhes: `Avaliação recusada - Motivo: ${data.motivo_recusa === 'loja' ? 'Recusado pela loja' : 'Cliente recusou'}`
+      });
     },
   });
 }
 
 export function useDeleteAtendimento() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      // 1. Deletar itens grandes associados à avaliação
+      // 1. Buscar atendimento antes de deletar para registrar no log
+      const { data: atendimentoParaLog } = await supabase
+        .from("atendimentos")
+        .select("*")
+        .eq("id", id)
+        .single();
+      
+      // 2. Deletar itens grandes associados à avaliação
       const { error: deleteItensGrandesError } = await supabase
         .from("itens_grandes_individuais")
         .delete()
@@ -578,14 +627,26 @@ export function useDeleteAtendimento() {
         console.error("[useDeleteAtendimento] Erro:", error);
         throw error;
       }
+      
+      return atendimentoParaLog;
     },
-    onSuccess: () => {
+    onSuccess: (atendimentoDeletado) => {
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
       queryClient.invalidateQueries({ queryKey: ["itens_grandes_individuais"] });
       queryClient.invalidateQueries({ queryKey: ["itens_grandes_disponiveis"] });
+      
+      if (atendimentoDeletado) {
+        log({
+          acao: "deletar",
+          tabela_afetada: "atendimentos",
+          registro_id: atendimentoDeletado.id,
+          dados_antes: atendimentoDeletado,
+          detalhes: `Atendimento deletado - ${atendimentoDeletado.nome_cliente}`
+        });
+      }
     },
   });
 }

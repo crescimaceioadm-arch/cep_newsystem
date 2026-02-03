@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useLogAtividade } from "@/hooks/useLogAtividade";
 import type { EventoMarketing } from "@/types/database";
 import { startOfWeek, endOfWeek, format } from "date-fns";
 
@@ -32,6 +33,7 @@ export function useEventosMarketingMes(mes: Date) {
 // Criar novo evento
 export function useCreateEventoMarketing() {
   const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
 
   return useMutation({
     mutationFn: async (dados: {
@@ -49,14 +51,22 @@ export function useCreateEventoMarketing() {
       if (error) throw error;
       return data as EventoMarketing;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["eventos_marketing"] });
+          log({
+            acao: "criar",
+            tabela_afetada: "eventos_marketing",
+            registro_id: data.id,
+            dados_depois: data,
+            detalhes: `Evento criado: ${data.titulo} - ${data.data}`
+          });
     },
   });
 }
 
 // Atualizar evento
 export function useUpdateEventoMarketing() {
+    const { log } = useLogAtividade();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -74,7 +84,14 @@ export function useUpdateEventoMarketing() {
       if (error) throw error;
       return data as EventoMarketing;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+            log({
+              acao: "editar",
+              tabela_afetada: "eventos_marketing",
+              registro_id: data.id,
+              dados_depois: data,
+              detalhes: `Evento editado: ${data.titulo}`
+            });
       queryClient.invalidateQueries({ queryKey: ["eventos_marketing"] });
     },
   });
@@ -82,18 +99,36 @@ export function useUpdateEventoMarketing() {
 
 // Deletar evento
 export function useDeleteEventoMarketing() {
+    const { log } = useLogAtividade();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
+            // Buscar evento antes de deletar para o log
+            const { data: eventoParaLog } = await supabase
+              .from("eventos_marketing")
+              .select("*")
+              .eq("id", id)
+              .single();
+      
       const { error } = await supabase
         .from("eventos_marketing")
         .delete()
         .eq("id", id);
+        return eventoParaLog;
       
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (eventoDeletado) => {
+            if (eventoDeletado) {
+              log({
+                acao: "deletar",
+                tabela_afetada: "eventos_marketing",
+                registro_id: eventoDeletado.id,
+                dados_antes: eventoDeletado,
+                detalhes: `Evento deletado: ${eventoDeletado.titulo}`
+              });
+            }
       queryClient.invalidateQueries({ queryKey: ["eventos_marketing"] });
     },
   });
