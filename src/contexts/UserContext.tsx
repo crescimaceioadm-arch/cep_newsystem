@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { getDateBrasilia } from '@/lib/utils';
+import type { TipoPermissao } from '@/hooks/usePermissoesUsuario';
 
 export type UserRole = 'admin' | 'caixa' | 'avaliadora' | 'geral' | 'social_media' | 'mkt';
 
@@ -12,6 +13,7 @@ interface UserProfile {
   nome?: string;
   email?: string;
   precisa_mudar_senha?: boolean;
+  permissoes?: Map<TipoPermissao, boolean>;
 }
 
 interface UserContextType {
@@ -24,6 +26,7 @@ interface UserContextType {
   isCaixa: boolean;
   isAvaliadora: boolean;
   isGeral: boolean;
+  hasPermission: (permissao: TipoPermissao) => boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -67,7 +70,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Busca perfil do usuário
+  // Busca perfil do usuário e suas permissões individuais
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -78,21 +81,34 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.warn('Erro ao buscar perfil:', error.message);
-        // Sem fallback para admin - força logout se perfil não carregar
         setProfile(null);
         return;
       }
 
       if (data) {
+        // Buscar permissões individuais do usuário
+        const { data: permissoesData } = await supabase
+          .from('permissoes_usuario')
+          .select('permissao, concedida')
+          .eq('user_id', userId);
+
+        // Criar mapa de permissões
+        const permissoesMap = new Map<TipoPermissao, boolean>();
+        if (permissoesData) {
+          permissoesData.forEach((p) => {
+            permissoesMap.set(p.permissao as TipoPermissao, p.concedida);
+          });
+        }
+
         setProfile({
           id: data.id,
           cargo: (data.cargo as UserRole) || 'geral',
           nome: data.nome,
           email: data.email,
           precisa_mudar_senha: data.precisa_mudar_senha || false,
+          permissoes: permissoesMap,
         });
       } else {
-        // Perfil não existe - força logout
         console.warn('Perfil não encontrado para usuário:', userId);
         setProfile(null);
       }
@@ -153,6 +169,45 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Cargo atual (fallback para 'geral' se não encontrado)
   const cargo: UserRole = profile?.cargo || 'geral';
 
+  // Verificar se usuário tem permissão específica
+  const hasPermission = (permissao: TipoPermissao): boolean => {
+    // Se o usuário tem permissões individuais definidas, usar elas
+    if (profile?.permissoes && profile.permissoes.size > 0) {
+      // Se a permissão está explicitamente definida, usar o valor definido
+      if (profile.permissoes.has(permissao)) {
+        return profile.permissoes.get(permissao) === true;
+      }
+      // Se não está definida e o usuário tem permissões customizadas, negar por padrão
+      return false;
+    }
+
+    // Caso contrário, usar permissões do cargo (comportamento antigo)
+    // Convertendo permissão para path de menu se aplicável
+    if (permissao.startsWith('menu:')) {
+      const menuPath = permissao.replace('menu:', '');
+      return hasAccess(cargo, menuPath);
+    }
+
+    // Para ações e exportações, admin tem tudo por padrão
+    if (cargo === 'admin') return true;
+
+    // Para outros cargos, definir permissões específicas
+    if (permissao === 'action:editar_venda' || permissao === 'action:deletar_venda') {
+      return ['admin', 'caixa', 'geral'].includes(cargo);
+    }
+    if (permissao === 'action:editar_avaliacao' || permissao === 'action:deletar_avaliacao') {
+      return ['admin', 'avaliadora'].includes(cargo);
+    }
+    if (permissao.startsWith('financeiro:')) {
+      return ['admin', 'caixa', 'geral'].includes(cargo);
+    }
+    if (permissao.startsWith('export:')) {
+      return ['admin', 'caixa', 'geral'].includes(cargo);
+    }
+
+    return false;
+  };
+
   const value: UserContextType = {
     user,
     session,
@@ -163,6 +218,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     isCaixa: cargo === 'caixa',
     isAvaliadora: cargo === 'avaliadora',
     isGeral: cargo === 'geral',
+    hasPermission,
   };
 
   return (
