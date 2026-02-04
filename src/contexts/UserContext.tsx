@@ -171,17 +171,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Verificar se usuário tem permissão específica
   const hasPermission = (permissao: TipoPermissao): boolean => {
-    // Se o usuário tem permissões individuais definidas, usar elas
-    if (profile?.permissoes && profile.permissoes.size > 0) {
-      // Se a permissão está explicitamente definida, usar o valor definido
-      if (profile.permissoes.has(permissao)) {
-        return profile.permissoes.get(permissao) === true;
+    // Primeiro, verificar se há uma negação explícita para esta permissão
+    if (profile?.permissoes && profile.permissoes.has(permissao)) {
+      const permissaoDefinida = profile.permissoes.get(permissao);
+      // Se está explicitamente definida como false, negar
+      if (permissaoDefinida === false) {
+        return false;
       }
-      // Se não está definida e o usuário tem permissões customizadas, negar por padrão
-      return false;
+      // Se está definida como true, conceder
+      if (permissaoDefinida === true) {
+        return true;
+      }
     }
 
-    // Caso contrário, usar permissões do cargo (comportamento antigo)
+    // Se não há definição explícita, usar permissões do cargo (comportamento padrão)
     // Convertendo permissão para path de menu se aplicável
     if (permissao.startsWith('menu:')) {
       const menuPath = permissao.replace('menu:', '');

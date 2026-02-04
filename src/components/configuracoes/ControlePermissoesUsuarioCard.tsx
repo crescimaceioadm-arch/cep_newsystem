@@ -135,10 +135,8 @@ export function ControlePermissoesUsuarioCard() {
     PERMISSOES_DISPONIVEIS.forEach((categoria) => {
       categoria.itens.forEach((item) => {
         const concedida = isPermissaoConcedida(item.id);
-        // Só salvar se a permissão foi concedida (para economizar espaço no banco)
-        if (concedida) {
-          todasPermissoes.push({ permissao: item.id, concedida });
-        }
+        // Salvar TODAS as permissões para permitir override completo
+        todasPermissoes.push({ permissao: item.id, concedida });
       });
     });
 
