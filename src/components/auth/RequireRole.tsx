@@ -8,7 +8,7 @@ interface RequireRoleProps {
 }
 
 export function RequireRole({ children }: RequireRoleProps) {
-  const { cargo, loading } = useUser();
+  const { cargo, loading, hasPermission } = useUser();
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -24,8 +24,11 @@ export function RequireRole({ children }: RequireRoleProps) {
     );
   }
 
-  // Verifica se tem acesso à rota atual
-  if (!hasAccess(cargo, currentPath)) {
+  // Verifica se tem acesso à rota atual usando permissões individuais
+  const menuPermissao = `menu:${currentPath}` as any;
+  const temAcesso = hasPermission(menuPermissao);
+  
+  if (!temAcesso) {
     // Redireciona para rota padrão do cargo
     const defaultRoute = DEFAULT_ROUTE[cargo];
     console.log(`Acesso negado: ${cargo} tentou acessar ${currentPath}, redirecionando para ${defaultRoute}`);

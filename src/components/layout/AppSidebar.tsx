@@ -59,13 +59,16 @@ const allMenuItems = [
 ];
 
 export function AppSidebar() {
-  const { cargo } = useUser();
+  const { cargo, hasPermission } = useUser();
   const { limparCaixa } = useCaixa();
   const navigate = useNavigate();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   
-  // Filtra menu items baseado no cargo do usuário
-  const menuItems = allMenuItems.filter(item => hasAccess(cargo, item.url));
+  // Filtra menu items baseado nas permissões do usuário (individuais ou do cargo)
+  const menuItems = allMenuItems.filter(item => {
+    const menuPermissao = `menu:${item.url}` as any;
+    return hasPermission(menuPermissao);
+  });
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
