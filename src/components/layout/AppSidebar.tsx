@@ -66,7 +66,9 @@ export function AppSidebar() {
   
   // Filtra menu items baseado nas permissões do usuário (individuais ou do cargo)
   const menuItems = allMenuItems.filter(item => {
-    const menuPermissao = `menu:${item.url}` as any;
+    // Mapear / para /dashboard para verificação de permissão
+    const urlParaVerificar = item.url === '/' ? '/dashboard' : item.url;
+    const menuPermissao = `menu:${urlParaVerificar}` as any;
     return hasPermission(menuPermissao);
   });
 

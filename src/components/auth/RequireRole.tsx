@@ -25,7 +25,9 @@ export function RequireRole({ children }: RequireRoleProps) {
   }
 
   // Verifica se tem acesso à rota atual usando permissões individuais
-  const menuPermissao = `menu:${currentPath}` as any;
+  // Mapear / para /dashboard para verificação de permissão
+  const pathParaVerificar = currentPath === '/' ? '/dashboard' : currentPath;
+  const menuPermissao = `menu:${pathParaVerificar}` as any;
   const temAcesso = hasPermission(menuPermissao);
   
   if (!temAcesso) {
