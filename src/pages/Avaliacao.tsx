@@ -1,5 +1,5 @@
 // Forçando um novo deploy na Vercel
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAtendimentosByStatus } from "@/hooks/useAtendimentos";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,23 @@ import {
 } from "@/components/ui/table";
 import { AvaliacaoModal } from "@/components/avaliacao/AvaliacaoModal";
 import { Atendimento } from "@/types/database";
-import { ClientePreferenciaPaymentBadge } from "@/components/ClientePreferenciaPaymentBadge";
+import { ClientePreferenciaPaymentBadgeRender } from "@/components/ClientePreferenciaPaymentBadge";
+import { useClientesPreferenciaBatch, useClientesRecusasBatch } from "@/hooks/useClientePreferenciaPagemento";
 import { convertToLocalTime } from "@/lib/utils";
 
 export default function Avaliacao() {
   const { data, isLoading, error } = useAtendimentosByStatus("aguardando_avaliacao");
   const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Buscar dados em batch para todos os clientes visíveis
+  const nomesClientes = useMemo(() => {
+    return data?.map(a => a.nome_cliente).filter(Boolean) || [];
+  }, [data]);
+
+  const { data: preferenciasMap, isLoading: isLoadingPreferencias } = useClientesPreferenciaBatch(nomesClientes);
+  // Desabilitado para performance - recusas são menos críticas
+  const { data: recusasMap, isLoading: isLoadingRecusas } = useClientesRecusasBatch(nomesClientes, false);
 
   const handleIniciarAvaliacao = (atendimento: Atendimento) => {
     setSelectedAtendimento(atendimento);
@@ -59,7 +69,11 @@ export default function Avaliacao() {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <span>{a.nome_cliente}</span>
-                        <ClientePreferenciaPaymentBadge nomeCliente={a.nome_cliente} />
+                        <ClientePreferenciaPaymentBadgeRender 
+                          preferencia={preferenciasMap?.[a.nome_cliente]}
+                          recusas={recusasMap?.[a.nome_cliente]}
+                          showRecusas={false}
+                        />
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">

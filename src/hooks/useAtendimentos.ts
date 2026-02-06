@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Atendimento, StatusAtendimento, ItemCategoria, AtendimentoItem } from "@/types/database";
-import { getDateTimeBrasilia } from "@/lib/utils";
+import { getDateTimeUTC } from "@/lib/utils";
 import { toast } from "sonner";
 import { useLogAtividade } from "@/hooks/useLogAtividade";
 
@@ -92,7 +92,7 @@ export function useCreateAtendimento() {
       nomeCliente: string;
       origemAvaliacao?: "presencial" | "whatsapp" | null;
     }) => {
-      const horaChegada = getDateTimeBrasilia();
+      const horaChegada = getDateTimeUTC(); // Agora salva em UTC corretamente
       const { data, error } = await supabase
         .from("atendimentos")
         .insert({ 

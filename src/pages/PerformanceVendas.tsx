@@ -5,14 +5,14 @@ import { startOfMonth, endOfMonth, endOfDay, isToday, format, isSameDay, parseIS
 import { ptBR } from "date-fns/locale";
 import { TrendingUp, BarChart3, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { convertToLocalTime } from "@/lib/utils";
+import { convertToLocalTime, getBrasiliaRange } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 
-const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const CustomTooltip = ({ active, payload, label, type = "currency" }: any) => {
   if (active && payload && payload.length) {
@@ -70,14 +70,17 @@ export default function PerformanceVendas() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const inicio = periodo?.from ? periodo.from : inicioMes;
-      const fim = periodo?.to ? periodo.to : fimMes;
+      setAllVendas([]); // LIMPAR dados antigos ANTES de buscar novos
+
+      const inicio = periodo?.from ? startOfDay(periodo.from) : startOfDay(inicioMes);
+      const fim = periodo?.to ? endOfDay(periodo.to) : endOfDay(fimMes);
+      const { start, end } = getBrasiliaRange(inicio, fim);
 
       const { data: vendas } = await supabase
         .from("vendas")
         .select("*")
-        .gte("created_at", inicio.toISOString())
-        .lte("created_at", endOfDay(fim).toISOString());
+        .gte("created_at", start)
+        .lte("created_at", end);
 
       // Pegar IDs das vendas do período
       const vendaIds = (vendas || []).map(v => v.id);
@@ -119,10 +122,11 @@ export default function PerformanceVendas() {
   const salesMetrics = useMemo(() => {
     const vendedorasMap = new Map();
 
-    allVendas.forEach((venda) => {
+    allVendas.forEach((venda, index) => {
       const nome = venda.vendedora_nome || "Sem vendedora";
       const valor = Number(venda.valor_total_venda || 0);
-      const ehHoje = isSameDay(parseISO(venda.created_at), hoje);
+      const dataLocalVenda = convertToLocalTime(venda.created_at) || parseISO(venda.created_at);
+      const ehHoje = isSameDay(dataLocalVenda, hoje);
 
       const current = vendedorasMap.get(nome) || {
         valorMes: 0,
@@ -147,7 +151,6 @@ export default function PerformanceVendas() {
       ...data,
       ticketMedio: data.qtdMes > 0 ? data.valorMes / data.qtdMes : 0
     })).sort((a, b) => b.valorMes - a.valorMes);
-
     return { vendedorasData };
   }, [allVendas]);
 
@@ -156,7 +159,8 @@ export default function PerformanceVendas() {
     const vendedorasMap: Record<string, any> = {};
 
     allVendas.forEach((venda) => {
-      const vendedora = venda.vendedora_nome || "Sem vendedora";
+      const nomeBruto = venda.vendedora_nome || "Sem vendedora";
+      const vendedora = nomeBruto === "Cliente não atendido" ? "Sem vendedora" : nomeBruto;
 
       if (!vendedorasMap[vendedora]) {
         vendedorasMap[vendedora] = {
@@ -228,13 +232,15 @@ export default function PerformanceVendas() {
     });
 
     // Calcular P.A
-    return Object.entries(vendedorasMap).reduce((acc, [nome, data]) => {
+    const resultado = Object.entries(vendedorasMap).reduce((acc, [nome, data]) => {
       acc[nome] = {
         ...data,
         pa: data.totalVendas > 0 ? (data.totalItens / data.totalVendas).toFixed(2) : "0.00"
       };
       return acc;
     }, {} as Record<string, any>);
+
+    return resultado;
   }, [allVendas]);
 
   if (loading) {
@@ -319,6 +325,7 @@ export default function PerformanceVendas() {
             fantasias: { qtdItens: 0, qtdVendas: 0 },
             enxoval: { qtdItens: 0, qtdVendas: 0 }
           };
+          
           cards.push({
             nome: "Oportunidades Perdidas",
             dados: oportunidadesPerdidas,
@@ -423,6 +430,12 @@ export default function PerformanceVendas() {
             const maxValorHoje = Math.max(...salesMetrics.vendedorasData.map(v => v.valorHoje));
             const maxQtdHoje = Math.max(...salesMetrics.vendedorasData.map(v => v.qtdHoje));
 
+            const totalVendasPeriodo = vendedora.qtdMes || 0;
+            const formatPercent = (valor: number) => {
+              if (!totalVendasPeriodo) return "0%";
+              return `${Math.round((valor / totalVendasPeriodo) * 100)}%`;
+            };
+
             return (
               <Card key={index} className="border-2 hover:shadow-lg transition-all">
                 <CardHeader className="pb-3">
@@ -471,7 +484,9 @@ export default function PerformanceVendas() {
                       <div>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-xs text-gray-600">Vendas com 1 item</span>
-                          <span className="text-xs font-bold text-gray-700">{peAsDistribuicao[vendedora.nome]?.um_item || 0}</span>
+                          <span className="text-xs font-bold text-gray-700">
+                            {peAsDistribuicao[vendedora.nome]?.um_item || 0} ({formatPercent(peAsDistribuicao[vendedora.nome]?.um_item || 0)})
+                          </span>
                         </div>
                         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div
@@ -485,7 +500,9 @@ export default function PerformanceVendas() {
                       <div>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-xs text-gray-600">Vendas com 2 a 3 itens</span>
-                          <span className="text-xs font-bold text-gray-700">{peAsDistribuicao[vendedora.nome]?.dois_a_tres_itens || 0}</span>
+                          <span className="text-xs font-bold text-gray-700">
+                            {peAsDistribuicao[vendedora.nome]?.dois_a_tres_itens || 0} ({formatPercent(peAsDistribuicao[vendedora.nome]?.dois_a_tres_itens || 0)})
+                          </span>
                         </div>
                         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div
@@ -499,7 +516,9 @@ export default function PerformanceVendas() {
                       <div>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-xs text-gray-600">Vendas com 4 a 10 itens</span>
-                          <span className="text-xs font-bold text-gray-700">{peAsDistribuicao[vendedora.nome]?.quatro_a_dez || 0}</span>
+                          <span className="text-xs font-bold text-gray-700">
+                            {peAsDistribuicao[vendedora.nome]?.quatro_a_dez || 0} ({formatPercent(peAsDistribuicao[vendedora.nome]?.quatro_a_dez || 0)})
+                          </span>
                         </div>
                         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div
@@ -513,7 +532,9 @@ export default function PerformanceVendas() {
                       <div>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-xs text-gray-600">Vendas acima de 10 itens</span>
-                          <span className="text-xs font-bold text-gray-700">{peAsDistribuicao[vendedora.nome]?.acima_dez || 0}</span>
+                          <span className="text-xs font-bold text-gray-700">
+                            {peAsDistribuicao[vendedora.nome]?.acima_dez || 0} ({formatPercent(peAsDistribuicao[vendedora.nome]?.acima_dez || 0)})
+                          </span>
                         </div>
                         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div

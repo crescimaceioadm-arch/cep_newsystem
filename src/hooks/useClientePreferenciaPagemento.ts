@@ -98,3 +98,90 @@ export function useTodasClientesPreferencia() {
     },
   });
 }
+
+// Hook otimizado para buscar preferências de múltiplos clientes de uma vez
+export function useClientesPreferenciaBatch(nomesClientes: string[] | undefined) {
+  return useQuery({
+    queryKey: ["clientes_pagamento_preferencia_batch", nomesClientes?.sort().join(",")],
+    queryFn: async () => {
+      if (!nomesClientes || nomesClientes.length === 0) return {};
+
+      const { data, error } = await supabase
+        .from("cliente_pagamento_preferencia")
+        .select("*")
+        .in("nome_cliente", nomesClientes);
+
+      if (error) throw error;
+
+      // Transforma em um mapa para acesso rápido
+      const map: Record<string, ClientePreferenciaPagemento> = {};
+      data?.forEach((item) => {
+        map[item.nome_cliente] = item as ClientePreferenciaPagemento;
+      });
+
+      return map;
+    },
+    enabled: !!nomesClientes && nomesClientes.length > 0,
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+    gcTime: 10 * 60 * 1000, // Manter em cache por 10 minutos
+    refetchOnWindowFocus: false, // Não refetch ao focar na janela
+  });
+}
+
+// Hook otimizado para buscar recusas de múltiplos clientes de uma vez
+export function useClientesRecusasBatch(nomesClientes: string[] | undefined, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ["clientes_recusas_batch", nomesClientes?.sort().join(",")],
+    queryFn: async () => {
+      if (!nomesClientes || nomesClientes.length === 0) return {};
+
+      // Buscar todas as avaliações dos clientes de uma vez
+      const { data: avaliacoes, error } = await supabase
+        .from("atendimentos")
+        .select("nome_cliente, status")
+        .in("nome_cliente", nomesClientes)
+        .eq("tipo_atendimento", "avaliacao")
+        .in("status", ["finalizado", "recusado", "recusou"]);
+
+      if (error) throw error;
+
+      // Agrupa por cliente - Otimizado com reduce
+      const map: Record<string, ClienteRecusas> = {};
+      
+      // Primeiro agrupa as avaliações por cliente
+      const avaliacoesPorCliente = avaliacoes?.reduce((acc, aval) => {
+        if (!acc[aval.nome_cliente]) {
+          acc[aval.nome_cliente] = { recusadas: 0, finalizadas: 0 };
+        }
+        if (aval.status === "recusado" || aval.status === "recusou") {
+          acc[aval.nome_cliente].recusadas++;
+        } else if (aval.status === "finalizado") {
+          acc[aval.nome_cliente].finalizadas++;
+        }
+        return acc;
+      }, {} as Record<string, { recusadas: number; finalizadas: number }>);
+
+      // Depois calcula os percentuais
+      nomesClientes.forEach((nomeCliente) => {
+        const stats = avaliacoesPorCliente?.[nomeCliente] || { recusadas: 0, finalizadas: 0 };
+        const totalAvaliacoes = stats.recusadas + stats.finalizadas;
+        const percentualRecusadas = totalAvaliacoes > 0 
+          ? (stats.recusadas / totalAvaliacoes) * 100 
+          : 0;
+
+        map[nomeCliente] = {
+          nome_cliente: nomeCliente,
+          total_avaliacoes: totalAvaliacoes,
+          total_recusadas: stats.recusadas,
+          percentual_recusadas: percentualRecusadas,
+        };
+      });
+
+      return map;
+    },
+    enabled: enabled && !!nomesClientes && nomesClientes.length > 0,
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+    gcTime: 10 * 60 * 1000, // Manter em cache por 10 minutos
+    refetchOnWindowFocus: false, // Não refetch ao focar na janela
+  });
+}

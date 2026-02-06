@@ -69,7 +69,16 @@ export function AppSidebar() {
     // Mapear / para /dashboard para verificação de permissão
     const urlParaVerificar = item.url === '/' ? '/dashboard' : item.url;
     const menuPermissao = `menu:${urlParaVerificar}` as any;
-    return hasPermission(menuPermissao);
+    const temPermissao = hasPermission(menuPermissao);
+    
+    console.log(`[AppSidebar] Verificando ${item.title} (${item.url}):`, {
+      urlParaVerificar,
+      menuPermissao,
+      temPermissao,
+      cargo
+    });
+    
+    return temPermissao;
   });
 
   const handleLogout = async () => {

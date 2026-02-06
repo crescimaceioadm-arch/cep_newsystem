@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAtendimentos, useDeleteAtendimento, useUpdateAtendimento } from "@/hooks/useAtendimentos";
@@ -34,7 +34,8 @@ import { TempoEspera } from "@/components/recepcao/TempoEspera";
 import { NovoAtendimentoModal } from "@/components/recepcao/NovoAtendimentoModal";
 import { FinalizarAtendimentoModal } from "@/components/recepcao/FinalizarAtendimentoModal";
 import { Badge } from "@/components/ui/badge";
-import { ClientePreferenciaPaymentBadge } from "@/components/ClientePreferenciaPaymentBadge";
+import { ClientePreferenciaPaymentBadgeRender } from "@/components/ClientePreferenciaPaymentBadge";
+import { useClientesPreferenciaBatch, useClientesRecusasBatch } from "@/hooks/useClientePreferenciaPagemento";
 import { UserPlus, CheckCircle, Loader2, Trash2, MessageCircle, User } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -53,6 +54,24 @@ export default function Recepcao() {
   const [finalizarModalOpen, setFinalizarModalOpen] = useState(false);
   const [atendimentoSelecionado, setAtendimentoSelecionado] = useState<Atendimento | null>(null);
   const [atendimentoParaExcluir, setAtendimentoParaExcluir] = useState<Atendimento | null>(null);
+
+  // Buscar dados em batch para todos os clientes visíveis
+  const nomesClientes = useMemo(() => {
+    return atendimentos?.map(a => a.nome_cliente).filter(Boolean) || [];
+  }, [atendimentos]);
+
+  // Filtrar apenas avaliações NÃO finalizadas, recusadas ou recusadas
+  const avaliacoesNaoFinalizadas = useMemo(() => {
+    return atendimentos?.filter(a => 
+      a.status !== "finalizado" && 
+      a.status !== "recusado" && 
+      a.status !== "recusou"
+    ) || [];
+  }, [atendimentos]);
+
+  const { data: preferenciasMap, isLoading: isLoadingPreferencias } = useClientesPreferenciaBatch(nomesClientes);
+  // Desabilitado para performance - recusas são menos críticas
+  const { data: recusasMap, isLoading: isLoadingRecusas } = useClientesRecusasBatch(nomesClientes, false);
 
   const handleFinalizar = (atendimento: Atendimento) => {
     setAtendimentoSelecionado(atendimento);
@@ -178,7 +197,7 @@ export default function Recepcao() {
               <div className="text-center py-8 text-destructive">
                 Erro ao carregar avaliações. Verifique a conexão com o banco de dados.
               </div>
-            ) : atendimentos && atendimentos.length > 0 ? (
+            ) : avaliacoesNaoFinalizadas && avaliacoesNaoFinalizadas.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -191,12 +210,16 @@ export default function Recepcao() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {atendimentos.map((atendimento) => (
+                  {avaliacoesNaoFinalizadas.map((atendimento) => (
                     <TableRow key={atendimento.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <span>{atendimento.nome_cliente}</span>
-                          <ClientePreferenciaPaymentBadge nomeCliente={atendimento.nome_cliente} />
+                          <ClientePreferenciaPaymentBadgeRender 
+                            preferencia={preferenciasMap?.[atendimento.nome_cliente]}
+                            recusas={recusasMap?.[atendimento.nome_cliente]}
+                            showRecusas={false}
+                          />
                         </div>
                       </TableCell>
                       <TableCell>
@@ -244,7 +267,10 @@ export default function Recepcao() {
               </Table>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                Nenhuma avaliação registrada hoje.
+                {atendimentos && atendimentos.length > 0 
+                  ? "Todas as avaliações foram finalizadas! ✅"
+                  : "Nenhuma avaliação registrada hoje."
+                }
               </div>
             )}
           </CardContent>

@@ -8,7 +8,7 @@ import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard,
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoque } from "@/hooks/useEstoque";
 import { useUser } from "@/contexts/UserContext";
-import { convertToLocalTime } from "@/lib/utils";
+import { convertToLocalTime, getBrasiliaRange } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -126,6 +126,8 @@ export default function Dashboard() {
       setLoading(true);
             const inicio = periodo?.from ? periodo.from : inicioMes;
             const fim = periodo?.to ? periodo.to : fimMes;
+            const { start: startPeriodo, end: endPeriodo } = getBrasiliaRange(inicio, fim);
+            const { start: startMes, end: endMes } = getBrasiliaRange(inicioMes, fimMes);
 
             // 1. Busca Atendimentos do PERÍODO SELECIONADO (para a tabela)
             // 1a. Finalizados usando a data de fechamento/encerramento dentro do período
@@ -133,16 +135,16 @@ export default function Dashboard() {
                 .from("atendimentos")
                 .select("*")
                 .eq("status", "finalizado")
-                .gte("hora_encerramento", inicio.toISOString())
-                .lte("hora_encerramento", endOfDay(fim).toISOString());
+                .gte("hora_encerramento", startPeriodo)
+                .lte("hora_encerramento", endPeriodo);
 
             // 1b. Recusados usando a data de fechamento/encerramento dentro do período
             const { data: atendRecusados } = await supabase
                 .from("atendimentos")
                 .select("*")
                 .eq("status", "recusado")
-                .gte("hora_encerramento", inicio.toISOString())
-                .lte("hora_encerramento", endOfDay(fim).toISOString());
+                .gte("hora_encerramento", startPeriodo)
+                .lte("hora_encerramento", endPeriodo);
 
             // 1c. Demais atendimentos (não-finalizados e não-recusados) usando a data de criação dentro do período
             const { data: atendOutros } = await supabase
@@ -150,16 +152,16 @@ export default function Dashboard() {
                 .select("*")
                 .neq("status", "finalizado")
                 .neq("status", "recusado")
-                .gte("created_at", inicio.toISOString())
-                .lte("created_at", endOfDay(fim).toISOString());
+                .gte("created_at", startPeriodo)
+                .lte("created_at", endPeriodo);
 
       // 2. Busca Atendimentos do MÊS INTEIRO (para o gráfico de rosca)
       const { data: atendFinalizadosMes } = await supabase
         .from("atendimentos")
         .select("*")
         .eq("status", "finalizado")
-        .gte("hora_encerramento", inicioMes.toISOString())
-        .lte("hora_encerramento", endOfDay(fimMes).toISOString());
+        .gte("hora_encerramento", startMes)
+        .lte("hora_encerramento", endMes);
 
       // 2b. Buscar itens de todas as avaliações (para classificação por bolsa/fralda)
       const { data: itens } = await supabase
@@ -190,15 +192,15 @@ export default function Dashboard() {
       const { data: vendas } = await supabase
         .from("vendas")
         .select("*")
-                .gte("created_at", inicio.toISOString())
-                .lte("created_at", endOfDay(fim).toISOString());
+                .gte("created_at", startPeriodo)
+                .lte("created_at", endPeriodo);
 
       // 4. Busca Vendas do mês inteiro (sempre, independente do filtro)
       const { data: vendasMes } = await supabase
         .from("vendas")
         .select("*")
-        .gte("created_at", inicioMes.toISOString())
-        .lte("created_at", endOfDay(fimMes).toISOString());
+        .gte("created_at", startMes)
+        .lte("created_at", endMes);
 
     setAllAtendimentos([...mapearComItens(atendFinalizados), ...mapearComItens(atendRecusados), ...mapearComItens(atendOutros)]);
       setAllAtendimentosMesInteiro(mapearComItens(atendFinalizadosMes)); // Novo: sempre o mês inteiro

@@ -1,6 +1,6 @@
-import { useClientePreferenciaPagemento, useClienteRecusas } from "@/hooks/useClientePreferenciaPagemento";
+import { useClientePreferenciaPagemento, useClienteRecusas, type ClientePreferenciaPagemento, type ClienteRecusas } from "@/hooks/useClientePreferenciaPagemento";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Orbit, Loader2, AlertCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface ClientePreferenciaPaymentBadgeProps {
   nomeCliente?: string;
@@ -8,6 +8,60 @@ interface ClientePreferenciaPaymentBadgeProps {
   showRecusas?: boolean;
 }
 
+// Componente que renderiza apenas (sem queries) - Use este quando tiver dados em batch
+interface ClientePreferenciaPaymentBadgeRenderProps {
+  preferencia?: ClientePreferenciaPagemento | null;
+  recusas?: ClienteRecusas | null;
+  className?: string;
+  showRecusas?: boolean;
+}
+
+export function ClientePreferenciaPaymentBadgeRender({ 
+  preferencia, 
+  recusas, 
+  className = "", 
+  showRecusas = true 
+}: ClientePreferenciaPaymentBadgeRenderProps) {
+  if (!preferencia || preferencia.total_avaliacoes === 0) {
+    return null; // Não mostra nada se não tem histórico - mais rápido
+  }
+
+  const { total_gira, total_pix_dinheiro, total_avaliacoes, percentual_gira } = preferencia;
+  const percentualDinheiro = 100 - percentual_gira;
+  const prefereGira = percentual_gira >= percentualDinheiro;
+  
+  const percentualDominante = prefereGira ? percentual_gira : percentualDinheiro;
+  const qtdDominante = prefereGira ? total_gira : total_pix_dinheiro;
+  const tipoLabel = prefereGira ? "Gira" : "$/Pix";
+
+  return (
+    <div className={`inline-flex items-center gap-1 ${className}`}>
+      {/* Badge de Preferência - Sem ícone, apenas texto */}
+      <Badge
+        variant="outline"
+        className={`px-2 py-0.5 text-[11px] font-semibold ${
+          prefereGira 
+            ? "border-orange-400 bg-orange-50 text-orange-700" 
+            : "border-green-400 bg-green-50 text-green-700"
+        }`}
+      >
+        {tipoLabel} {percentualDominante.toFixed(0)}% ({qtdDominante}/{total_avaliacoes})
+      </Badge>
+
+      {/* Badge de Recusas - Simplificado */}
+      {showRecusas && recusas && recusas.total_recusadas > 0 && (
+        <Badge
+          variant="outline"
+          className="px-2 py-0.5 text-[11px] font-semibold border-red-400 bg-red-50 text-red-700"
+        >
+          ❌ {recusas.percentual_recusadas.toFixed(0)}% ({recusas.total_recusadas}/{recusas.total_avaliacoes})
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+// Componente original que faz queries individuais (mantido para compatibilidade)
 export function ClientePreferenciaPaymentBadge({ nomeCliente, className = "", showRecusas = true }: ClientePreferenciaPaymentBadgeProps) {
   const { data: preferencia, isLoading } = useClientePreferenciaPagemento(nomeCliente);
   const { data: recusas, isLoading: isLoadingRecusas } = useClienteRecusas(showRecusas ? nomeCliente : undefined);
@@ -22,73 +76,10 @@ export function ClientePreferenciaPaymentBadge({ nomeCliente, className = "", sh
     );
   }
 
-  if (!preferencia) {
-    return (
-      <Badge
-        variant="outline"
-        className={`px-2.5 py-1 text-xs font-medium border-muted text-muted-foreground ${className}`}
-      >
-        <span>Sem histórico</span>
-      </Badge>
-    );
-  }
-
-  const { total_gira, total_pix_dinheiro, total_avaliacoes, percentual_gira } = preferencia;
-  if (total_avaliacoes === 0) {
-    return (
-      <Badge
-        variant="outline"
-        className={`px-2.5 py-1 text-xs font-medium border-muted text-muted-foreground ${className}`}
-      >
-        <span>Sem histórico</span>
-      </Badge>
-    );
-  }
-
-  const percentualDinheiro = 100 - percentual_gira;
-  const prefereGira = percentual_gira >= percentualDinheiro;
-  
-  const IconePreferencia = prefereGira ? Orbit : DollarSign;
-  const percentualDominante = prefereGira ? percentual_gira : percentualDinheiro;
-  const qtdDominante = prefereGira ? total_gira : total_pix_dinheiro;
-
-  return (
-    <div className={`inline-flex items-center gap-2 ${className}`}>
-      {/* Badge de Preferência de Pagamento */}
-      <Badge
-        variant="outline"
-        className={`inline-flex items-center gap-2 px-2.5 py-1.5 ${
-          prefereGira 
-            ? "border-orange-300 bg-orange-50 text-orange-700" 
-            : "border-green-300 bg-green-50 text-green-700"
-        }`}
-      >
-        {/* Ícone grande */}
-        <IconePreferencia className="h-6 w-6" />
-        
-        {/* Informações empilhadas */}
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-bold">{percentualDominante.toFixed(0)}%</span>
-          <span className="text-[10px] font-medium opacity-80">{qtdDominante}/{total_avaliacoes}</span>
-        </div>
-      </Badge>
-
-      {/* Badge de Recusas */}
-      {recusas && recusas.total_recusadas > 0 && (
-        <Badge
-          variant="outline"
-          className={`inline-flex items-center gap-2 px-2.5 py-1.5 border-red-300 bg-red-50 text-red-700`}
-        >
-          {/* Ícone de recusa */}
-          <AlertCircle className="h-6 w-6" />
-          
-          {/* Informações empilhadas */}
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-bold">{recusas.percentual_recusadas.toFixed(0)}%</span>
-            <span className="text-[10px] font-medium opacity-80">{recusas.total_recusadas}/{recusas.total_avaliacoes}</span>
-          </div>
-        </Badge>
-      )}
-    </div>
-  );
+  return <ClientePreferenciaPaymentBadgeRender 
+    preferencia={preferencia} 
+    recusas={recusas} 
+    className={className} 
+    showRecusas={showRecusas} 
+  />;
 }

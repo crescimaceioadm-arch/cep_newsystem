@@ -174,6 +174,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     // Primeiro, verificar se há uma negação explícita para esta permissão
     if (profile?.permissoes && profile.permissoes.has(permissao)) {
       const permissaoDefinida = profile.permissoes.get(permissao);
+      console.log(`[hasPermission] ${permissao}: definida explicitamente como`, permissaoDefinida);
       // Se está explicitamente definida como false, negar
       if (permissaoDefinida === false) {
         return false;
@@ -185,10 +186,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
 
     // Se não há definição explícita, usar permissões do cargo (comportamento padrão)
+    console.log(`[hasPermission] ${permissao}: não definida, usando cargo ${cargo}`);
+    
     // Convertendo permissão para path de menu se aplicável
     if (permissao.startsWith('menu:')) {
       const menuPath = permissao.replace('menu:', '');
-      return hasAccess(cargo, menuPath);
+      const acesso = hasAccess(cargo, menuPath);
+      console.log(`[hasPermission] menu ${menuPath}: cargo ${cargo} tem acesso?`, acesso);
+      return acesso;
     }
 
     // Para ações e exportações, admin tem tudo por padrão

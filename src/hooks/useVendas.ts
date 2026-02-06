@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Venda, Estoque, ItemCategoria } from "@/types/database";
 import { toast } from "sonner";
 import { registrarMovimentacaoCaixa } from "@/lib/registrarMovimentacaoCaixa";
+import { getBrasiliaRange, getDateTimeUTC } from "@/lib/utils";
 import { useLogAtividade } from "@/hooks/useLogAtividade";
 
 export interface ItemGrandeSelecionado {
@@ -73,15 +74,13 @@ export function useVendasHoje() {
     queryKey: ["vendas", "hoje"],
     queryFn: async () => {
       const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      const amanha = new Date(hoje);
-      amanha.setDate(amanha.getDate() + 1);
+      const { start, end } = getBrasiliaRange(hoje, hoje);
 
       const { data, error } = await supabase
         .from("vendas")
         .select("*")
-        .gte("created_at", hoje.toISOString())
-        .lt("created_at", amanha.toISOString());
+        .gte("created_at", start)
+        .lte("created_at", end);
 
       if (error) throw error;
 
@@ -212,7 +211,6 @@ export function useFinalizarVenda() {
         bandeira_cartao_3: venda.pagamentos[2]?.bandeira || null,
       };
 
-      console.log("[useFinalizarVenda] Inserindo venda:", vendaData);
       const { data: vendaInserida, error: vendaError } = await supabase
         .from("vendas")
         .insert(vendaData)
@@ -227,29 +225,43 @@ export function useFinalizarVenda() {
       // 3b. Inserir itens pivot (derivados dos campos legados + opcionais)
       if (vendaInserida) {
         const itensPivot: Array<{ venda_id: string; categoria_id: string; quantidade: number }> = [];
+        
         const pushIf = (slug: string, qtd: number) => {
           if (qtd && qtd > 0) {
             const cid = catBySlug.get(slug);
             if (cid) itensPivot.push({ venda_id: vendaInserida.id, categoria_id: cid, quantidade: qtd });
           }
         };
+        
         pushIf("baby", Number(venda.qtd_baby_vendida));
         pushIf("1a16", Number(venda.qtd_1_a_16_vendida));
         pushIf("calcados", Number(venda.qtd_calcados_vendida));
         pushIf("brinquedos", Number(venda.qtd_brinquedos_vendida));
         pushIf("itens_medios", Number(venda.qtd_itens_medios_vendida));
         pushIf("itens_grandes", Number(venda.qtd_itens_grandes_vendida));
+        
         (venda.itens || []).forEach((it) => {
           if (it.quantidade > 0) itensPivot.push({ venda_id: vendaInserida.id, categoria_id: it.categoria_id, quantidade: it.quantidade });
         });
 
+        if (itensPivot.length === 0) {
+          console.error("[useFinalizarVenda] Nenhum item para inserir em venda_itens (itensPivot vazio)");
+        }
+
         if (itensPivot.length > 0) {
-          await supabase.from("venda_itens").insert(itensPivot);
+          const { error: itensPivotError } = await supabase
+            .from("venda_itens")
+            .insert(itensPivot);
+
+          if (itensPivotError) {
+            console.error("[useFinalizarVenda] ❌ Erro ao inserir itens em venda_itens:", itensPivotError);
+            toast.error("Venda registrada, mas falha ao salvar itens. Verifique permissões (RLS) de venda_itens.");
+          }
         }
 
         // Marcar itens grandes como vendidos
         if (venda.itensGrandesSelecionados && venda.itensGrandesSelecionados.length > 0) {
-          const agora = new Date().toISOString();
+          const agora = getDateTimeUTC(); // Usar UTC para salvar no banco
           for (const itemSelecionado of venda.itensGrandesSelecionados) {
             await supabase
               .from("itens_grandes_individuais")
@@ -267,8 +279,6 @@ export function useFinalizarVenda() {
 
       // 5. ✅ REGISTRAR MOVIMENTAÇÃO DE CAIXA DE FORMA SEGURA (NÃO DEPENDE APENAS DO TRIGGER)
       // Esta chamada garante que a movimentação seja registrada mesmo se o trigger falhar
-      console.log("[useFinalizarVenda] Registrando movimentação de caixa...");
-      
       const resultadoMovimentacao = await registrarMovimentacaoCaixa({
         vendaId: vendaInserida.id,
         caixaOrigem: venda.caixa_origem || "Caixa 1",
@@ -286,16 +296,8 @@ export function useFinalizarVenda() {
           `Venda registrada mas houve problema ao atualizar o caixa. Registre manualmente R$ ${resultadoMovimentacao.valorRegistrado || 0}`
         );
       } else if (resultadoMovimentacao.error === "DUPLICADA") {
-        console.log(
-          `[useFinalizarVenda] ℹ️ Movimentação já existia (provavelmente criada pelo trigger)`
-        );
-      } else {
-        console.log(
-          `[useFinalizarVenda] ✅ Movimentação registrada com sucesso: R$ ${resultadoMovimentacao.valorRegistrado}`
-        );
+        // movimentação já existia
       }
-
-      console.log("[useFinalizarVenda] Venda inserida, atualizando estoque...");
 
       // 4. Atualizar estoque (subtrair) - ler -> calcular no JS -> gravar
       // (decrementa SOMENTE após a venda ter sido gravada com sucesso)
