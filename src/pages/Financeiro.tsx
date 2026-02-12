@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -59,19 +60,24 @@ import { AprovacaoFechamentosCard } from "@/components/financeiro/AprovacaoFecha
 import { RelatorioFechamentosCard } from "@/components/financeiro/RelatorioFechamentosCard";
 import { RelatorioMovimentacoesCard } from "@/components/financeiro/RelatorioMovimentacoesCard";
 import { RelatorioFechamentosCaixaCard } from "@/components/financeiro/RelatorioFechamentosCaixaCard";
-import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil } from "lucide-react";
+import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil, CheckCircle, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { convertToLocalTime } from "@/lib/utils";
+import { convertToLocalTime, getDateBrasilia } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 // Componente para Card de Caixa com saldo final calculado
 function CaixaCard({ 
   caixa, 
-  onFechamento 
+  onFechamento,
+  fechamentoStatus,
+  carregandoStatus
 }: { 
   caixa: Caixa; 
   onFechamento: (caixa: Caixa) => void;
+  fechamentoStatus?: string | null;
+  carregandoStatus?: boolean;
 }) {
   const { data: saldoData, isLoading } = useSaldoFinalHoje(caixa.id);
   
@@ -88,6 +94,21 @@ function CaixaCard({
     }
     return "text-primary";
   };
+
+  const getStatusInfo = () => {
+    if (carregandoStatus) {
+      return { texto: "Carregando status...", className: "text-muted-foreground", Icon: null };
+    }
+    if (fechamentoStatus === "aprovado") {
+      return { texto: "Fechado", className: "text-green-600", Icon: CheckCircle };
+    }
+    if (fechamentoStatus === "pendente_aprovacao") {
+      return { texto: "Em aprovação", className: "text-amber-600", Icon: AlertTriangle };
+    }
+    return { texto: "Não fechado", className: "text-red-600", Icon: XCircle };
+  };
+
+  const statusInfo = getStatusInfo();
 
   const saldoFinal = saldoData?.saldoFinal ?? 0;
 
@@ -107,7 +128,7 @@ function CaixaCard({
           Saldo Final Hoje
         </p>
       </CardContent>
-      <div className="px-6 pb-4">
+      <div className="px-6 pb-4 space-y-2">
         <Button
           variant="outline"
           size="sm"
@@ -117,6 +138,12 @@ function CaixaCard({
           <Lock className="h-4 w-4 mr-2" />
           Realizar Fechamento
         </Button>
+        <p className={`text-xs font-medium ${statusInfo.className}`}>
+          <span className="inline-flex items-center gap-1">
+            {statusInfo.Icon && <statusInfo.Icon className="h-3.5 w-3.5" />}
+            <span>Status: <strong>{statusInfo.texto}</strong></span>
+          </span>
+        </p>
       </div>
     </Card>
   );
@@ -133,6 +160,29 @@ export default function Financeiro() {
   const { mutate: movimentar, isPending: movimentando } = useMovimentacaoManual();
   const deleteMovimentacao = useDeleteMovimentacao();
   const { mutateAsync: editarMovimentacao, isPending: editandoMov } = useEditarMovimentacao();
+
+  const { data: fechamentosHoje = [], isLoading: loadingFechamentosHoje } = useQuery({
+    queryKey: ["fechamentos_hoje"],
+    queryFn: async () => {
+      const hoje = getDateBrasilia();
+      const { data, error } = await supabase
+        .from("fechamentos_caixa")
+        .select("caixa_id, status")
+        .gte("data_fechamento", `${hoje}T00:00:00`)
+        .lt("data_fechamento", `${hoje}T23:59:59`);
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const statusPorCaixa = useMemo(() => {
+    const map = new Map<string, string>();
+    fechamentosHoje.forEach((f: any) => {
+      if (f?.caixa_id) map.set(f.caixa_id, f.status);
+    });
+    return map;
+  }, [fechamentosHoje]);
 
   // Transferência
   const [origem, setOrigem] = useState("");
@@ -504,7 +554,9 @@ export default function Financeiro() {
               <CaixaCard 
                 key={caixa.id} 
                 caixa={caixa} 
-                onFechamento={openFechamento} 
+                onFechamento={openFechamento}
+                fechamentoStatus={statusPorCaixa.get(caixa.id)}
+                carregandoStatus={loadingFechamentosHoje}
               />
             ))
           )}

@@ -12,6 +12,7 @@ export type TipoPermissao =
   | 'menu:/financeiro'
   | 'menu:/estoque'
   | 'menu:/dashboard'
+  | 'menu:/cockpit-real-time'
   | 'menu:/configuracoes'
   | 'menu:/marketing'
   | 'menu:/performance-vendas'

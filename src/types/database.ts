@@ -31,6 +31,7 @@ export interface Atendimento {
   hora_chegada: string;
   hora_encerramento?: string | null;
   status: StatusAtendimento;
+  motivo_recusa?: "loja" | "cliente" | null;
   itens?: AtendimentoItem[];
   qtd_baby: number | null;
   qtd_1_a_16: number | null;

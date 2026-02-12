@@ -35,7 +35,8 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: [
     '/', '/recepcao', '/recepcao/clientes', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
-    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing', '/performance-vendas', '/logs-atividades'
+    '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing', '/performance-vendas', '/logs-atividades',
+    '/cockpit-real-time'
   ],
   caixa: [
     '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth', '/performance-vendas'
@@ -56,7 +57,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
 
 // Rota padrão por cargo (para redirecionamento)
 export const DEFAULT_ROUTE: Record<UserRole, string> = {
-  admin: '/',
+  admin: '/cockpit-real-time',
   caixa: '/dashboard',
   avaliadora: '/avaliacao',
   geral: '/vendas',

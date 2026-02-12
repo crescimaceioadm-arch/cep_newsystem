@@ -17,6 +17,7 @@ import { ControlePerfisMenuCard } from "@/components/configuracoes/ControlePerfi
 import { ControlePermissoesUsuarioCard } from "@/components/configuracoes/ControlePermissoesUsuarioCard";
 import { GerenciamentoCargosCard } from "@/components/configuracoes/GerenciamentoCargosCard";
 import { ReconciliacaoCaixaCard } from "@/components/financeiro/ReconciliacaoCaixaCard";
+import { NotificationPermissionCard } from "@/components/notifications/NotificationPermissionCard";
 import {
   Select,
   SelectContent,
@@ -30,7 +31,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { useItemCategories, useCreateItemCategory, useUpdateItemCategory } from "@/hooks/useItemCategories";
+import { useItemCategories, useCreateItemCategory, useUpdateItemCategory, useDeleteItemCategory } from "@/hooks/useItemCategories";
+import { Switch } from "@/components/ui/switch";
 import { useTiposItensGrandes, useCreateTipoItemGrande, useUpdateTipoItemGrande, useDeleteTipoItemGrande } from "@/hooks/useTiposItensGrandes";
 import { useMarcasItensGrandes, useCreateMarcaItemGrande, useUpdateMarcaItemGrande, useDeleteMarcaItemGrande } from "@/hooks/useMarcasItensGrandes";
 
@@ -181,15 +183,30 @@ function ItemCategoriesSection() {
   const { data: categorias, isLoading, isError, error, refetch } = useItemCategories();
   const criarCategoria = useCreateItemCategory();
   const atualizarCategoria = useUpdateItemCategory();
+  const deletarCategoria = useDeleteItemCategory();
   const [seedAttempted, setSeedAttempted] = useState(false);
   const [novoNome, setNovoNome] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, { nome: string; requer_valor: boolean }>>({});
+  const [novoSlug, setNovoSlug] = useState("");
+  const [novoTipo, setNovoTipo] = useState<"compra" | "venda" | "ambos">("ambos");
+  const [novoOrdem, setNovoOrdem] = useState<number>(0);
+  const [novoAtivo, setNovoAtivo] = useState(true);
+  const [novoRequerValor, setNovoRequerValor] = useState(false);
+  const [novoRequerDescricao, setNovoRequerDescricao] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, { nome: string; slug: string; tipo: "compra" | "venda" | "ambos"; ordem: number; ativo: boolean; requer_valor: boolean; requer_descricao: boolean }>>({});
 
   useEffect(() => {
     if (categorias) {
-      const initialDrafts: Record<string, { nome: string; requer_valor: boolean }> = {};
+      const initialDrafts: Record<string, { nome: string; slug: string; tipo: "compra" | "venda" | "ambos"; ordem: number; ativo: boolean; requer_valor: boolean; requer_descricao: boolean }> = {};
       categorias.forEach((cat) => {
-        initialDrafts[cat.id] = { nome: cat.nome, requer_valor: cat.requer_valor };
+        initialDrafts[cat.id] = {
+          nome: cat.nome,
+          slug: cat.slug,
+          tipo: cat.tipo,
+          ordem: cat.ordem ?? 0,
+          ativo: cat.ativo ?? true,
+          requer_valor: cat.requer_valor ?? false,
+          requer_descricao: cat.requer_descricao ?? false,
+        };
       });
       setDrafts(initialDrafts);
     }
@@ -234,11 +251,25 @@ function ItemCategoriesSection() {
     }
 
     criarCategoria.mutate(
-      { nome, tipo: "ambos" },
+      {
+        nome,
+        slug: novoSlug.trim() || undefined,
+        tipo: novoTipo,
+        ordem: novoOrdem,
+        ativo: novoAtivo,
+        requer_valor: novoRequerValor,
+        requer_descricao: novoRequerDescricao,
+      },
       {
         onSuccess: () => {
           toast.success("Categoria criada");
           setNovoNome("");
+          setNovoSlug("");
+          setNovoTipo("ambos");
+          setNovoOrdem(0);
+          setNovoAtivo(true);
+          setNovoRequerValor(false);
+          setNovoRequerDescricao(false);
         },
         onError: (error: any) => {
           toast.error("Erro ao criar: " + error.message);
@@ -252,14 +283,20 @@ function ItemCategoriesSection() {
     const original = categorias?.find((c) => c.id === id);
     if (!draft || !original) return;
 
-    const updates: Partial<typeof original> = { tipo: "ambos" };
+    const updates: Partial<typeof original> = {};
     const nome = draft.nome.trim();
+    const slug = draft.slug.trim();
     if (!nome) {
       toast.error("Nome não pode ser vazio");
       return;
     }
     if (nome !== original.nome) updates.nome = nome;
+    if (slug && slug !== original.slug) updates.slug = slug;
+    if (draft.tipo !== original.tipo) updates.tipo = draft.tipo;
+    if (draft.ordem !== original.ordem) updates.ordem = draft.ordem;
+    if (draft.ativo !== original.ativo) updates.ativo = draft.ativo;
     if (draft.requer_valor !== original.requer_valor) updates.requer_valor = draft.requer_valor;
+    if (draft.requer_descricao !== original.requer_descricao) updates.requer_descricao = draft.requer_descricao;
 
     if (!Object.keys(updates).length) {
       toast.info("Nenhuma alteração para salvar");
@@ -281,7 +318,7 @@ function ItemCategoriesSection() {
 
   const renderCategoriaLinha = (catId: string) => (
     <div key={catId} className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/40">
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
         <Input
           value={drafts[catId]?.nome ?? ""}
           onChange={(e) =>
@@ -292,29 +329,110 @@ function ItemCategoriesSection() {
           }
           placeholder="Nome da categoria"
         />
-        <Button
-          variant="outline"
-          size="icon"
-          className={drafts[catId]?.requer_valor ? "bg-blue-100" : ""}
-          onClick={() =>
+        <Input
+          value={drafts[catId]?.slug ?? ""}
+          onChange={(e) =>
             setDrafts((prev) => ({
               ...prev,
-              [catId]: { ...prev[catId], requer_valor: !prev[catId]?.requer_valor },
+              [catId]: { ...prev[catId], slug: e.target.value },
             }))
           }
-          title="Marcar se precisa informar valor e descrição"
+          placeholder="Slug"
+        />
+        <Select
+          value={drafts[catId]?.tipo ?? "ambos"}
+          onValueChange={(value) =>
+            setDrafts((prev) => ({
+              ...prev,
+              [catId]: { ...prev[catId], tipo: value as "compra" | "venda" | "ambos" },
+            }))
+          }
         >
-          <CheckCircle2 className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleUpdate(catId)}
-          disabled={atualizarCategoria.isPending}
-        >
-          <Save className="h-4 w-4 mr-1" />
-          Salvar
-        </Button>
+          <SelectTrigger>
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="compra">Compra</SelectItem>
+            <SelectItem value="venda">Venda</SelectItem>
+            <SelectItem value="ambos">Ambos</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          type="number"
+          value={drafts[catId]?.ordem ?? 0}
+          onChange={(e) =>
+            setDrafts((prev) => ({
+              ...prev,
+              [catId]: { ...prev[catId], ordem: Number(e.target.value) || 0 },
+            }))
+          }
+          placeholder="Ordem"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={drafts[catId]?.ativo ?? true}
+            onCheckedChange={(checked) =>
+              setDrafts((prev) => ({
+                ...prev,
+                [catId]: { ...prev[catId], ativo: checked },
+              }))
+            }
+          />
+          <span className="text-sm">Ativo</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={drafts[catId]?.requer_valor ?? false}
+            onCheckedChange={(checked) =>
+              setDrafts((prev) => ({
+                ...prev,
+                [catId]: { ...prev[catId], requer_valor: checked },
+              }))
+            }
+          />
+          <span className="text-sm">Requer valor</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={drafts[catId]?.requer_descricao ?? false}
+            onCheckedChange={(checked) =>
+              setDrafts((prev) => ({
+                ...prev,
+                [catId]: { ...prev[catId], requer_descricao: checked },
+              }))
+            }
+          />
+          <span className="text-sm">Requer descricao</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleUpdate(catId)}
+            disabled={atualizarCategoria.isPending}
+          >
+            <Save className="h-4 w-4 mr-1" />
+            Salvar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive"
+            onClick={() => {
+              if (confirm("Excluir esta categoria?")) {
+                deletarCategoria.mutate(catId, {
+                  onSuccess: () => toast.success("Categoria removida"),
+                  onError: (error: any) => toast.error("Erro ao excluir: " + error.message),
+                });
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Excluir
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -328,13 +446,48 @@ function ItemCategoriesSection() {
       </p>
       
       <div className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/30">
-        <div className="flex flex-col md:flex-row gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <Input
             placeholder="Nova categoria"
             value={novoNome}
             onChange={(e) => setNovoNome(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
+          <Input
+            placeholder="Slug (opcional)"
+            value={novoSlug}
+            onChange={(e) => setNovoSlug(e.target.value)}
+          />
+          <Select value={novoTipo} onValueChange={(value) => setNovoTipo(value as "compra" | "venda" | "ambos")}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="compra">Compra</SelectItem>
+              <SelectItem value="venda">Venda</SelectItem>
+              <SelectItem value="ambos">Ambos</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="number"
+            placeholder="Ordem"
+            value={novoOrdem}
+            onChange={(e) => setNovoOrdem(Number(e.target.value) || 0)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch checked={novoAtivo} onCheckedChange={setNovoAtivo} />
+            <span className="text-sm">Ativo</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={novoRequerValor} onCheckedChange={setNovoRequerValor} />
+            <span className="text-sm">Requer valor</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={novoRequerDescricao} onCheckedChange={setNovoRequerDescricao} />
+            <span className="text-sm">Requer descricao</span>
+          </div>
           <Button onClick={handleCreate} disabled={criarCategoria.isPending}>
             <Plus className="h-4 w-4 mr-1" />
             Adicionar
@@ -631,6 +784,21 @@ export default function Configuracoes() {
             </AccordionTrigger>
             <AccordionContent className="pt-4 space-y-4">
               <GestaoUsuariosCard />
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
+        {/* Admin: Notificacoes */}
+        {isAdmin && (
+          <AccordionItem value="notificacoes" className="border rounded-lg px-4">
+            <AccordionTrigger className="hover:no-underline">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <span className="text-lg font-semibold">Notificacoes</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4">
+              <NotificationPermissionCard />
             </AccordionContent>
           </AccordionItem>
         )}

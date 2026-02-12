@@ -12,6 +12,7 @@ import {
   LogOut,
   Package,
   TrendingUp,
+  Activity,
   ChevronRight,
   FileText
 } from "lucide-react";
@@ -37,8 +38,9 @@ import { toast } from "sonner";
 import { CaixaIndicator } from "./CaixaIndicator";
 
 const allMenuItems = [
-  { title: "Dashboard", url: "/", icon: BarChart3, submenu: [
-    { title: "Dashboard", url: "/" },
+  { title: "Cockpit real time", url: "/cockpit-real-time", icon: Activity },
+  { title: "Dashboard", url: "/dashboard", icon: BarChart3, submenu: [
+    { title: "Dashboard", url: "/dashboard" },
     { title: "Performance Vendas", url: "/dashboard/performance-vendas" },
   ]},
   { title: "Performance Vendas", url: "/performance-vendas", icon: TrendingUp },
@@ -59,15 +61,14 @@ const allMenuItems = [
 ];
 
 export function AppSidebar() {
-  const { cargo, hasPermission } = useUser();
+  const { cargo, hasPermission, profile, user } = useUser();
   const { limparCaixa } = useCaixa();
   const navigate = useNavigate();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   
   // Filtra menu items baseado nas permissões do usuário (individuais ou do cargo)
   const menuItems = allMenuItems.filter(item => {
-    // Mapear / para /dashboard para verificação de permissão
-    const urlParaVerificar = item.url === '/' ? '/dashboard' : item.url;
+    const urlParaVerificar = item.url;
     const menuPermissao = `menu:${urlParaVerificar}` as any;
     const temPermissao = hasPermission(menuPermissao);
     
@@ -92,6 +93,8 @@ export function AppSidebar() {
     }
   };
 
+  const nomeUsuario = profile?.nome || profile?.email || user?.email || "";
+
   return (
     <Sidebar className="border-r-0 bg-sidebar-gradient">
       <SidebarHeader className="p-6 border-b border-amber-300/50">
@@ -106,6 +109,11 @@ export function AppSidebar() {
             </div>
           </div>
           <CaixaIndicator />
+          {nomeUsuario && (
+            <div className="rounded-md bg-white/50 px-2 py-1 text-xs text-slate-700">
+              Logado: <span className="font-semibold">{nomeUsuario}</span>
+            </div>
+          )}
         </div>
       </SidebarHeader>
       
@@ -159,7 +167,7 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild>
                         <NavLink 
                           to={item.url} 
-                          end={item.url === "/"} 
+                          end={item.url === "/dashboard"} 
                           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-white/40 hover:text-slate-900 transition-colors"
                           activeClassName="bg-white/50 text-slate-900 font-semibold hover:bg-white/50 hover:text-slate-900 shadow-sm"
                         >

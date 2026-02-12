@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
-import { format, subDays, startOfDay } from "date-fns";
+import { format, subDays, startOfDay, isSunday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import {
@@ -31,14 +31,30 @@ export function AlertaFechamentosFaltantes() {
   const [dialogAberto, setDialogAberto] = useState(false);
   const [bannerVisivel, setBannerVisivel] = useState(true);
   const [caixaSelecionado, setCaixaSelecionado] = useState<CaixaSemFechamento | null>(null);
+  const [lojaAbriu, setLojaAbriu] = useState<boolean | null>(null);
+  const [ignorarHoje, setIgnorarHoje] = useState(false);
   const [valorContado, setValorContado] = useState<string>("");
   const [justificativa, setJustificativa] = useState<string>("");
 
   const isAdmin = cargo === "admin";
   const isCaixaOuGeral = cargo === "caixa" || cargo === "geral";
 
-  // Data do dia anterior
-  const dataOntem = format(subDays(startOfDay(new Date()), 1), "yyyy-MM-dd");
+  // Data de referencia: ultimo dia util (pula domingos)
+  let dataReferencia = subDays(startOfDay(new Date()), 1);
+  while (isSunday(dataReferencia)) {
+    dataReferencia = subDays(dataReferencia, 1);
+  }
+  const dataOntem = format(dataReferencia, "yyyy-MM-dd");
+  const storageKey = `fechamento_assumido_${dataOntem}`;
+
+  useEffect(() => {
+    try {
+      const assumido = localStorage.getItem(storageKey) === "1";
+      if (assumido) setIgnorarHoje(true);
+    } catch {
+      // Silencioso: se localStorage falhar, mantem o fluxo normal.
+    }
+  }, [storageKey]);
 
   // Buscar caixas sem fechamento no dia anterior
   const { data: caixasSemFechamento = [] } = useQuery({
@@ -74,10 +90,10 @@ export function AlertaFechamentosFaltantes() {
 
   // Abrir popup automaticamente para Caixa/Geral quando houver fechamentos faltantes
   useEffect(() => {
-    if (isCaixaOuGeral && caixasSemFechamento.length > 0 && !dialogAberto) {
+    if (isCaixaOuGeral && caixasSemFechamento.length > 0 && !dialogAberto && !ignorarHoje) {
       setDialogAberto(true);
     }
-  }, [caixasSemFechamento, isCaixaOuGeral, dialogAberto]);
+  }, [caixasSemFechamento, isCaixaOuGeral, dialogAberto, ignorarHoje]);
 
   // Mutation para criar fechamento
   const { mutate: criarFechamento, isPending } = useMutation({
@@ -122,6 +138,9 @@ export function AlertaFechamentosFaltantes() {
   // Não mostrar nada se não houver fechamentos faltantes
   if (caixasSemFechamento.length === 0) return null;
 
+  // Se o dia foi assumido como sem abertura, nao alertar
+  if (ignorarHoje) return null;
+
   // Não mostrar nada se o usuário não for Admin, Caixa ou Geral
   if (!isAdmin && !isCaixaOuGeral) return null;
 
@@ -134,39 +153,53 @@ export function AlertaFechamentosFaltantes() {
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-8 w-8 text-red-500" />
               <AlertDialogTitle className="text-xl">
-                ⚠️ Fechamento Pendente do Dia Anterior
+                ⚠️ Fechamento Pendente do Ultimo Dia Util
               </AlertDialogTitle>
             </div>
             <AlertDialogDescription className="text-base pt-2">
-              {caixasSemFechamento.length === 1 ? (
-                <>
-                  O caixa <strong className="text-red-600">{caixasSemFechamento[0].nome}</strong>{" "}
-                  não foi fechado em{" "}
-                  <strong>
-                    {format(new Date(dataOntem), "dd/MM/yyyy (EEEE)", { locale: ptBR })}
-                  </strong>
-                  .
-                </>
-              ) : (
-                <>
-                  Os seguintes caixas não foram fechados em{" "}
-                  <strong>
-                    {format(new Date(dataOntem), "dd/MM/yyyy (EEEE)", { locale: ptBR })}
-                  </strong>
-                  :
-                  <ul className="list-disc pl-6 mt-2">
-                    {caixasSemFechamento.map((caixa) => (
-                      <li key={caixa.id} className="text-red-600 font-semibold">
-                        {caixa.nome}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+              A loja abriu em {format(new Date(dataOntem), "dd/MM/yyyy (EEEE)", { locale: ptBR })}?
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          {!caixaSelecionado ? (
+          {lojaAbriu === null ? (
+            <div className="space-y-3 py-4">
+              <div className="grid gap-2">
+                <Button
+                  variant="outline"
+                  className="justify-start h-auto py-3"
+                  onClick={() => setLojaAbriu(true)}
+                >
+                  Sim, abriu
+                </Button>
+                <Button
+                  variant="outline"
+                  className="justify-start h-auto py-3"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem(storageKey, "1");
+                    } catch {
+                      // Silencioso: se localStorage falhar, apenas encerra o dialogo.
+                    }
+                    setIgnorarHoje(true);
+                    setLojaAbriu(false);
+                    toast.success("Dia assumido como fechado (loja nao abriu).");
+                    setDialogAberto(false);
+                  }}
+                >
+                  Nao, nao abriu
+                </Button>
+              </div>
+              <div className="pt-4 border-t">
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => setDialogAberto(false)}
+                >
+                  Fechar e fazer mais tarde
+                </Button>
+              </div>
+            </div>
+          ) : !caixaSelecionado ? (
             <div className="space-y-3 py-4">
               <p className="text-sm text-muted-foreground">
                 Selecione um caixa para fazer o fechamento retroativo:
@@ -271,7 +304,7 @@ export function AlertaFechamentosFaltantes() {
         <AlertTitle className="flex items-center justify-between">
           <span className="text-lg font-semibold">
             ⚠️ Fechamento{caixasSemFechamento.length > 1 ? "s" : ""} Pendente
-            {caixasSemFechamento.length > 1 ? "s" : ""} do Dia Anterior
+            {caixasSemFechamento.length > 1 ? "s" : ""} do Ultimo Dia Util
           </span>
           <Button
             variant="ghost"

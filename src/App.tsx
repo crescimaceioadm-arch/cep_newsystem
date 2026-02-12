@@ -16,6 +16,8 @@ import HistoricoAtendimentos from "./pages/HistoricoAtendimentos";
 import Financeiro from "./pages/Financeiro";
 import Estoque from "./pages/Estoque";
 import Dashboard from "./pages/Dashboard";
+import CockpitRealTime from "./pages/CockpitRealTime";
+import AdminHome from "./pages/AdminHome";
 import Configuracoes from "./pages/Configuracoes";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -41,7 +43,7 @@ const App = () => (
               <CaixaGuard />
               <Routes>
                 <Route path="/auth" element={<Auth />} />
-                <Route path="/" element={<RequireRole><Dashboard /></RequireRole>} />
+                <Route path="/" element={<RequireRole><AdminHome /></RequireRole>} />
                 <Route path="/recepcao" element={<RequireRole><Recepcao /></RequireRole>} />
                 <Route path="/avaliacao" element={<RequireRole><Avaliacao /></RequireRole>} />
                 <Route path="/atendimentos/historico" element={<RequireRole><HistoricoAtendimentos /></RequireRole>} />
@@ -54,6 +56,7 @@ const App = () => (
                 <Route path="/estoque/itens-grandes" element={<RequireRole><ItensGrandes /></RequireRole>} />
                 <Route path="/estoque/itens-grandes/relatorio" element={<RequireRole><RelatorioItensGrandes /></RequireRole>} />
                 <Route path="/dashboard" element={<RequireRole><Dashboard /></RequireRole>} />
+                <Route path="/cockpit-real-time" element={<RequireRole><CockpitRealTime /></RequireRole>} />
                 <Route path="/dashboard/performance-vendas" element={<RequireRole><PerformanceVendas /></RequireRole>} />
                 <Route path="/performance-vendas" element={<RequireRole><PerformanceVendas /></RequireRole>} />
                 <Route path="/configuracoes" element={<RequireRole><Configuracoes /></RequireRole>} />

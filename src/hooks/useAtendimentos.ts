@@ -276,6 +276,7 @@ interface AvaliacaoData {
   pagamento_3_metodo?: string | null;
   pagamento_3_valor?: number | null;
   isEditing?: boolean;
+  status?: StatusAtendimento;
   itens?: Array<{ categoria_id: string; quantidade: number; valor_total?: number | null }>;
   itensGrandes?: Array<{ tipo_id: string; marca_id: string; descricao: string; valor_compra: number }>;
 }
@@ -334,32 +335,46 @@ export function useSaveAvaliacao() {
       const deltaDinheiro = (dinheiroDepois || 0) - (dinheiroAntes || 0);
 
       // Define o novo status: preserva o status atual se for edição, senão muda para aguardando_pagamento
-      const novoStatus: StatusAtendimento = data.isEditing ? (atendimentoAtual?.status as StatusAtendimento) : "aguardando_pagamento";
+      const statusOverride = data.isEditing ? data.status : undefined;
+      const novoStatus: StatusAtendimento = data.isEditing
+        ? (statusOverride ?? (atendimentoAtual?.status as StatusAtendimento))
+        : "aguardando_pagamento";
+      const motivoRecusaUpdate = statusOverride === "recusado"
+        ? "loja"
+        : statusOverride === "recusou"
+          ? "cliente"
+          : undefined;
 
       // 1. Atualiza o atendimento com as quantidades e muda status
+      const atendimentoUpdates: Partial<Atendimento> & { motivo_recusa?: "loja" | "cliente" } = {
+        qtd_baby: data.qtd_baby,
+        qtd_1_a_16: data.qtd_1_a_16,
+        qtd_calcados: data.qtd_calcados,
+        qtd_brinquedos: data.qtd_brinquedos,
+        qtd_itens_medios: data.qtd_itens_medios,
+        qtd_itens_grandes: data.qtd_itens_grandes,
+        valor_total_itens_medios: data.valor_total_itens_medios || 0,
+        valor_total_itens_grandes: data.valor_total_itens_grandes || 0,
+        descricao_itens_extra: data.descricao_itens_extra,
+        avaliadora_nome: data.avaliadora_nome || null,
+        origem_avaliacao: data.origem_avaliacao ?? null,
+        // Persistência dos campos de pagamento (colunas existentes pagamento_* )
+        pagamento_1_metodo: data.pagamento_1_metodo ?? null,
+        pagamento_1_valor: data.pagamento_1_valor ?? null,
+        pagamento_2_metodo: data.pagamento_2_metodo ?? null,
+        pagamento_2_valor: data.pagamento_2_valor ?? null,
+        pagamento_3_metodo: data.pagamento_3_metodo ?? null,
+        pagamento_3_valor: data.pagamento_3_valor ?? null,
+        status: novoStatus,
+      };
+
+      if (motivoRecusaUpdate) {
+        atendimentoUpdates.motivo_recusa = motivoRecusaUpdate;
+      }
+
       const { error: updateError } = await supabase
         .from("atendimentos")
-        .update({
-          qtd_baby: data.qtd_baby,
-          qtd_1_a_16: data.qtd_1_a_16,
-          qtd_calcados: data.qtd_calcados,
-          qtd_brinquedos: data.qtd_brinquedos,
-          qtd_itens_medios: data.qtd_itens_medios,
-          qtd_itens_grandes: data.qtd_itens_grandes,
-          valor_total_itens_medios: data.valor_total_itens_medios || 0,
-          valor_total_itens_grandes: data.valor_total_itens_grandes || 0,
-          descricao_itens_extra: data.descricao_itens_extra,
-          avaliadora_nome: data.avaliadora_nome || null,
-          origem_avaliacao: data.origem_avaliacao ?? null,
-          // Persistência dos campos de pagamento (colunas existentes pagamento_* )
-          pagamento_1_metodo: data.pagamento_1_metodo ?? null,
-          pagamento_1_valor: data.pagamento_1_valor ?? null,
-          pagamento_2_metodo: data.pagamento_2_metodo ?? null,
-          pagamento_2_valor: data.pagamento_2_valor ?? null,
-          pagamento_3_metodo: data.pagamento_3_metodo ?? null,
-          pagamento_3_valor: data.pagamento_3_valor ?? null,
-          status: novoStatus,
-        })
+        .update(atendimentoUpdates)
         .eq("id", data.id);
 
       if (updateError) {

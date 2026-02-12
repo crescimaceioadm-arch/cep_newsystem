@@ -29,11 +29,35 @@ export function useItemCategories() {
 export function useCreateItemCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ nome, tipo }: { nome: string; tipo: ItemCategoria["tipo"] }) => {
-      const slug = generateSlug(nome);
+    mutationFn: async ({
+      nome,
+      tipo,
+      slug,
+      ordem,
+      ativo,
+      requer_valor,
+      requer_descricao,
+    }: {
+      nome: string;
+      tipo: ItemCategoria["tipo"];
+      slug?: string;
+      ordem?: number;
+      ativo?: boolean;
+      requer_valor?: boolean;
+      requer_descricao?: boolean;
+    }) => {
+      const slugFinal = generateSlug(slug?.trim() ? slug : nome);
       const { error } = await supabase
         .from("item_categories")
-        .insert({ nome, slug, tipo, ativo: true });
+        .insert({
+          nome,
+          slug: slugFinal,
+          tipo,
+          ordem: ordem ?? 0,
+          ativo: ativo ?? true,
+          requer_valor: requer_valor ?? false,
+          requer_descricao: requer_descricao ?? false,
+        });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -46,14 +70,30 @@ export function useUpdateItemCategory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<ItemCategoria> }) => {
-      // Se o nome foi alterado, gerar novo slug automaticamente
-      if (updates.nome) {
+      // Se o nome foi alterado, gerar novo slug automaticamente (se slug nao for informado)
+      if (updates.nome && !updates.slug) {
         updates.slug = generateSlug(updates.nome);
       }
       
       const { error } = await supabase
         .from("item_categories")
         .update(updates)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["item_categories"] });
+    },
+  });
+}
+
+export function useDeleteItemCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("item_categories")
+        .delete()
         .eq("id", id);
       if (error) throw error;
     },

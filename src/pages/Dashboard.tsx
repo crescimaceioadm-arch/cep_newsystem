@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { startOfMonth, endOfMonth, endOfDay, isToday, format, isSameDay, parseISO, startOfWeek, endOfWeek, startOfDay } from "date-fns";
+import { startOfMonth, endOfMonth, endOfDay, isToday, format, isSameDay, parseISO, startOfWeek, endOfWeek, startOfDay, differenceInCalendarDays, getDaysInMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Crown, Users, TrendingUp, DollarSign, ShoppingBag, Package, CreditCard, BarChart3, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
+import { useItemCategories } from "@/hooks/useItemCategories";
 import { ptBR as dayPickerPtBR } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 
@@ -68,6 +71,7 @@ export default function Dashboard() {
   const [allVendasMesInteiro, setAllVendasMesInteiro] = useState<any[]>([]); // Vendas do mês inteiro (não segue filtro)
   const [loading, setLoading] = useState(true);
   const { data: estoque } = useEstoque();
+  const { data: categoriasItens = [] } = useItemCategories();
 
   const hoje = new Date();
   const inicioMes = startOfMonth(hoje);
@@ -76,6 +80,8 @@ export default function Dashboard() {
   // Seletor de período (hoje por padrão)
   const [periodo, setPeriodo] = useState<DateRange>({ from: startOfDay(hoje), to: startOfDay(hoje) });
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [metasPorCategoria, setMetasPorCategoria] = useState<Record<string, number>>({});
+  const queryClient = useQueryClient();
 
     // Faixas rápidas: hoje, semana, mês
     const quickRanges = {
@@ -211,6 +217,60 @@ export default function Dashboard() {
     fetchData();
     }, [periodo]);
 
+  const mesKey = format(periodo?.from ?? hoje, "yyyy-MM");
+
+  const categoriasCompra = useMemo(
+    () => (categoriasItens || []).filter((c) => c.ativo !== false && (c.tipo === "compra" || c.tipo === "ambos")),
+    [categoriasItens]
+  );
+
+  const { data: metasDb = [], isLoading: loadingMetas } = useQuery({
+    queryKey: ["metas_gasto_dinheiro", mesKey],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("metas_gasto_dinheiro")
+        .select("categoria_id, valor")
+        .eq("mes", mesKey);
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  useEffect(() => {
+    const map: Record<string, number> = {};
+    metasDb.forEach((meta: any) => {
+      map[meta.categoria_id] = Number(meta.valor || 0);
+    });
+    setMetasPorCategoria(map);
+  }, [metasDb]);
+
+  const { mutate: salvarMeta } = useMutation({
+    mutationFn: async ({ categoriaId, valor }: { categoriaId: string; valor: number }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { error } = await supabase
+        .from("metas_gasto_dinheiro")
+        .upsert(
+          {
+            mes: mesKey,
+            categoria_id: categoriaId,
+            valor: valor,
+            atualizado_por: user?.id || null,
+            atualizado_em: new Date().toISOString(),
+          },
+          { onConflict: "mes,categoria_id" }
+        );
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["metas_gasto_dinheiro", mesKey] });
+    },
+  });
+
   // ==================================================================================
   // LÓGICA 1: COMPRAS E AVALIAÇÕES (SEU CÓDIGO ORIGINAL INTACTO)
   // ==================================================================================
@@ -317,6 +377,17 @@ export default function Dashboard() {
     { name: "Baby", compras: metrics.comprasPorCat.baby, estoque: 0 },
     { name: "Infantil", compras: metrics.comprasPorCat.infantil, estoque: 0 },
   ];
+
+  const diasNoMes = getDaysInMonth(periodo?.from ?? hoje);
+  const diasPeriodo = periodo?.from && periodo?.to
+    ? differenceInCalendarDays(startOfDay(periodo.to), startOfDay(periodo.from)) + 1
+    : diasNoMes;
+
+  const parseMetaInput = (value: string) => {
+    const normalized = value.replace(/[^0-9.,-]/g, "").replace(",", ".");
+    const num = Number.parseFloat(normalized);
+    return Number.isFinite(num) ? num : 0;
+  };
 
   if (estoque) {
     estoque.forEach(e => {
@@ -618,56 +689,43 @@ export default function Dashboard() {
         };
     }, [allVendas]);
 
-    // Tabela de gasto em dinheiro por grupos de avaliações (com base no período selecionado)
+    // Tabela de gasto em dinheiro por categoria (com base no período selecionado)
     const tabelaGastos = useMemo(() => {
       const finalizadosPeriodo = allAtendimentos.filter((a) => a.status === "finalizado");
 
       const ehDinheiro = (a: any) => classificarPagamento(a) === "dinheiro";
       const ehGira = (a: any) => classificarPagamento(a) === "gira";
 
-      // Classificação única por avaliação com precedência: Grandes > Enxoval > Brinquedos > Bolsa/Fralda > Só roupas/sapatos > Outras > Outros
-      const classificarAvaliacao = (a: any): string => {
-        const hasGrandes = (a.qtd_itens_grandes || 0) > 0;
-        const hasEnxoval = (a.qtd_itens_medios || 0) > 0; // Enxoval
-        const hasBrinquedos = (a.qtd_brinquedos || 0) > 0;
-        const roupasSapatosQtd = (a.qtd_baby || 0) + (a.qtd_1_a_16 || 0) + (a.qtd_calcados || 0);
-        const hasRoupasOuSapatos = roupasSapatosQtd > 0;
-        
-        // Verificar itens dinâmicos (bolsa, fralda, etc.)
-        let hasBolsaOuFralda = false;
-        if (a.itens && Array.isArray(a.itens)) {
-          hasBolsaOuFralda = a.itens.some((item: any) => {
-            const cat = item.categoria;
-            const slug = cat?.slug || "";
-            return slug.includes("bolsa") || slug.includes("fralda");
-          });
-        }
-
-        const hasQualquerItem = hasGrandes || hasEnxoval || hasBrinquedos || hasRoupasOuSapatos || hasBolsaOuFralda;
-
-        if (!hasQualquerItem) return "Outros (sem item registrado)";
-        if (hasGrandes) return "Com Itens grandes";
-        if (hasEnxoval) return "Com Enxoval";
-        if (hasBrinquedos) return "Com Brinquedos";
-        if (hasBolsaOuFralda) return "Bolsa/Fralda";
-        if (hasRoupasOuSapatos) return "Só roupas/sapatos";
-        return "Com outras categorias";
-      };
-
-      // Agrupar avaliações por categoria classificada
-      const gruposMap = new Map<string, any[]>();
-      finalizadosPeriodo.forEach(a => {
-        const cat = classificarAvaliacao(a);
-        const arr = gruposMap.get(cat) || [];
-        arr.push(a);
-        gruposMap.set(cat, arr);
+      const rowsMap = new Map<string, any>();
+      categoriasCompra.forEach((cat) => {
+        rowsMap.set(cat.id, {
+          categoria: cat.nome,
+          categoriaId: cat.id,
+          totalDinheiro: 0,
+          qtdDinheiro: 0,
+          detalhes: [],
+          totalGira: 0,
+          qtdGira: 0,
+        });
       });
 
-      const totalGrupo = (lista: any[], filtro: (a: any) => boolean) =>
-        lista.filter(filtro).reduce((acc, a) => acc + Number(a.valor_total_negociado || 0), 0);
+      const rowSemItem = {
+        categoria: "Outros (sem item registrado)",
+        categoriaId: null,
+        totalDinheiro: 0,
+        qtdDinheiro: 0,
+        detalhes: [],
+        totalGira: 0,
+        qtdGira: 0,
+      };
 
-      const getAvaliacoesPorGrupo = (lista: any[]) =>
-        lista.filter(ehDinheiro).map(a => ({
+      finalizadosPeriodo.forEach((a) => {
+        const itens = Array.isArray(a.itens) ? a.itens : [];
+        const totalNegociado = Number(a.valor_total_negociado || 0);
+        const isDinheiro = ehDinheiro(a);
+        const isGira = ehGira(a);
+
+        const detalheBase = {
           cliente: a.nome_cliente || a.cliente_nome || "Sem nome",
           data: a.hora_encerramento ? format(parseISO(a.hora_encerramento), "dd/MM/yyyy", { locale: ptBR }) : "",
           valor: Number(a.valor_total_negociado || 0),
@@ -682,37 +740,87 @@ export default function Dashboard() {
           qtd_itens_medios: a.qtd_itens_medios || 0,
           qtd_itens_grandes: a.qtd_itens_grandes || 0,
           itens: a.itens || [],
-          descricao_itens: a.descricao_itens_extra || ""
-        }));
-
-      // Ordem solicitada de exibição
-      const order = [
-        "Só roupas/sapatos",
-        "Com Itens grandes",
-        "Com Enxoval",
-        "Com Brinquedos",
-        "Bolsa/Fralda",
-        "Com outras categorias",
-      ];
-
-      const rows = order.map(categoria => {
-        const lista = gruposMap.get(categoria) || [];
-        return {
-          categoria,
-          totalDinheiro: totalGrupo(lista, ehDinheiro),
-          qtdDinheiro: lista.filter(ehDinheiro).length,
-          detalhes: getAvaliacoesPorGrupo(lista),
-          totalGira: totalGrupo(lista, ehGira),
-          qtdGira: lista.filter(ehGira).length,
+          descricao_itens: a.descricao_itens_extra || "",
         };
+
+        if (!itens.length) {
+          if (isDinheiro) {
+            rowSemItem.totalDinheiro += totalNegociado;
+            rowSemItem.qtdDinheiro += 1;
+            rowSemItem.detalhes.push(detalheBase);
+          } else if (isGira) {
+            rowSemItem.totalGira += totalNegociado;
+            rowSemItem.qtdGira += 1;
+          }
+          return;
+        }
+
+        const knownSum = itens.reduce((acc: number, item: any) => acc + Number(item.valor_total || 0), 0);
+        const unknownItems = itens.filter((item: any) => item.valor_total == null);
+        const totalUnknownQty = unknownItems.reduce((acc: number, item: any) => acc + Number(item.quantidade || 0), 0);
+        const remaining = Math.max(totalNegociado - knownSum, 0);
+
+        const countedDinheiro = new Set<string>();
+        const countedGira = new Set<string>();
+        const detalheAdded = new Set<string>();
+
+        itens.forEach((item: any) => {
+          const categoriaId = item.categoria_id;
+          const categoriaNome = item.categoria?.nome || "Categoria";
+          const row = rowsMap.get(categoriaId) || {
+            categoria: categoriaNome,
+            categoriaId,
+            totalDinheiro: 0,
+            qtdDinheiro: 0,
+            detalhes: [],
+            totalGira: 0,
+            qtdGira: 0,
+          };
+
+          const quantidade = Number(item.quantidade || 0);
+          const valorItem = item.valor_total != null
+            ? Number(item.valor_total)
+            : totalUnknownQty > 0
+              ? (remaining * (quantidade / totalUnknownQty))
+              : 0;
+
+          if (isDinheiro) {
+            row.totalDinheiro += valorItem;
+            if (!countedDinheiro.has(categoriaId)) {
+              row.qtdDinheiro += 1;
+              countedDinheiro.add(categoriaId);
+            }
+            if (!detalheAdded.has(categoriaId)) {
+              row.detalhes.push(detalheBase);
+              detalheAdded.add(categoriaId);
+            }
+          } else if (isGira) {
+            row.totalGira += valorItem;
+            if (!countedGira.has(categoriaId)) {
+              row.qtdGira += 1;
+              countedGira.add(categoriaId);
+            }
+          }
+
+          rowsMap.set(categoriaId, row);
+        });
       });
 
-      const totalGeralDinheiro = rows.reduce((acc, r) => acc + r.totalDinheiro, 0);
-      const totalGeralGira = rows.reduce((acc, r) => acc + r.totalGira, 0);
-      const totalQtdDinheiro = rows.reduce((acc, r) => acc + r.qtdDinheiro, 0);
-      const totalQtdGira = rows.reduce((acc, r) => acc + r.qtdGira, 0);
-      return { rows, totalGeralDinheiro, totalGeralGira, totalQtdDinheiro, totalQtdGira };
-    }, [allAtendimentos]);
+      const rows = categoriasCompra.map((cat) => rowsMap.get(cat.id)).filter(Boolean);
+      const extraRows = Array.from(rowsMap.values()).filter(
+        (row) => row.categoriaId && !categoriasCompra.find((cat) => cat.id === row.categoriaId)
+      );
+      const allRows = [...rows, ...extraRows];
+      if (rowSemItem.totalDinheiro > 0 || rowSemItem.totalGira > 0) {
+        allRows.push(rowSemItem);
+      }
+
+      const totalGeralDinheiro = allRows.reduce((acc, r) => acc + r.totalDinheiro, 0);
+      const totalGeralGira = allRows.reduce((acc, r) => acc + r.totalGira, 0);
+      const totalQtdDinheiro = allRows.reduce((acc, r) => acc + r.qtdDinheiro, 0);
+      const totalQtdGira = allRows.reduce((acc, r) => acc + r.qtdGira, 0);
+      return { rows: allRows, totalGeralDinheiro, totalGeralGira, totalQtdDinheiro, totalQtdGira };
+    }, [allAtendimentos, categoriasCompra]);
 
 
   // ==================================================================================
@@ -1178,6 +1286,7 @@ export default function Dashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Categoria</TableHead>
+                      <TableHead className="text-right">Meta (R$)</TableHead>
                       <TableHead className="text-right">Total em dinheiro</TableHead>
                       <TableHead className="text-right">Nº avaliações</TableHead>
                       <TableHead className="text-right">Total Gira Crédito</TableHead>
@@ -1186,6 +1295,12 @@ export default function Dashboard() {
                   </TableHeader>
                   <TableBody>
                     {tabelaGastos.rows.map((row) => {
+                      const categoriaId = row.categoriaId;
+                      const metaMensal = categoriaId ? metasPorCategoria[categoriaId] || 0 : 0;
+                      const metaPeriodo = metaMensal > 0 ? (metaMensal / diasNoMes) * diasPeriodo : 0;
+                      const percent = metaPeriodo > 0 ? (row.totalDinheiro / metaPeriodo) * 100 : 0;
+                      const percentClamped = Math.min(percent, 100);
+
                       const isExpanded = expandedCategories.has(row.categoria);
                       const toggleExpanded = () => {
                         const newExpanded = new Set(expandedCategories);
@@ -1206,6 +1321,41 @@ export default function Dashboard() {
                               />
                               {row.categoria}
                             </TableCell>
+                            <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
+                              <div className="flex flex-col items-end gap-2">
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className="h-8 w-28 text-right"
+                                  placeholder="0,00"
+                                  value={metaMensal > 0 ? metaMensal : ""}
+                                  disabled={!categoriaId}
+                                  onChange={(e) => {
+                                    const valor = parseMetaInput(e.target.value);
+                                    setMetasPorCategoria((prev) => ({
+                                      ...prev,
+                                      ...(categoriaId ? { [categoriaId]: valor } : {}),
+                                    }));
+                                  }}
+                                  onBlur={(e) => {
+                                    if (!categoriaId) return;
+                                    const valor = parseMetaInput(e.target.value);
+                                    salvarMeta({ categoriaId, valor });
+                                  }}
+                                />
+                                <div className="w-28">
+                                  <div className="h-2 w-full rounded bg-green-200/40 overflow-hidden">
+                                    <div
+                                      className="h-full bg-green-600/60 transition-all"
+                                      style={{ width: `${percentClamped}%` }}
+                                    />
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-muted-foreground text-right">
+                                    {loadingMetas ? "..." : metaPeriodo > 0 ? `${percent.toFixed(1)}%` : "-"}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
                             <TableCell className="text-right font-semibold">{formatCurrency(row.totalDinheiro)}</TableCell>
                             <TableCell className="text-right">{row.qtdDinheiro}</TableCell>
                             <TableCell className="text-right font-semibold text-yellow-700">{formatCurrency(row.totalGira)}</TableCell>
@@ -1213,7 +1363,7 @@ export default function Dashboard() {
                           </TableRow>
                           {isExpanded && row.detalhes && row.detalhes.length > 0 && (
                             <TableRow className="bg-gray-50/50">
-                              <TableCell colSpan={5} className="p-4">
+                              <TableCell colSpan={6} className="p-4">
                                 <div className="space-y-3">
                                   <h4 className="font-semibold text-sm text-gray-700">Avaliações em dinheiro nesta categoria:</h4>
                                   <div className="overflow-x-auto">
@@ -1264,7 +1414,7 @@ export default function Dashboard() {
                           )}
                           {isExpanded && (!row.detalhes || row.detalhes.length === 0) && (
                             <TableRow className="bg-gray-50/50">
-                              <TableCell colSpan={5} className="p-4 text-center text-sm text-gray-500">
+                              <TableCell colSpan={6} className="p-4 text-center text-sm text-gray-500">
                                 Nenhuma avaliação em dinheiro nesta categoria no período selecionado.
                               </TableCell>
                             </TableRow>
@@ -1272,13 +1422,25 @@ export default function Dashboard() {
                         </Fragment>
                       );
                     })}
-                    <TableRow>
-                      <TableCell className="font-medium">Total</TableCell>
-                      <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeralDinheiro)}</TableCell>
-                      <TableCell className="text-right">{tabelaGastos.totalQtdDinheiro}</TableCell>
-                      <TableCell className="text-right font-bold text-yellow-700">{formatCurrency(tabelaGastos.totalGeralGira)}</TableCell>
-                      <TableCell className="text-right">{tabelaGastos.totalQtdGira}</TableCell>
-                    </TableRow>
+                    {(() => {
+                      const totalMetaMensal = tabelaGastos.rows.reduce((acc, r) => {
+                        const id = r.categoriaId;
+                        return acc + (id ? metasPorCategoria[id] || 0 : 0);
+                      }, 0);
+                      const totalMetaPeriodo = totalMetaMensal > 0 ? (totalMetaMensal / diasNoMes) * diasPeriodo : 0;
+                      return (
+                        <TableRow>
+                          <TableCell className="font-medium">Total</TableCell>
+                          <TableCell className="text-right font-bold">
+                            {totalMetaPeriodo > 0 ? formatCurrency(totalMetaPeriodo) : "-"}
+                          </TableCell>
+                          <TableCell className="text-right font-bold">{formatCurrency(tabelaGastos.totalGeralDinheiro)}</TableCell>
+                          <TableCell className="text-right">{tabelaGastos.totalQtdDinheiro}</TableCell>
+                          <TableCell className="text-right font-bold text-yellow-700">{formatCurrency(tabelaGastos.totalGeralGira)}</TableCell>
+                          <TableCell className="text-right">{tabelaGastos.totalQtdGira}</TableCell>
+                        </TableRow>
+                      );
+                    })()}
                                     </TableBody>
                                 </Table>
                             </div>

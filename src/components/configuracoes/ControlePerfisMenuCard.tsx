@@ -18,6 +18,7 @@ interface MenuPermissao {
 }
 
 const MENUS_DISPONIVEIS: MenuPermissao[] = [
+  { id: 'cockpit', label: 'Cockpit real time', path: '/cockpit-real-time', descricao: 'Painel em tempo real (admin)' },
   { id: 'vendas', label: 'Vendas', path: '/vendas', descricao: 'Gerenciar vendas e histórico' },
   { id: 'recepcao', label: 'Recepção', path: '/recepcao', descricao: 'Atendimento de clientes' },
   { id: 'avaliacao', label: 'Avaliação', path: '/avaliacao', descricao: 'Avaliar itens' },

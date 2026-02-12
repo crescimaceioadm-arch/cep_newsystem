@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar } from "lucide-react";
@@ -288,6 +289,9 @@ export default function CalendarioEventosMarketing() {
                 </span>
               )}
             </DialogTitle>
+            <DialogDescription>
+              Preencha o titulo e a descricao para salvar o evento.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

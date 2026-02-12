@@ -563,6 +563,7 @@ export function useFechamentoCaixa() {
       const diferenca = valorSistema - valorContado;
       const dataParaSalvar = dataFechamento || getDateBrasilia();
 
+      const statusFinal = status || "aprovado";
       const { error } = await supabase.from("fechamentos_caixa").insert({
         caixa_id: caixaId,
         data_fechamento: dataParaSalvar,
@@ -570,21 +571,24 @@ export function useFechamentoCaixa() {
         valor_contado: valorContado,
         diferenca: diferenca,
         justificativa: justificativa || null,
-        status: status || 'aprovado', // 🆕 Novo campo
-        requer_revisao: status === 'pendente_aprovacao', // 🆕 Flag de revisão
+        status: statusFinal, // 🆕 Novo campo
+        requer_revisao: statusFinal === "pendente_aprovacao", // 🆕 Flag de revisão
         detalhes_pagamentos: detalhesPagamentos ? JSON.stringify(detalhesPagamentos) : null,
       });
 
       if (error) throw error;
-      return { caixaId, valorSistema, valorContado, diferenca };
+      return { caixaId, valorSistema, valorContado, diferenca, status: statusFinal };
     },
-    onSuccess: ({ caixaId, valorSistema, valorContado, diferenca }) => {
+    onSuccess: ({ caixaId, valorSistema, valorContado, diferenca, status }) => {
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["fechamentos_pendentes"] });
       queryClient.invalidateQueries({ queryKey: ["historico_fechamentos"] });
       queryClient.invalidateQueries({ queryKey: ["estatisticas_fechamentos"] });
-      toast.success("Caixa fechado com sucesso!");
+      const mensagem = status === "pendente_aprovacao"
+        ? "Caixa enviado para aprovação"
+        : "Caixa fechado;";
+      toast.success(mensagem);
       log({
         acao: "fechar",
         tabela_afetada: "fechamentos_caixa",

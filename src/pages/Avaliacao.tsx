@@ -16,6 +16,7 @@ import { Atendimento } from "@/types/database";
 import { ClientePreferenciaPaymentBadgeRender } from "@/components/ClientePreferenciaPaymentBadge";
 import { useClientesPreferenciaBatch, useClientesRecusasBatch } from "@/hooks/useClientePreferenciaPagemento";
 import { convertToLocalTime } from "@/lib/utils";
+import { NotificationPermissionCard } from "@/components/notifications/NotificationPermissionCard";
 
 export default function Avaliacao() {
   const { data, isLoading, error } = useAtendimentosByStatus("aguardando_avaliacao");
@@ -39,6 +40,7 @@ export default function Avaliacao() {
   return (
     <MainLayout title="Avaliação">
       <main className="space-y-4">
+        <NotificationPermissionCard />
         {isLoading && <div className="text-muted-foreground">Carregando...</div>}
 
         {error && (

@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Atendimento } from "@/types/database";
+import { Atendimento, StatusAtendimento } from "@/types/database";
 import { useSaveAvaliacao, useRecusarAvaliacao } from "@/hooks/useAtendimentos";
 import { useColaboradoresByFuncao } from "@/hooks/useColaboradores";
 import { toast } from "@/hooks/use-toast";
@@ -72,6 +72,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
   const [avaliadoraSelecionada, setAvaliadoraSelecionada] = useState("");
   const [isRecusando, setIsRecusando] = useState(false);
   const [motivoRecusa, setMotivoRecusa] = useState<"loja" | "cliente" | "">("");
+  const [statusEdicao, setStatusEdicao] = useState<"manter" | "recusado" | "recusou">("manter");
   const { data: categorias } = useItemCategories();
   const categoriasCompra = React.useMemo(
     () => (categorias || []).filter((c) => c.ativo !== false && (c.tipo === "compra" || c.tipo === "ambos")),
@@ -158,6 +159,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
       });
       setItemQuantities(initialItems);
       setAvaliadoraSelecionada((atendimento as any).avaliadora_nome || "");
+      setStatusEdicao("manter");
     } else if (open && !isEditing) {
       resetForm();
     }
@@ -240,6 +242,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
     setAvaliadoraSelecionada("");
     setIsRecusando(false);
     setMotivoRecusa("");
+    setStatusEdicao("manter");
     const emptyItems: Record<string, { quantidade: number; valor_total?: number | null }> = {};
     categoriasCompra.forEach((cat) => {
       emptyItems[cat.id] = { quantidade: 0, valor_total: null };
@@ -299,6 +302,7 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
       pagamento_3_valor: formData.valor_pagto_3 || null,
       avaliadora_nome: avaliadoraSelecionada || undefined,
       isEditing,
+      status: isEditing && statusEdicao !== "manter" ? statusEdicao : undefined,
       itens: [] as Array<{ categoria_id: string; quantidade: number; valor_total?: number | null }>,
       origem_avaliacao: atendimento.origem_avaliacao ?? null,
       itensGrandes: itensGrandes,
@@ -393,6 +397,16 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
 
   if (!atendimento) return null;
 
+  const statusLabelMap: Record<StatusAtendimento, string> = {
+    aguardando: "Aguardando",
+    em_avaliacao: "Em Avaliação",
+    aguardando_pagamento: "Aguardando Pagamento",
+    finalizado: "Finalizado",
+    recusado: "Recusado pela Loja",
+    recusou: "Cliente recusou",
+  };
+  const statusAtualLabel = statusLabelMap[atendimento.status] || atendimento.status;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl overflow-y-auto max-h-[90vh]">
@@ -425,6 +439,22 @@ export function AvaliacaoModal({ atendimento, open, onOpenChange, isEditing = fa
             </SelectContent>
           </Select>
         </div>
+
+        {isEditing && (
+          <div className="space-y-2 mb-3">
+            <Label htmlFor="status-edicao">Status da Avaliação</Label>
+            <Select value={statusEdicao} onValueChange={(value) => setStatusEdicao(value as "manter" | "recusado" | "recusou")}>
+              <SelectTrigger id="status-edicao">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manter">Manter status atual ({statusAtualLabel})</SelectItem>
+                <SelectItem value="recusado">Recusado pela Loja</SelectItem>
+                <SelectItem value="recusou">Cliente recusou</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {!isRecusando ? (
           <>
