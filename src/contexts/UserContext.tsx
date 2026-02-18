@@ -27,6 +27,7 @@ interface UserContextType {
   isAvaliadora: boolean;
   isGeral: boolean;
   hasPermission: (permissao: TipoPermissao) => boolean;
+  logout: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -217,6 +218,49 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const logout = async () => {
+    try {
+      // Fazer logout do Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Erro ao fazer logout:', error);
+        throw error;
+      }
+
+      // Limpar localStorage
+      try {
+        const keysToRemove = [
+          'session_date',
+          'caixa_selecionado',
+          'auth_token',
+          'user_session',
+        ];
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+        });
+        // Limpar todo o localStorage como fallback
+        localStorage.clear();
+      } catch (e) {
+        console.warn('Erro ao limpar localStorage:', e);
+      }
+
+      // Limpar sessionStorage
+      try {
+        sessionStorage.clear();
+      } catch (e) {
+        console.warn('Erro ao limpar sessionStorage:', e);
+      }
+
+      // Resetar estado
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+    } catch (error) {
+      console.error('Erro durante logout:', error);
+      throw error;
+    }
+  };
+
   const value: UserContextType = {
     user,
     session,
@@ -228,6 +272,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     isAvaliadora: cargo === 'avaliadora',
     isGeral: cargo === 'geral',
     hasPermission,
+    logout,
   };
 
   return (

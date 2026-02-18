@@ -84,9 +84,27 @@ export function useRegistrarLog() {
       // Obter informações do usuário
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user || !profile) {
+      if (!user) {
         console.warn("Log não registrado: usuário não autenticado");
         return null;
+      }
+
+      let resolvedProfile = profile;
+
+      if (!resolvedProfile) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("nome, cargo")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          resolvedProfile = {
+            id: user.id,
+            cargo: data.cargo,
+            nome: data.nome,
+          };
+        }
       }
 
       // Obter IP e User Agent (de forma assíncrona)
@@ -97,8 +115,8 @@ export function useRegistrarLog() {
 
       const logData = {
         user_id: user.id,
-        user_nome: profile.nome || "Usuário desconhecido",
-        user_cargo: profile.cargo || null,
+        user_nome: resolvedProfile?.nome || user.user_metadata?.nome || user.email || "Usuario desconhecido",
+        user_cargo: resolvedProfile?.cargo || user.user_metadata?.cargo || null,
         acao: params.acao,
         tabela_afetada: params.tabela_afetada,
         registro_id: params.registro_id || null,

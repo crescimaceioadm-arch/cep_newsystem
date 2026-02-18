@@ -22,10 +22,38 @@ export function InactivityProvider({ children }: { children: ReactNode }) {
   const midnightRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem("caixa_selecionado");
-    toast.info("Sessão expirada por inatividade");
-    navigate("/auth");
+    try {
+      // Logout do Supabase
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+    }
+
+    try {
+      // Limpar localStorage
+      const keysToRemove = [
+        "session_date",
+        "caixa_selecionado",
+        "auth_token",
+        "user_session",
+      ];
+      keysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+      });
+      localStorage.clear();
+    } catch (e) {
+      console.warn("Erro ao limpar localStorage:", e);
+    }
+
+    try {
+      // Limpar sessionStorage
+      sessionStorage.clear();
+    } catch (e) {
+      console.warn("Erro ao limpar sessionStorage:", e);
+    }
+
+    toast.info("Sessão expirada");
+    navigate("/auth", { replace: true });
   };
 
   const resetTimer = () => {

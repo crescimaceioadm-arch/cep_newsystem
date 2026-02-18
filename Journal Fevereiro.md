@@ -35,6 +35,25 @@ Melhorar o popup inicial para abrir caixas com resumo de status, opcao de abrir 
 
 ---
 
+## 📅 13/02/2026 - 00:00
+
+### 🧾 Saldo inicial usa ultimo fechamento do dia
+
+**Necessidade:**  
+Quando existem dois fechamentos no mesmo dia, o saldo inicial do dia seguinte estava pegando o valor mais antigo.
+
+**Solução Implementada:**  
+- Ordenacao por `created_at` para usar o fechamento mais recente do dia anterior.
+
+**Arquivos Alterados:**
+- `src/hooks/useCaixas.ts`
+	- Ordenacao por `created_at` nas buscas de fechamento do dia anterior.
+
+**Observações:**
+- Evita que o saldo inicial fique preso ao fechamento da manha.
+
+---
+
 ## 📅 06/02/2026 - 00:00
 
 ### 🗂️ Início do Journal de Fevereiro

@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/sidebar";
 import { useUser, hasAccess } from "@/contexts/UserContext";
 import { useCaixa } from "@/contexts/CaixaContext";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CaixaIndicator } from "./CaixaIndicator";
 
@@ -61,7 +60,7 @@ const allMenuItems = [
 ];
 
 export function AppSidebar() {
-  const { cargo, hasPermission, profile, user } = useUser();
+  const { cargo, hasPermission, profile, user, logout } = useUser();
   const { limparCaixa } = useCaixa();
   const navigate = useNavigate();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
@@ -83,13 +82,21 @@ export function AppSidebar() {
   });
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Erro ao sair: " + error.message);
-    } else {
-      limparCaixa(); // Limpa o caixa selecionado ao fazer logout
-      toast.success("Você saiu do sistema");
-      navigate("/auth");
+    try {
+      // Limpar caixa selecionado
+      limparCaixa();
+      
+      // Executar logout geral
+      await logout();
+      
+      // Mostrar mensagem de sucesso
+      toast.success("Você saiu do sistema com sucesso");
+      
+      // Redirecionar para página de login
+      navigate("/auth", { replace: true });
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      toast.error("Erro ao sair do sistema");
     }
   };
 

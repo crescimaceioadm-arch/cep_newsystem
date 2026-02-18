@@ -83,6 +83,7 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
           .eq("caixa_id", caixaId)
           .eq("data_fechamento", diaAnterior)
           .eq("status", "aprovado") // 🆕 Só fechamentos aprovados
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -108,6 +109,7 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
           .eq("caixa_id", caixaId)
           .eq("data_fechamento", diaAnterior)
           .eq("status", "pendente_aprovacao")
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -561,7 +563,14 @@ export function useFechamentoCaixa() {
       detalhesPagamentos?: DetalhesPagamentosFechamento;
     }) => {
       const diferenca = valorSistema - valorContado;
-      const dataParaSalvar = dataFechamento || getDateBrasilia();
+      const agoraBrasilia = getDateTimeBrasilia();
+      const dataParaSalvar = dataFechamento
+        ? (dataFechamento.includes("T")
+          ? dataFechamento
+          : `${dataFechamento}T${agoraBrasilia.split("T")[1]}`)
+        : agoraBrasilia;
+
+      const { data: { user } } = await supabase.auth.getUser();
 
       const statusFinal = status || "aprovado";
       const { error } = await supabase.from("fechamentos_caixa").insert({
@@ -574,6 +583,7 @@ export function useFechamentoCaixa() {
         status: statusFinal, // 🆕 Novo campo
         requer_revisao: statusFinal === "pendente_aprovacao", // 🆕 Flag de revisão
         detalhes_pagamentos: detalhesPagamentos ? JSON.stringify(detalhesPagamentos) : null,
+        criado_por: user?.id || null,
       });
 
       if (error) throw error;
