@@ -193,7 +193,11 @@ export function AlertaFechamentosFaltantes() {
                 <Button
                   variant="ghost"
                   className="w-full"
-                  onClick={() => setDialogAberto(false)}
+                  onClick={() => {
+                    // Marca como ignorado para não reabre durante esta sessão
+                    setIgnorarHoje(true);
+                    setDialogAberto(false);
+                  }}
                 >
                   Fechar e fazer mais tarde
                 </Button>
@@ -221,7 +225,11 @@ export function AlertaFechamentosFaltantes() {
                 <Button
                   variant="ghost"
                   className="w-full"
-                  onClick={() => setDialogAberto(false)}
+                  onClick={() => {
+                    // Marca como ignorado para não reabre durante esta sessão
+                    setIgnorarHoje(true);
+                    setDialogAberto(false);
+                  }}
                 >
                   Fechar e fazer mais tarde
                 </Button>
