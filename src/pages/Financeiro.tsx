@@ -56,6 +56,7 @@ import {
   MovimentacaoCaixa,
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
+import { AjustarSaldoCaixaModal } from "@/components/financeiro/AjustarSaldoCaixaModal";
 import { AprovacaoFechamentosCard } from "@/components/financeiro/AprovacaoFechamentosCard";
 import { RelatorioFechamentosCard } from "@/components/financeiro/RelatorioFechamentosCard";
 import { RelatorioMovimentacoesCard } from "@/components/financeiro/RelatorioMovimentacoesCard";
@@ -71,13 +72,17 @@ import { supabase } from "@/integrations/supabase/client";
 function CaixaCard({ 
   caixa, 
   onFechamento,
+  onAjusteSaldo,
   fechamentoStatus,
-  carregandoStatus
+  carregandoStatus,
+  isAdmin = false,
 }: { 
   caixa: Caixa; 
   onFechamento: (caixa: Caixa) => void;
+  onAjusteSaldo: (caixa: Caixa) => void;
   fechamentoStatus?: string | null;
   carregandoStatus?: boolean;
+  isAdmin?: boolean;
 }) {
   const { data: saldoData, isLoading } = useSaldoFinalHoje(caixa.id);
   
@@ -138,6 +143,17 @@ function CaixaCard({
           <Lock className="h-4 w-4 mr-2" />
           Realizar Fechamento
         </Button>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-blue-600 border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+            onClick={() => onAjusteSaldo(caixa)}
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            Ajustar Saldo
+          </Button>
+        )}
         <p className={`text-xs font-medium ${statusInfo.className}`}>
           <span className="inline-flex items-center gap-1">
             {statusInfo.Icon && <statusInfo.Icon className="h-3.5 w-3.5" />}
@@ -199,6 +215,10 @@ export default function Financeiro() {
   // Fechamento Modal
   const [modalFechamento, setModalFechamento] = useState(false);
   const [caixaFechamento, setCaixaFechamento] = useState<Caixa | null>(null);
+
+  // Ajuste de Saldo Modal
+  const [modalAjusteSaldo, setModalAjusteSaldo] = useState(false);
+  const [caixaAjusteSaldo, setCaixaAjusteSaldo] = useState<Caixa | null>(null);
 
   // Filtro de Data
   const [dataInicio, setDataInicio] = useState<string>("");
@@ -360,7 +380,7 @@ export default function Financeiro() {
         };
       }
 
-      // Sem filtro de data: usar saldo atual do caixa
+      // Sem filtro de data: mostrar apenas últimas movimentações (sem saldo calculado)
       if (!dataInicio || !dataFim) {
         const movs = movimentacoes?.filter(mov => {
           const origemNome = mov.caixa_origem?.[0]?.nome;
@@ -372,7 +392,7 @@ export default function Financeiro() {
           caixaAtual,
           movimentacoes: movs,
           saldoInicial: 0,
-          saldoFinal: caixaAtual.saldo_atual || 0,
+          saldoFinal: 0,
           totalEntradas: 0,
           totalSaidas: 0
         };
@@ -555,8 +575,13 @@ export default function Financeiro() {
                 key={caixa.id} 
                 caixa={caixa} 
                 onFechamento={openFechamento}
+                onAjusteSaldo={(c) => {
+                  setCaixaAjusteSaldo(c);
+                  setModalAjusteSaldo(true);
+                }}
                 fechamentoStatus={statusPorCaixa.get(caixa.id)}
                 carregandoStatus={loadingFechamentosHoje}
+                isAdmin={isAdmin}
               />
             ))
           )}
@@ -1233,6 +1258,19 @@ N
         onOpenChange={setModalFechamento}
         caixa={caixaFechamento}
       />
+
+      {/* Modal de Ajuste de Saldo */}
+      {caixaAjusteSaldo && (
+        <AjustarSaldoCaixaModal
+          open={modalAjusteSaldo}
+          onOpenChange={setModalAjusteSaldo}
+          caixaId={caixaAjusteSaldo.id}
+          caixaNome={caixaAjusteSaldo.nome}
+          onSuccess={() => {
+            refetch();
+          }}
+        />
+      )}
 
       {/* Dialog de edição de movimentação */}
       <Dialog open={!!movimentacaoParaEditar} onOpenChange={(open) => !open && resetEditarState()}>

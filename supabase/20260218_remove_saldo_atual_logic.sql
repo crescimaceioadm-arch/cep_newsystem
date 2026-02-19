@@ -1,0 +1,56 @@
+-- Migration: Remove saldo_atual logic and rename to saldo_seed_caixas
+-- Date: 2026-02-18
+-- Purpose: Consolidate all balance calculation logic to movimentacoes_caixa and fechamentos_caixa
+-- The table 'caixas' should only store caixa metadata, not balance data
+-- 
+-- IMPORTANT: We KEEP the triggers that update saldo_seed_caixas as a safety net
+-- Primary balance calculation: useSaldoFinalHoje() (React Query)
+-- Secondary/Backup: saldo_seed_caixas trigger updates (Database)
+
+-- 1. Rename saldo_atual to saldo_seed_caixas in caixas table
+ALTER TABLE caixas RENAME COLUMN saldo_atual TO saldo_seed_caixas;
+
+-- ============================================================================
+-- IMPORTANT NOTES:
+-- ============================================================================
+-- 
+-- After this migration:
+-- 
+-- 1. saldo_seed_caixas is the SEED value (starting point)
+--    It is ALSO updated by triggers as a backup safety mechanism
+--    WARNING: This creates dual sources of truth! Recommend keeping for now.
+--
+-- 2. Primary balance calculations use:
+--    - useSaldoInicial(): Finds opening balance from first fechamento_caixa
+--    - useSaldoFinalHoje(): Calculates (saldo_inicial + entradas - saidas)
+--    - useSaldoFinalPeriodo(): Calculates balance for any date range
+--
+-- 3. Balance adjustments must be done via:
+--    - Creating/Deleting movimentacoes_caixa (manual movements)
+--    - Creating fechamentos_caixa (daily closings)
+--    - React Query will automatically recalculate via query invalidation
+--
+-- 4. The caixas table structure:
+--    - id: UUID identifier
+--    - nome: Caixa name
+--    - saldo_seed_caixas: Seed value + trigger-updated as safety mechanism
+--    - updated_at: Timestamp
+--
+-- 5. Flow after changes:
+--    INSERT/UPDATE/DELETE movimentacoes_caixa
+--         ↓
+--    Trigger updates saldo_seed_caixas (backup)
+--         ↓
+--    React Query invalidates ["movimentacoes_dinheiro", "saldo_final_hoje"]
+--         ↓
+--    useSaldoFinalHoje() recalculates: saldo_inicial + movs
+--         ↓
+--    UI updates with new saldo
+--
+-- ============================================================================
+
+-- 2. Verification: List current caixas structure
+-- SELECT column_name, data_type, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'caixas'
+-- ORDER BY ordinal_position;

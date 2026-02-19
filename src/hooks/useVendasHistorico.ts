@@ -321,14 +321,14 @@ export function useAtualizarVenda() {
         // Buscar caixa anterior
         const { data: caixaAnteriorData } = await supabase
           .from("caixas")
-          .select("id, saldo_atual")
+          .select("id")
           .eq("nome", caixaAnterior)
           .maybeSingle();
 
         // Buscar caixa novo (pode ser o mesmo)
         const { data: caixaNovoData } = await supabase
           .from("caixas")
-          .select("id, saldo_atual")
+          .select("id")
           .eq("nome", caixaNovo)
           .maybeSingle();
 
@@ -341,20 +341,17 @@ export function useAtualizarVenda() {
           .maybeSingle();
 
         if (eraDinheiro && !agoraDinheiro) {
-          // ERA dinheiro, AGORA não é mais → remover movimentação e subtrair do saldo
-          if (movExistente && caixaAnteriorData) {
+          // ERA dinheiro, AGORA não é mais → remover movimentação
+          // O trigger vai automaticamente reverter o saldo
+          if (movExistente) {
             await supabase
               .from("movimentacoes_caixa")
               .delete()
               .eq("id", movExistente.id);
-
-            await supabase
-              .from("caixas")
-              .update({ saldo_atual: (caixaAnteriorData.saldo_atual || 0) - movExistente.valor })
-              .eq("id", caixaAnteriorData.id);
           }
         } else if (!eraDinheiro && agoraDinheiro) {
-          // NÃO era dinheiro, AGORA é → criar movimentação e somar ao saldo
+          // NÃO era dinheiro, AGORA é → criar movimentação
+          // O trigger vai automaticamente adicionar ao saldo
           if (caixaNovoData) {
             await supabase
               .from("movimentacoes_caixa")
@@ -365,59 +362,21 @@ export function useAtualizarVenda() {
                 valor: valorNovo,
                 motivo: `Venda #${id}`,
               });
-
-            await supabase
-              .from("caixas")
-              .update({ saldo_atual: (caixaNovoData.saldo_atual || 0) + valorNovo })
-              .eq("id", caixaNovoData.id);
           }
         } else if (eraDinheiro && agoraDinheiro) {
-          // ERA e CONTINUA dinheiro → ajustar diferença de valor/caixa
+          // ERA e CONTINUA dinheiro → ajustar movimentação
           const diferencaValor = valorNovo - valorAnterior;
           const mudouCaixa = caixaAnterior !== caixaNovo;
 
           if (movExistente) {
-            if (mudouCaixa) {
-              // Remover do caixa anterior
-              if (caixaAnteriorData) {
-                await supabase
-                  .from("caixas")
-                  .update({ saldo_atual: (caixaAnteriorData.saldo_atual || 0) - movExistente.valor })
-                  .eq("id", caixaAnteriorData.id);
-              }
-              // Adicionar ao novo caixa
-              if (caixaNovoData) {
-                await supabase
-                  .from("caixas")
-                  .update({ saldo_atual: (caixaNovoData.saldo_atual || 0) + valorNovo })
-                  .eq("id", caixaNovoData.id);
+            if (mudouCaixa && caixaNovoData) {
+              // Deletar movimentação do caixa anterior e criar no novo
+              // Triggers vão ajustar os saldos automaticamente
+              await supabase
+                .from("movimentacoes_caixa")
+                .delete()
+                .eq("id", movExistente.id);
 
-                // Atualizar movimentação para o novo caixa
-                await supabase
-                  .from("movimentacoes_caixa")
-                  .update({ 
-                    caixa_destino_id: caixaNovoData.id, 
-                    valor: valorNovo 
-                  })
-                  .eq("id", movExistente.id);
-              }
-            } else if (diferencaValor !== 0) {
-              // Mesmo caixa, valor diferente
-              if (caixaAnteriorData) {
-                await supabase
-                  .from("caixas")
-                  .update({ saldo_atual: (caixaAnteriorData.saldo_atual || 0) + diferencaValor })
-                  .eq("id", caixaAnteriorData.id);
-
-                await supabase
-                  .from("movimentacoes_caixa")
-                  .update({ valor: valorNovo })
-                  .eq("id", movExistente.id);
-              }
-            }
-          } else {
-            // Não existia movimentação (venda antiga), criar agora
-            if (caixaNovoData) {
               await supabase
                 .from("movimentacoes_caixa")
                 .insert({
@@ -427,11 +386,26 @@ export function useAtualizarVenda() {
                   valor: valorNovo,
                   motivo: `Venda #${id}`,
                 });
-
+            } else if (diferencaValor !== 0) {
+              // Mesmo caixa, apenas ajustar valor
+              // Triggers vão ajustar o saldo automaticamente
               await supabase
-                .from("caixas")
-                .update({ saldo_atual: (caixaNovoData.saldo_atual || 0) + valorNovo })
-                .eq("id", caixaNovoData.id);
+                .from("movimentacoes_caixa")
+                .update({ valor: valorNovo })
+                .eq("id", movExistente.id);
+            }
+          } else {
+            // Não existia movimentação (venda antiga), criar agora se é dinheiro
+            if (caixaNovoData && agoraDinheiro) {
+              await supabase
+                .from("movimentacoes_caixa")
+                .insert({
+                  caixa_destino_id: caixaNovoData.id,
+                  caixa_origem_id: null,
+                  tipo: 'venda',
+                  valor: valorNovo,
+                  motivo: `Venda #${id}`,
+                });
             }
           }
         }

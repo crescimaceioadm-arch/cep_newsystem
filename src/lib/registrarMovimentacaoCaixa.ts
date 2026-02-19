@@ -49,19 +49,26 @@ export async function registrarMovimentacaoCaixa({
     }
 
     console.log(`[registrarMovimentacaoCaixa] Venda ${vendaId}: R$ ${totalDinheiro} em dinheiro`);
+    console.log(`[registrarMovimentacaoCaixa] 🔍 Buscando caixa com NOME: "${caixaOrigem}"`);
 
     // 2. Buscar ID do caixa destino
     const { data: caixaData, error: caixaError } = await supabase
       .from("caixas")
-      .select("id")
+      .select("id, nome")
       .eq("nome", caixaOrigem)
       .single();
 
     if (caixaError || !caixaData) {
       const errorMsg = `Caixa "${caixaOrigem}" não encontrado: ${caixaError?.message || "unknown"}`;
       console.error(`[registrarMovimentacaoCaixa] ${errorMsg}`);
+      // Log para debug - buscar todos os caixas disponíveis
+      const { data: allCaixas } = await supabase.from("caixas").select("id, nome");
+      console.error(`[registrarMovimentacaoCaixa] Caixas disponíveis:`, allCaixas);
       return { success: false, error: errorMsg };
     }
+
+    console.log(`[registrarMovimentacaoCaixa] ✅ Caixa encontrado: ID=${caixaData.id}, NOME="${caixaData.nome}"`);
+    console.log(`[registrarMovimentacaoCaixa] Valor será registrado em: "${caixaData.nome}" (ID: ${caixaData.id})`);
 
     // 3. Verificar se já existe movimentação para esta venda (evitar duplicação)
     const { data: movExistente, error: checkError } = await supabase

@@ -8,7 +8,7 @@ import { useLogAtividade } from "@/hooks/useLogAtividade";
 export interface Caixa {
   id: string;
   nome: string;
-  saldo_atual: number;
+  saldo_seed_caixas: number;
   updated_at: string;
 }
 
@@ -42,8 +42,7 @@ export interface FechamentoCaixa {
  * 2. Fechamento mais recente anterior
  * 3. Zero como fallback
  * 
- * NOTA: O saldo_atual do caixa (configurações) é usado como fonte primária
- * apenas quando NÃO há fechamentos registrados.
+ * NOTA: O saldo é sempre calculado dinamicamente via movimentacoes_caixa e fechamentos_caixa.
  */
 export function useSaldoInicial(caixaId: string | null, dataInicio: string | null) {
   return useQuery({
@@ -77,15 +76,23 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
 
         // PRIORIDADE 1: Buscar fechamento APROVADO do dia anterior (valor_contado)
         // 🔒 IMPORTANTE: Só considera fechamentos com status "aprovado"
+        // 🐛 FIX: Usar range de datas pois data_fechamento pode ter timestamp com hora
+        const diaAnteriorInicio = diaAnterior + "T00:00:00Z";
+        const diaAnteriorFim = dataInicio + "T00:00:00Z";
+        
+        console.log("🔍 [SALDO INICIAL] Buscando range:", diaAnteriorInicio, "até", diaAnteriorFim);
+        console.log("🔍 [SALDO INICIAL] Caixa ID:", caixaId);
+        
         const { data, error } = await supabase
           .from("fechamentos_caixa")
           .select("*")
           .eq("caixa_id", caixaId)
-          .eq("data_fechamento", diaAnterior)
+          .gte("data_fechamento", diaAnteriorInicio)
+          .lt("data_fechamento", diaAnteriorFim)
           .eq("status", "aprovado") // 🆕 Só fechamentos aprovados
-          .order("created_at", { ascending: false })
-          .limit(1)
           .maybeSingle();
+        
+        console.log("📊 [SALDO INICIAL] Resultado da query:", { data, error });
 
         if (error && error.code !== 'PGRST116') {
           console.error("❌ [SALDO INICIAL] Erro ao buscar fechamento:", error);
@@ -107,10 +114,9 @@ export function useSaldoInicial(caixaId: string | null, dataInicio: string | nul
           .from("fechamentos_caixa")
           .select("*")
           .eq("caixa_id", caixaId)
-          .eq("data_fechamento", diaAnterior)
+          .gte("data_fechamento", diaAnteriorInicio)
+          .lt("data_fechamento", diaAnteriorFim)
           .eq("status", "pendente_aprovacao")
-          .order("created_at", { ascending: false })
-          .limit(1)
           .maybeSingle();
 
         if (errorPendenteDia && errorPendenteDia.code !== 'PGRST116') {
@@ -367,13 +373,25 @@ export function useSaldoFinalHoje(caixaId: string | null) {
       console.log("  📈 Total Entradas:", totalEntradas);
       console.log("  📉 Total Saídas:", totalSaidas);
       console.log("  ✅ Saldo Final:", saldoFinal);
+      console.log("  🧮 Fórmula:", `${saldoInicial} + ${totalEntradas} - ${totalSaidas} = ${saldoFinal}`);
+      
+      // Validação: Se não há movimentações NEM saldo inicial, caixa pode estar sem configuração
+      if (movs.length === 0 && saldoInicial === 0) {
+        console.warn("⚠️  [SALDO FINAL HOJE] Caixa com ZERO movimentações e ZERO saldo inicial!");
+        console.warn("   Verifique se o caixa foi devidamente configurado com fechamentos_caixa");
+      }
 
       return {
         saldoInicial,
         totalEntradas,
         totalSaidas,
         saldoFinal,
-        fonte: saldoInicialData?.fonte || "sem_dados"
+        fonte: saldoInicialData?.fonte || "sem_dados",
+        debugInfo: {
+          movimentacoesConhecidas: movs.length,
+          foiCalculado: true,
+          timestamp: new Date().toISOString()
+        }
       };
     },
   });
@@ -517,9 +535,20 @@ export function useMovimentacaoManual() {
       return { caixaNome, tipo, valor, motivo };
     },
     onSuccess: ({ caixaNome, tipo, valor, motivo }) => {
+      // ✅ Invalidar queries para reconhecer nova movimentação:
+      // 1. "caixas" - trigger pode ter atualizado saldo_seed_caixas
+      // 2. "movimentacoes_caixa" - nova movimentação foi criada
+      // 3. "movimentacoes_dinheiro" - será incluída na próxima busca
+      // 4. "saldo_final_hoje" - deve recalcular incluindo esta movimentação
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
-      toast.success("Movimentação registrada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      
+      toast.success("✅ Movimentação registrada com sucesso!");
+      console.log(`📊 [CREATE] ${tipo.toUpperCase()} criada - ${caixaNome} - R$ ${valor}`);
+      console.log("   Queries invalidadas, useSaldoFinalHoje() vai refazer o cálculo");
+      
       log({
         acao: tipo,
         tabela_afetada: "movimentacoes_caixa",
@@ -770,7 +799,7 @@ export function useDeleteMovimentacao() {
 
   return useMutation({
     mutationFn: async (movimentacao: MovimentacaoCaixa) => {
-      const { tipo, valor, caixa_origem_id, caixa_destino_id } = movimentacao;
+      const { tipo } = movimentacao;
 
       // Apenas tipos permitidos para exclusão manual
       const tiposPermitidos = ['entrada', 'saida', 'transferencia_entre_caixas'];
@@ -778,83 +807,9 @@ export function useDeleteMovimentacao() {
         throw new Error(`Tipo "${tipo}" não pode ser excluído manualmente`);
       }
 
-      // Reverter saldo baseado no tipo
-      if (tipo === 'entrada' && caixa_destino_id) {
-        // Entrada foi adicionada ao caixa destino, reverter subtraindo
-        const { data: caixa, error: caixaError } = await supabase
-          .from("caixas")
-          .select("saldo_atual")
-          .eq("id", caixa_destino_id)
-          .single();
-
-        if (caixaError) throw caixaError;
-
-        const novoSaldo = caixa.saldo_atual - valor;
-        const { error: updateError } = await supabase
-          .from("caixas")
-          .update({ saldo_atual: novoSaldo })
-          .eq("id", caixa_destino_id);
-
-        if (updateError) throw updateError;
-      } 
-      else if (tipo === 'saida' && caixa_origem_id) {
-        // Saída foi removida do caixa origem, reverter adicionando
-        const { data: caixa, error: caixaError } = await supabase
-          .from("caixas")
-          .select("saldo_atual")
-          .eq("id", caixa_origem_id)
-          .single();
-
-        if (caixaError) throw caixaError;
-
-        const novoSaldo = caixa.saldo_atual + valor;
-        const { error: updateError } = await supabase
-          .from("caixas")
-          .update({ saldo_atual: novoSaldo })
-          .eq("id", caixa_origem_id);
-
-        if (updateError) throw updateError;
-      }
-      else if (tipo === 'transferencia_entre_caixas') {
-        // Transferência: reverter ambos os caixas
-        if (caixa_origem_id) {
-          const { data: caixaOrigem, error: erroOrigem } = await supabase
-            .from("caixas")
-            .select("saldo_atual")
-            .eq("id", caixa_origem_id)
-            .single();
-
-          if (erroOrigem) throw erroOrigem;
-
-          // Devolver o valor ao caixa de origem
-          const { error: updateOrigem } = await supabase
-            .from("caixas")
-            .update({ saldo_atual: caixaOrigem.saldo_atual + valor })
-            .eq("id", caixa_origem_id);
-
-          if (updateOrigem) throw updateOrigem;
-        }
-
-        if (caixa_destino_id) {
-          const { data: caixaDestino, error: erroDestino } = await supabase
-            .from("caixas")
-            .select("saldo_atual")
-            .eq("id", caixa_destino_id)
-            .single();
-
-          if (erroDestino) throw erroDestino;
-
-          // Remover o valor do caixa de destino
-          const { error: updateDestino } = await supabase
-            .from("caixas")
-            .update({ saldo_atual: caixaDestino.saldo_atual - valor })
-            .eq("id", caixa_destino_id);
-
-          if (updateDestino) throw updateDestino;
-        }
-      }
-
       // Deletar a movimentação
+      // O trigger do banco vai reverter saldo_seed_caixas se existir
+      // React Query vai recalcular useSaldoFinalHoje() automaticamente
       const { error: deleteError } = await supabase
         .from("movimentacoes_caixa")
         .delete()
@@ -863,11 +818,18 @@ export function useDeleteMovimentacao() {
       if (deleteError) throw deleteError;
     },
     onSuccess: () => {
+      // ✅ Invalidar queries para forçar recalcular:
+      // 1. "caixas" - caso trigger tenha atualizado saldo_seed_caixas
+      // 2. "movimentacoes_dinheiro" - lista de movimentações mudou
+      // 3. "saldo_final_hoje" - deve recalcular baseado em movimentações novas
+      // 4. "movimentacoes_caixa" - lista geral de movimentações
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
-      toast.success("Movimentação excluída com sucesso!");
+      
+      toast.success("✅ Movimentação excluída com sucesso!");
+      console.log("📊 [EXCLUDE] Queries invalidadas, useSaldoFinalHoje() vai recalcular na próxima renderização");
     },
     onError: (error: Error) => {
       toast.error("Erro ao excluir: " + error.message);
@@ -882,23 +844,6 @@ export function useDeleteMovimentacao() {
 export function useEditarMovimentacao() {
   const queryClient = useQueryClient();
 
-  const atualizarSaldo = async (caixaId: string, delta: number) => {
-    const { data: caixa, error: caixaError } = await supabase
-      .from("caixas")
-      .select("saldo_atual")
-      .eq("id", caixaId)
-      .single();
-
-    if (caixaError) throw caixaError;
-
-    const { error: updateError } = await supabase
-      .from("caixas")
-      .update({ saldo_atual: caixa.saldo_atual + delta })
-      .eq("id", caixaId);
-
-    if (updateError) throw updateError;
-  };
-
   return useMutation({
     mutationFn: async ({
       movimentacao,
@@ -909,7 +854,7 @@ export function useEditarMovimentacao() {
       novoValor: number;
       novoMotivo: string;
     }) => {
-      const { tipo, valor: valorAntigo, caixa_origem_id, caixa_destino_id } = movimentacao;
+      const { tipo } = movimentacao;
 
       const tiposPermitidos = ['entrada', 'saida', 'transferencia_entre_caixas'];
       if (!tiposPermitidos.includes(tipo)) {
@@ -920,27 +865,9 @@ export function useEditarMovimentacao() {
         throw new Error("Valor inválido para edição");
       }
 
-      // 1) Extornar efeito antigo
-      if (tipo === 'entrada' && caixa_destino_id) {
-        await atualizarSaldo(caixa_destino_id, -valorAntigo);
-      } else if (tipo === 'saida' && caixa_origem_id) {
-        await atualizarSaldo(caixa_origem_id, valorAntigo);
-      } else if (tipo === 'transferencia_entre_caixas') {
-        if (caixa_origem_id) await atualizarSaldo(caixa_origem_id, valorAntigo);
-        if (caixa_destino_id) await atualizarSaldo(caixa_destino_id, -valorAntigo);
-      }
-
-      // 2) Aplicar novo valor
-      if (tipo === 'entrada' && caixa_destino_id) {
-        await atualizarSaldo(caixa_destino_id, novoValor);
-      } else if (tipo === 'saida' && caixa_origem_id) {
-        await atualizarSaldo(caixa_origem_id, -novoValor);
-      } else if (tipo === 'transferencia_entre_caixas') {
-        if (caixa_origem_id) await atualizarSaldo(caixa_origem_id, -novoValor);
-        if (caixa_destino_id) await atualizarSaldo(caixa_destino_id, novoValor);
-      }
-
-      // 3) Atualizar registro
+      // Atualizar registro
+      // Triggers do banco vai ajustar saldo_seed_caixas se existir
+      // React Query vai recalcular useSaldoFinalHoje() automaticamente
       const { error: updateMovError } = await supabase
         .from("movimentacoes_caixa")
         .update({ valor: novoValor, motivo: novoMotivo || null })
@@ -949,11 +876,18 @@ export function useEditarMovimentacao() {
       if (updateMovError) throw updateMovError;
     },
     onSuccess: () => {
+      // ✅ Invalidar queries para forçar recalcular:
+      // 1. "caixas" - caso trigger tenha atualizado saldo_seed_caixas
+      // 2. "movimentacoes_dinheiro" - valores das movimentações mudaram
+      // 3. "saldo_final_hoje" - deve recalcular com novos valores
+      // 4. "movimentacoes_caixa" - lista foi atualizada
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
       queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
-      toast.success("Movimentação editada com sucesso!");
+      
+      toast.success("✅ Movimentação editada com sucesso!");
+      console.log("📊 [EDIT] Queries invalidadas, useSaldoFinalHoje() vai recalcular na próxima renderização");
     },
     onError: (error: Error) => {
       toast.error("Erro ao editar: " + error.message);
@@ -1182,6 +1116,135 @@ export function useRelatorioMovimentacoesManual(
 
       if (error) throw error;
       return data as MovimentacaoCaixa[];
+    },
+  });
+}
+
+/**
+ * Hook para AJUSTAR saldo via admin
+ * 
+ * ⚠️ IMPORTANTE: Não altera saldo_seed_caixas!
+ * Em vez disso, CRIA uma movimentação de AJUSTE
+ * 
+ * Fluxo:
+ * 1. Admin quer saldo = R$ 1000
+ * 2. Saldo atual (calculado) = R$ 450
+ * 3. Diferença = R$ 550
+ * 4. Criar movimentação de ENTRADA com R$ 550 (motivo: "Ajuste manual")
+ * 5. useSaldoFinalHoje() recalcula: 450 + 550 = 1000 ✓
+ * 
+ * Resultado: Saldo atualizado via movimentações (auditável, correto)
+ */
+export function useAjustarSaldoAdmin() {
+  const queryClient = useQueryClient();
+  const { log } = useLogAtividade();
+
+  return useMutation({
+    mutationFn: async ({
+      caixaId,
+      saldoDesejado,
+      saldoAtual,
+    }: {
+      caixaId: string;
+      saldoDesejado: number;
+      saldoAtual: number;
+    }) => {
+      // Validar valores
+      if (!Number.isFinite(saldoDesejado) || saldoDesejado < 0) {
+        throw new Error("Saldo deve ser um valor válido (>= 0)");
+      }
+
+      const diferenca = saldoDesejado - saldoAtual;
+
+      console.log(`📊 [AJUSTE] Saldo Atual: R$ ${saldoAtual.toFixed(2)}`);
+      console.log(`📊 [AJUSTE] Saldo Desejado: R$ ${saldoDesejado.toFixed(2)}`);
+      console.log(`📊 [AJUSTE] Diferença: R$ ${diferenca.toFixed(2)}`);
+
+      // Se diferença é ZERO, não fazer nada
+      if (Math.abs(diferenca) < 0.01) {
+        console.log("ℹ️ [AJUSTE] Saldo já está correto, nenhuma alteração necessária");
+        return { caixaId, saldoDesejado, saldoAtual, diferenca: 0 };
+      }
+
+      // ✅ CORREÇÃO: Criar FECHAMENTO ao invés de movimentação
+      // Criar fechamento para ONTEM com o valor desejado
+      // Assim, o saldo de hoje vai partir desse valor como saldo_inicial
+      const ontem = new Date();
+      ontem.setDate(ontem.getDate() - 1);
+      const dataFechamento = ontem.toISOString().split('T')[0] + 'T23:59:59Z';
+
+      console.log(`🔧 [AJUSTE] Criando fechamento para ${ontem.toISOString().split('T')[0]}`);
+
+      // Verificar se já existe fechamento para ontem
+      const { data: fechamentoExistente, error: errorCheck } = await supabase
+        .from("fechamentos_caixa")
+        .select("id")
+        .eq("caixa_id", caixaId)
+        .gte("data_fechamento", ontem.toISOString().split('T')[0] + 'T00:00:00Z')
+        .lt("data_fechamento", new Date().toISOString().split('T')[0] + 'T00:00:00Z')
+        .maybeSingle();
+
+      if (errorCheck && errorCheck.code !== 'PGRST116') {
+        throw errorCheck;
+      }
+
+      if (fechamentoExistente) {
+        // Atualizar fechamento existente
+        const { error: updateError } = await supabase
+          .from("fechamentos_caixa")
+          .update({
+            valor_contado: saldoDesejado,
+            observacoes: `Saldo ajustado manualmente pelo admin de R$ ${saldoAtual.toFixed(2)} para R$ ${saldoDesejado.toFixed(2)}`,
+            status: "aprovado",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", fechamentoExistente.id);
+
+        if (updateError) throw updateError;
+        console.log(`✅ [AJUSTE] Fechamento existente ATUALIZADO para R$ ${saldoDesejado.toFixed(2)}`);
+      } else {
+        // Criar novo fechamento
+        const { error: insertError } = await supabase
+          .from("fechamentos_caixa")
+          .insert({
+            caixa_id: caixaId,
+            data_fechamento: dataFechamento,
+            valor_contado: saldoDesejado,
+            observacoes: `Fechamento criado via ajuste manual - saldo ajustado de R$ ${saldoAtual.toFixed(2)} para R$ ${saldoDesejado.toFixed(2)}`,
+            status: "aprovado",
+          });
+
+        if (insertError) throw insertError;
+        console.log(`✅ [AJUSTE] Novo fechamento CRIADO para R$ ${saldoDesejado.toFixed(2)}`);
+      }
+
+      return { caixaId, saldoDesejado, saldoAtual, diferenca };
+    },
+    onSuccess: ({ saldoAtual, saldoDesejado, diferenca }) => {
+      // ✅ Invalidar queries para recalcular tudo
+      queryClient.invalidateQueries({ queryKey: ["caixas"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_inicial"] }); // ✅ Adicionado
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      queryClient.invalidateQueries({ queryKey: ["fechamentos_hoje"] }); // ✅ Adicionado
+
+      toast.success(
+        `✅ Saldo ajustado: R$ ${saldoAtual.toFixed(2)} → R$ ${saldoDesejado.toFixed(2)}`
+      );
+
+      console.log(`📊 [AJUSTE] Fechamento criado/atualizado, queries invalidadas`);
+      console.log(`   Novo saldo inicial de hoje será: R$ ${saldoDesejado.toFixed(2)}`);
+
+      log({
+        acao: "ajustar_saldo",
+        tabela_afetada: "fechamentos_caixa",
+        registro_id: "caixa_id_" + "***",
+        detalhes: `Saldo ajustado de R$ ${saldoAtual.toFixed(2)} para R$ ${saldoDesejado.toFixed(2)} via criação de fechamento`,
+      });
+    },
+    onError: (error: Error) => {
+      toast.error("❌ Erro ao ajustar saldo: " + error.message);
+      console.error(error);
     },
   });
 }

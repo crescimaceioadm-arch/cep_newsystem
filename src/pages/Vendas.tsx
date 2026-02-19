@@ -107,6 +107,12 @@ export default function Vendas() {
       return;
     }
 
+    // 🔍 LOG para debug do caixa selecionado
+    console.log(`[Vendas.handleFinalizarVenda] 🔍 CAIXA SELECIONADO: "${caixaSelecionado}"`);
+    console.log(`[Vendas.handleFinalizarVenda] Context value: caixaSelecionado =`, caixaSelecionado);
+    const caixaFinal = caixaSelecionado || "Caixa 1";
+    console.log(`[Vendas.handleFinalizarVenda] ✅ Será usado: "${caixaFinal}" (por causa do || fallback)`);
+
     const basePayload = {
       qtd_baby_vendida: 0,
       qtd_1_a_16_vendida: 0,
@@ -145,7 +151,7 @@ export default function Vendas() {
       }
     });
 
-    finalizarVenda({
+    const vendaPayload = {
       ...basePayload,
       itens: itensExtras,
       valor_total_venda: valorTotalNum,
@@ -153,7 +159,11 @@ export default function Vendas() {
       vendedora_nome: vendedoraSelecionada || undefined,
       caixa_origem: caixaSelecionado || "Caixa 1",
       itensGrandesSelecionados: itensGrandesSelecionados,
-    }, {
+    };
+    
+    console.log(`[Vendas.handleFinalizarVenda] 📤 Enviando venda com caixa_origem: "${vendaPayload.caixa_origem}"`);
+
+    finalizarVenda(vendaPayload, {
       onSuccess: () => {
         const reset: Record<string, number> = {};
         categoriasVenda.forEach((cat) => { reset[cat.id] = 0; });

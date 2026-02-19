@@ -52,7 +52,7 @@ export function FechamentoCaixaModal({
   }, [open, refetch, refetchSaldo]);
 
   // Usa o valor ao vivo do hook em vez do objeto estático das props
-  const valorSistema = saldoData?.saldoFinal ?? caixa?.saldo_atual ?? 0;
+  const valorSistema = saldoData?.saldoFinal ?? 0;
   const roundToCents = (value: string) => {
     const num = Number.parseFloat(value.replace(/[^0-9.,-]/g, "").replace(",", "."));
     if (Number.isNaN(num)) return "";
