@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,15 +57,16 @@ import {
 } from "@/hooks/useCaixas";
 import { FechamentoCaixaModal } from "@/components/financeiro/FechamentoCaixaModal";
 import { AjustarSaldoCaixaModal } from "@/components/financeiro/AjustarSaldoCaixaModal";
+import { AbrirCaixaAvaliacaoModal, useCaixaAvaliacaoAberto } from "@/components/financeiro/AbrirCaixaAvaliacaoModal";
 import { AprovacaoFechamentosCard } from "@/components/financeiro/AprovacaoFechamentosCard";
 import { RelatorioFechamentosCard } from "@/components/financeiro/RelatorioFechamentosCard";
 import { RelatorioMovimentacoesCard } from "@/components/financeiro/RelatorioMovimentacoesCard";
 import { RelatorioFechamentosCaixaCard } from "@/components/financeiro/RelatorioFechamentosCaixaCard";
-import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil, CheckCircle, XCircle } from "lucide-react";
+import { Wallet, ArrowLeftRight, Plus, Minus, Lock, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Trash2, Pencil, CheckCircle, XCircle, Unlock } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { convertToLocalTime, getDateBrasilia } from "@/lib/utils";
+import { convertToLocalTime, getDateBrasilia, getBrasiliaRange } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 // Componente para Card de Caixa com saldo final calculado
@@ -73,16 +74,20 @@ function CaixaCard({
   caixa, 
   onFechamento,
   onAjusteSaldo,
+  onAbrirAvaliacao,
   fechamentoStatus,
   carregandoStatus,
   isAdmin = false,
+  isAvaliacaoAberto = false,
 }: { 
   caixa: Caixa; 
   onFechamento: (caixa: Caixa) => void;
   onAjusteSaldo: (caixa: Caixa) => void;
+  onAbrirAvaliacao?: (caixa: Caixa) => void;
   fechamentoStatus?: string | null;
   carregandoStatus?: boolean;
   isAdmin?: boolean;
+  isAvaliacaoAberto?: boolean;
 }) {
   const { data: saldoData, isLoading } = useSaldoFinalHoje(caixa.id);
   
@@ -110,6 +115,10 @@ function CaixaCard({
     if (fechamentoStatus === "pendente_aprovacao") {
       return { texto: "Em aprovação", className: "text-amber-600", Icon: AlertTriangle };
     }
+    // Para Avaliação, verificar se está aberto
+    if (caixa.nome === "Avaliação" && isAvaliacaoAberto) {
+      return { texto: "Caixa Aberto", className: "text-blue-600", Icon: Unlock };
+    }
     return { texto: "Não fechado", className: "text-red-600", Icon: XCircle };
   };
 
@@ -134,6 +143,20 @@ function CaixaCard({
         </p>
       </CardContent>
       <div className="px-6 pb-4 space-y-2">
+        {/* Botão de Abertura - apenas para Avaliação */}
+        {caixa.nome === "Avaliação" && !isAvaliacaoAberto && onAbrirAvaliacao && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-green-600 border-green-300 hover:bg-green-50 hover:text-green-700"
+            onClick={() => onAbrirAvaliacao(caixa)}
+          >
+            <Unlock className="h-4 w-4 mr-2" />
+            Abrir Caixa
+          </Button>
+        )}
+        
+        {/* Botão de Fechamento */}
         <Button
           variant="outline"
           size="sm"
@@ -143,6 +166,8 @@ function CaixaCard({
           <Lock className="h-4 w-4 mr-2" />
           Realizar Fechamento
         </Button>
+        
+        {/* Botão de Ajuste - apenas Admin */}
         {isAdmin && (
           <Button
             variant="outline"
@@ -154,6 +179,8 @@ function CaixaCard({
             Ajustar Saldo
           </Button>
         )}
+        
+        {/* Status */}
         <p className={`text-xs font-medium ${statusInfo.className}`}>
           <span className="inline-flex items-center gap-1">
             {statusInfo.Icon && <statusInfo.Icon className="h-3.5 w-3.5" />}
@@ -169,6 +196,8 @@ export default function Financeiro() {
   const { caixaSelecionado } = useCaixa();
   const { cargo } = useUser();
   const isAdmin = cargo === 'admin';
+  const queryClient = useQueryClient();
+  const { isAberto: isAvaliacaoAberto } = useCaixaAvaliacaoAberto();
   
   const { data: caixas, isLoading: loadingCaixas, refetch } = useCaixas();
   const { data: movimentacoes, isLoading: loadingMov } = useMovimentacoesCaixa();
@@ -177,15 +206,28 @@ export default function Financeiro() {
   const deleteMovimentacao = useDeleteMovimentacao();
   const { mutateAsync: editarMovimentacao, isPending: editandoMov } = useEditarMovimentacao();
 
+  // Buscar caixa de Avaliação
+  const caixaAvaliacao = useMemo(() => {
+    return caixas?.find(c => c.nome === "Avaliação") || null;
+  }, [caixas]);
+
+  // Buscar saldo do caixa de avaliação
+  const { data: saldoAvaliacao, isLoading: loadingSaldoAvaliacao } = useSaldoFinalHoje(
+    caixaAvaliacao?.id || null
+  );
+
   const { data: fechamentosHoje = [], isLoading: loadingFechamentosHoje } = useQuery({
     queryKey: ["fechamentos_hoje"],
     queryFn: async () => {
-      const hoje = getDateBrasilia();
+      const hoje = new Date();
+      const { start, end } = getBrasiliaRange(hoje, hoje);
+      
       const { data, error } = await supabase
         .from("fechamentos_caixa")
-        .select("caixa_id, status")
-        .gte("data_fechamento", `${hoje}T00:00:00`)
-        .lt("data_fechamento", `${hoje}T23:59:59`);
+        .select("caixa_id, status, data_fechamento")
+        .gte("data_fechamento", start)
+        .lte("data_fechamento", end)
+        .order("data_fechamento", { ascending: false }); // ✅ Mais recente primeiro
 
       if (error) throw error;
       return data || [];
@@ -194,8 +236,12 @@ export default function Financeiro() {
 
   const statusPorCaixa = useMemo(() => {
     const map = new Map<string, string>();
+    // Como está ordenado DESC, o primeiro de cada caixa é o mais recente
     fechamentosHoje.forEach((f: any) => {
-      if (f?.caixa_id) map.set(f.caixa_id, f.status);
+      if (f?.caixa_id && !map.has(f.caixa_id)) {
+        // Só adiciona se ainda não existe (garante pegar o mais recente)
+        map.set(f.caixa_id, f.status);
+      }
     });
     return map;
   }, [fechamentosHoje]);
@@ -219,6 +265,10 @@ export default function Financeiro() {
   // Ajuste de Saldo Modal
   const [modalAjusteSaldo, setModalAjusteSaldo] = useState(false);
   const [caixaAjusteSaldo, setCaixaAjusteSaldo] = useState<Caixa | null>(null);
+
+  // Abertura de Caixa Avaliação Modal
+  const [modalAbrirAvaliacao, setModalAbrirAvaliacao] = useState(false);
+  const [caixaAbrirAvaliacao, setCaixaAbrirAvaliacao] = useState<Caixa | null>(null);
 
   // Filtro de Data
   const [dataInicio, setDataInicio] = useState<string>("");
@@ -266,6 +316,12 @@ export default function Financeiro() {
   const handleTransferencia = () => {
     if (!origem || !destino || !valorTransf || origem === destino) return;
 
+    // Verificar se envolve Avaliação e se está aberto
+    if ((origem === "Avaliação" || destino === "Avaliação") && !isAvaliacaoAberto) {
+      toast.error("❌ O Caixa de Avaliação não está aberto. Abra o caixa antes de realizar transferências.");
+      return;
+    }
+
     transferir(
       {
         origemNome: origem,
@@ -286,6 +342,12 @@ export default function Financeiro() {
 
   const handleMovimentacao = () => {
     if (!caixaMov || !valorMov) return;
+
+    // Verificar se é Avaliação e se está aberto
+    if (caixaMov === "Avaliação" && !isAvaliacaoAberto) {
+      toast.error("❌ O Caixa de Avaliação não está aberto. Abra o caixa antes de realizar movimentações.");
+      return;
+    }
 
     movimentar(
       {
@@ -309,6 +371,10 @@ export default function Financeiro() {
     setModalFechamento(true);
   };
 
+  const openAbrirAvaliacao = (caixa: Caixa) => {
+    setCaixaAbrirAvaliacao(caixa);
+    setModalAbrirAvaliacao(true);
+  };
 
   // 🛡️ Handlers seguros para mudança de data
   const handleDataInicioChange = (novaData: string) => {
@@ -550,6 +616,20 @@ export default function Financeiro() {
     }
   };
 
+  // Handler para atualizar todos os dados relevantes
+  const handleAtualizarFinanceiro = () => {
+    // Invalida todas as queries relevantes para garantir atualização total
+    queryClient.invalidateQueries({ queryKey: ["caixas"] });
+    queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+    queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
+    queryClient.invalidateQueries({ queryKey: ["saldo_inicial"] });
+    queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+    queryClient.invalidateQueries({ queryKey: ["fechamentos_hoje"] });
+    // Se quiser garantir, pode invalidar tudo:
+    // queryClient.invalidateQueries();
+    refetch(); // ainda chama o refetch dos caixas para manter compatibilidade
+  };
+
   return (
     <MainLayout title="Financeiro / Caixas">
       <div className="space-y-6">
@@ -559,7 +639,7 @@ export default function Financeiro() {
             <h1 className="text-3xl font-bold tracking-tight">Financeiro / Caixas</h1>
             <p className="text-muted-foreground">Controle os caixas físicos da loja</p>
           </div>
-          <Button variant="outline" onClick={() => refetch()}>
+          <Button variant="outline" onClick={handleAtualizarFinanceiro}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Atualizar
           </Button>
@@ -579,9 +659,11 @@ export default function Financeiro() {
                   setCaixaAjusteSaldo(c);
                   setModalAjusteSaldo(true);
                 }}
+                onAbrirAvaliacao={openAbrirAvaliacao}
                 fechamentoStatus={statusPorCaixa.get(caixa.id)}
                 carregandoStatus={loadingFechamentosHoje}
                 isAdmin={isAdmin}
+                isAvaliacaoAberto={isAvaliacaoAberto}
               />
             ))
           )}
@@ -1266,6 +1348,19 @@ N
           onOpenChange={setModalAjusteSaldo}
           caixaId={caixaAjusteSaldo.id}
           caixaNome={caixaAjusteSaldo.nome}
+          onSuccess={() => {
+            refetch();
+          }}
+        />
+      )}
+
+      {/* Modal de Abertura de Caixa Avaliação */}
+      {caixaAbrirAvaliacao && (
+        <AbrirCaixaAvaliacaoModal
+          open={modalAbrirAvaliacao}
+          onOpenChange={setModalAbrirAvaliacao}
+          saldoSistema={saldoAvaliacao?.saldoFinal ?? 0}
+          isLoading={loadingSaldoAvaliacao}
           onSuccess={() => {
             refetch();
           }}

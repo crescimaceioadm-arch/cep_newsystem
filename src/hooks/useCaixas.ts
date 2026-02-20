@@ -624,6 +624,8 @@ export function useFechamentoCaixa() {
       queryClient.invalidateQueries({ queryKey: ["fechamentos_pendentes"] });
       queryClient.invalidateQueries({ queryKey: ["historico_fechamentos"] });
       queryClient.invalidateQueries({ queryKey: ["estatisticas_fechamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["fechamentos_hoje"] }); // ✅ IMPORTANTE: atualiza status na tela
+      queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] }); // ✅ Atualiza saldo dos cards
       const mensagem = status === "pendente_aprovacao"
         ? "Caixa enviado para aprovação"
         : "Caixa fechado;";

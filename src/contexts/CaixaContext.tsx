@@ -3,7 +3,7 @@ import { UserRole } from "./UserContext";
 
 const STORAGE_KEY = "caixa_selecionado";
 
-export type CaixaOption = "Caixa 1" | "Caixa 2" | "Caixa 3";
+export type CaixaOption = "Caixa 1" | "Caixa 2";
 
 interface CaixaContextType {
   caixaSelecionado: CaixaOption | null;
@@ -31,7 +31,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     // Initialize from localStorage synchronously to prevent flicker
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && ["Caixa 1", "Caixa 2", "Caixa 3"].includes(stored)) {
+      if (stored && ["Caixa 1", "Caixa 2"].includes(stored)) {
         return stored as CaixaOption;
       }
     }

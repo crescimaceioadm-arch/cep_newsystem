@@ -206,6 +206,13 @@ export function useFinalizarAtendimento() {
       if (valorDinheiro > 0) {
         console.log("[useFinalizarAtendimento] Registrando R$", valorDinheiro, "em dinheiro no caixa Avaliação");
 
+        // Verificar se o caixa de Avaliação está aberto
+        const caixaAvaliacaoAberto = localStorage.getItem("caixa_avaliacao_aberto") === "1";
+        if (!caixaAvaliacaoAberto) {
+          toast.error("❌ O Caixa de Avaliação não está aberto. Abra o caixa antes de finalizar pagamentos em dinheiro.");
+          throw new Error("Caixa de Avaliação não está aberto");
+        }
+
         // Buscar o caixa de Avaliação
         const { data: caixaAvaliacao, error: caixaError } = await supabase
           .from("caixas")

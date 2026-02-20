@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFechamentoCaixa, useResumoVendasPorCaixa, useSaldoFinalHoje, Caixa } from "@/hooks/useCaixas";
+import { useQueryClient } from "@tanstack/react-query";
 import { convertToLocalTime } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 import { Banknote, CreditCard, Smartphone, Wallet, RefreshCcw } from "lucide-react";
@@ -34,6 +35,7 @@ export function FechamentoCaixaModal({
   const { data: resumo, isLoading, refetch } = useResumoVendasPorCaixa(caixa?.nome || null);
   const { data: saldoData, refetch: refetchSaldo } = useSaldoFinalHoje(caixa?.id || null);
   const { mutate: fecharCaixa, isPending } = useFechamentoCaixa();
+  const queryClient = useQueryClient();
 
   // Reset ao abrir - também atualiza o saldo do caixa
   useEffect(() => {
@@ -94,10 +96,20 @@ export function FechamentoCaixaModal({
           setDataFechamento("");
           onOpenChange(false);
           
+          // Invalida queries para atualizar status imediatamente na tela principal
+          queryClient.invalidateQueries({ queryKey: ["fechamentos_hoje"] });
+          queryClient.invalidateQueries({ queryKey: ["caixas"] });
+          queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+          
           // Exibir mensagem apropriada
           if (temDiferenca) {
             toast.success("Fechamento registrado! Aguardando aprovação do admin.", { duration: 4000 });
+          } else {
+            toast.success("Fechamento registrado e aprovado!", { duration: 3000 });
           }
+        },
+        onError: (err: any) => {
+          toast.error(err?.message || "Erro ao fechar caixa");
         },
       }
     );
