@@ -3,7 +3,7 @@ import { UserRole } from "./UserContext";
 
 const STORAGE_KEY = "caixa_selecionado";
 
-export type CaixaOption = "Caixa 1" | "Caixa 2";
+export type CaixaOption = "Caixa 1" | "Caixa 2" | "Caixa 3";
 
 interface CaixaContextType {
   caixaSelecionado: CaixaOption | null;
@@ -31,7 +31,7 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
     // Initialize from localStorage synchronously to prevent flicker
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && ["Caixa 1", "Caixa 2"].includes(stored)) {
+      if (stored && ["Caixa 1", "Caixa 2", "Caixa 3"].includes(stored)) {
         return stored as CaixaOption;
       }
     }
@@ -51,11 +51,10 @@ export function CaixaProvider({ children }: { children: ReactNode }) {
   };
 
   const initializeCaixaForRole = (cargo: UserRole | null, userId: string | null) => {
-    // Auto-atribuir Caixa 1 para admin ao fazer login
-    if (cargo === 'admin' && userId && !caixaSelecionado) {
-      const caixa: CaixaOption = "Caixa 1";
-      setCaixaState(caixa);
-      localStorage.setItem(STORAGE_KEY, caixa);
+    // Admin não auto-atribui mais - vai escolher no modal
+    // Apenas limpa configuração antiga se houver
+    if (cargo === 'admin' && userId && caixaSelecionado && caixaSelecionado !== "Caixa 3") {
+      limparCaixa();
     }
   };
 

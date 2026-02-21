@@ -79,6 +79,7 @@ function CaixaCard({
   carregandoStatus,
   isAdmin = false,
   isAvaliacaoAberto = false,
+  caixaSelecionado = null,
 }: { 
   caixa: Caixa; 
   onFechamento: (caixa: Caixa) => void;
@@ -88,6 +89,7 @@ function CaixaCard({
   carregandoStatus?: boolean;
   isAdmin?: boolean;
   isAvaliacaoAberto?: boolean;
+  caixaSelecionado?: string | null;
 }) {
   const { data: saldoData, isLoading } = useSaldoFinalHoje(caixa.id);
   
@@ -109,17 +111,20 @@ function CaixaCard({
     if (carregandoStatus) {
       return { texto: "Carregando status...", className: "text-muted-foreground", Icon: null };
     }
+    
+    // 1. Se tem fechamento aprovado hoje = FECHADO
     if (fechamentoStatus === "aprovado") {
-      return { texto: "Fechado", className: "text-green-600", Icon: CheckCircle };
+      return { texto: "Fechado ✔", className: "text-green-600", Icon: CheckCircle };
     }
+    
+    // 2. Se tem fechamento pendente = EM APROVAÇÃO
     if (fechamentoStatus === "pendente_aprovacao") {
-      return { texto: "Em aprovação", className: "text-amber-600", Icon: AlertTriangle };
+      return { texto: "Em aprovação ⏳", className: "text-amber-600", Icon: AlertTriangle };
     }
-    // Para Avaliação, verificar se está aberto
-    if (caixa.nome === "Avaliação" && isAvaliacaoAberto) {
-      return { texto: "Caixa Aberto", className: "text-blue-600", Icon: Unlock };
-    }
-    return { texto: "Não fechado", className: "text-red-600", Icon: XCircle };
+    
+    // 3. Se NÃO tem fechamento hoje = ABERTO (está operando)
+    // Isso vale para TODOS os caixas (Caixa 1, 2 e Avaliação)
+    return { texto: "Caixa Aberto ✓", className: "text-blue-600", Icon: Unlock };
   };
 
   const statusInfo = getStatusInfo();
@@ -224,10 +229,10 @@ export default function Financeiro() {
       
       const { data, error } = await supabase
         .from("fechamentos_caixa")
-        .select("caixa_id, status, data_fechamento")
+        .select("caixa_id, status, data_fechamento, caixa:caixas(nome)")
         .gte("data_fechamento", start)
         .lte("data_fechamento", end)
-        .order("data_fechamento", { ascending: false }); // ✅ Mais recente primeiro
+        .order("data_fechamento", { ascending: false });
 
       if (error) throw error;
       return data || [];
@@ -236,10 +241,8 @@ export default function Financeiro() {
 
   const statusPorCaixa = useMemo(() => {
     const map = new Map<string, string>();
-    // Como está ordenado DESC, o primeiro de cada caixa é o mais recente
     fechamentosHoje.forEach((f: any) => {
       if (f?.caixa_id && !map.has(f.caixa_id)) {
-        // Só adiciona se ainda não existe (garante pegar o mais recente)
         map.set(f.caixa_id, f.status);
       }
     });
@@ -664,6 +667,7 @@ export default function Financeiro() {
                 carregandoStatus={loadingFechamentosHoje}
                 isAdmin={isAdmin}
                 isAvaliacaoAberto={isAvaliacaoAberto}
+                caixaSelecionado={caixaSelecionado}
               />
             ))
           )}

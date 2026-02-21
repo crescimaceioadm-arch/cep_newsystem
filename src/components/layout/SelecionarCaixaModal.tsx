@@ -1,16 +1,21 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCaixa, CaixaOption } from "@/contexts/CaixaContext";
+import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/integrations/supabase/client";
 import { getDateBrasilia } from "@/lib/utils";
-import { MonitorSmartphone } from "lucide-react";
+import { MonitorSmartphone, UserCheck } from "lucide-react";
 
 const caixas: CaixaOption[] = ["Caixa 1", "Caixa 2"];
 
 export function SelecionarCaixaModal() {
   const { caixaSelecionado, setCaixaSelecionado, showModal, setShowModal } = useCaixa();
+  const { cargo } = useUser();
+  const navigate = useNavigate();
+  const isAdmin = cargo === "admin";
 
   const { data: fechamentosHoje = [], isLoading: loadingFechamentos } = useQuery({
     queryKey: ["fechamentos_hoje_modal"],
@@ -36,6 +41,19 @@ export function SelecionarCaixaModal() {
     return map;
   }, [fechamentosHoje]);
 
+  // Verifica se todos os caixas normais (1 e 2) já foram fechados/aprovados
+  const todosCaixasFechados = useMemo(() => {
+    if (isAdmin) return false; // Admin sempre vê o modal
+    return caixas.every(c => statusPorCaixa.get(c) === "aprovado");
+  }, [statusPorCaixa, isAdmin]);
+
+  // Fecha o modal automaticamente se todos os caixas já estão fechados
+  useEffect(() => {
+    if (!isAdmin && todosCaixasFechados && showModal) {
+      setShowModal(false);
+    }
+  }, [todosCaixasFechados, showModal, setShowModal, isAdmin]);
+
   const getStatusInfo = (caixa: string) => {
     const status = statusPorCaixa.get(caixa);
     if (status === "aprovado") return { label: "Fechado", className: "text-green-700" };
@@ -54,47 +72,107 @@ export function SelecionarCaixaModal() {
     setShowModal(open);
   };
 
+  const handleAvaliadoiraClick = () => {
+    setShowModal(false);
+    navigate("/avaliacao");
+  };
+
+  // Não renderiza o modal se todos os caixas já estão fechados (exceto para admin)
+  if (!isAdmin && todosCaixasFechados) {
+    return null;
+  }
+
   return (
     <Dialog open={showModal} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => !caixaSelecionado && e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MonitorSmartphone className="h-5 w-5 text-primary" />
-            Qual caixa quer abrir?
+            {isAdmin ? "Quer abrir Caixa 3?" : "Qual caixa quer abrir?"}
           </DialogTitle>
           <DialogDescription>
-            Selecione o terminal que sera aberto agora.
+            {isAdmin 
+              ? "Selecione uma opção para continuar." 
+              : "Selecione o terminal que sera aberto agora."}
           </DialogDescription>
         </DialogHeader>
         
         <div className="grid gap-3 py-4">
-          {caixas.map((caixa) => {
-            const isPendente = statusPorCaixa.get(caixa) === "pendente_aprovacao";
-            const statusInfo = getStatusInfo(caixa);
-            return (
-              <div key={caixa} className="space-y-1">
-                <Button
-                  variant={caixaSelecionado === caixa ? "default" : "outline"}
-                  className="h-14 text-lg w-full"
-                  disabled={isPendente}
-                  title={isPendente ? "Fechamento pendente de aprovacao" : undefined}
-                  onClick={() => setCaixaSelecionado(caixa)}
-                >
-                  {caixa}
-                </Button>
-                <p className={`text-xs text-center font-medium ${statusInfo.className}`}>
-                  {statusInfo.label}
-                </p>
-              </div>
-            );
-          })}
+          {isAdmin ? (
+            // Para admin: apenas pergunta sobre Caixa 3
+            <>
+              <Button
+                variant="default"
+                className="h-14 text-lg w-full"
+                onClick={() => setCaixaSelecionado("Caixa 3")}
+              >
+                Sim
+              </Button>
+              <Button
+                variant="outline"
+                className="h-14 text-lg w-full"
+                onClick={() => setShowModal(false)}
+              >
+                Não
+              </Button>
+            </>
+          ) : (
+            // Para não-admin: mostrar apenas caixas não fechados
+            <>
+              {caixas.map((caixa) => {
+                const status = statusPorCaixa.get(caixa);
+                const isPendente = status === "pendente_aprovacao";
+                const isFechado = status === "aprovado";
+                const statusInfo = getStatusInfo(caixa);
+                
+                // Não mostrar caixas já fechados
+                if (isFechado) return null;
+                
+                return (
+                  <div key={caixa} className="space-y-1">
+                    <Button
+                      variant={caixaSelecionado === caixa ? "default" : "outline"}
+                      className="h-14 text-lg w-full"
+                      disabled={isPendente}
+                      title={isPendente ? "Fechamento pendente de aprovacao" : undefined}
+                      onClick={() => setCaixaSelecionado(caixa)}
+                    >
+                      {caixa}
+                    </Button>
+                    <p className={`text-xs text-center font-medium ${statusInfo.className}`}>
+                      {statusInfo.label}
+                    </p>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
 
-        <div className="border-t pt-4">
-          <p className="text-xs text-muted-foreground">
-            Ao abrir um caixa, o status fica como "Caixa aberto" ate o fechamento do dia.
-          </p>
-        </div>
+        {/* Botão Avaliadora */}
+        {!isAdmin && (
+          <div className="border-t pt-4">
+            <Button
+              variant="secondary"
+              className="w-full h-10 flex items-center justify-center gap-2"
+              onClick={handleAvaliadoiraClick}
+            >
+              <UserCheck className="h-4 w-4" />
+              Avaliadora
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Entrar direto como avaliadora sem abrir caixa
+            </p>
+          </div>
+        )}
+
+        {!isAdmin && (
+          <div className="border-t pt-4">
+            <p className="text-xs text-muted-foreground">
+              Ao abrir um caixa, o status fica como "Caixa aberto" ate o fechamento do dia.
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

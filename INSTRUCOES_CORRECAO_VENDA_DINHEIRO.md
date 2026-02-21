@@ -182,23 +182,6 @@ Executando queries no Supabase, encontramos:
 ```
 
 ---
-
-## 📝 O QUE PRECISA SER FEITO
-
-Para corrigir, é necessário:
-
-1. **Remover os triggers antigos** da tabela vendas (3 triggers)
-2. **Remover as funções antigos** que usam `saldo_atual` (5 funções)
-3. **Recriar as funções** SEM incluir `UPDATE caixas SET saldo_atual`
-4. **Recriar os triggers** apontando para as funções corrigidas
-
-Assim:
-- Movimentações continuarão sendo registradas (importantes!)
-- MAS sem tentar atualizar coluna que não existe
-- Saldo será calculado dinamicamente (como deveria ser)
-
----
-
 ## ⚠️ IMPACTO
 
 **Funcionalidades afetadas pela função**
@@ -218,19 +201,3 @@ Assim:
 |---|---|
 | [LOGICA_FLUXO_CAIXA.md](LOGICA_FLUXO_CAIXA.md) | Toda o sistema de cálculo de saldo (completo) |
 | [CORRECAO_DUPLICACAO_SALDO.md](CORRECAO_DUPLICACAO_SALDO.md) | Problema separado: saldo duplicado (R$ 1600) |
-
----
-
-## 🔗 Referência das Funções/Triggers
-
-**Arquivo original (criou o problema):**
-- `supabase/20260127_fix_saldo_movimentacoes.sql`
-
-**Investigação (como encontramos):**
-- `supabase/20260219_DIAGNOSTICO_PROFUNDO.sql`
-- `supabase/20260219_VER_triggers.sql`
-
-**Scripts que tentaram corrigir (não funcionaram):**
-- `supabase/20260219_FIX_TODAS_FUNCOES.sql`
-- `supabase/20260219_HOTFIX_FINAL_SAFE.sql`
-- `supabase/20260219_LIMPAR_triggers.sql`

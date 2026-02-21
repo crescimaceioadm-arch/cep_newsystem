@@ -70,14 +70,6 @@ export function AppSidebar() {
     const urlParaVerificar = item.url;
     const menuPermissao = `menu:${urlParaVerificar}` as any;
     const temPermissao = hasPermission(menuPermissao);
-    
-    console.log(`[AppSidebar] Verificando ${item.title} (${item.url}):`, {
-      urlParaVerificar,
-      menuPermissao,
-      temPermissao,
-      cargo
-    });
-    
     return temPermissao;
   });
 
