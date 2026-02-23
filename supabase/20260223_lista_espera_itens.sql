@@ -200,86 +200,83 @@ ALTER TABLE lista_espera_clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lista_espera_itens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lista_espera_matches ENABLE ROW LEVEL SECURITY;
 
+-- Remover políticas existentes (se houver)
+DROP POLICY IF EXISTS "Usuários autenticados podem ver clientes" ON lista_espera_clientes;
+DROP POLICY IF EXISTS "Usuários autenticados podem criar clientes" ON lista_espera_clientes;
+DROP POLICY IF EXISTS "Usuários autenticados podem atualizar clientes" ON lista_espera_clientes;
+DROP POLICY IF EXISTS "Usuários autenticados podem deletar clientes" ON lista_espera_clientes;
+
+DROP POLICY IF EXISTS "Usuários autenticados podem ver itens" ON lista_espera_itens;
+DROP POLICY IF EXISTS "Usuários autenticados podem criar itens" ON lista_espera_itens;
+DROP POLICY IF EXISTS "Usuários autenticados podem atualizar itens" ON lista_espera_itens;
+DROP POLICY IF EXISTS "Usuários autenticados podem deletar itens" ON lista_espera_itens;
+
+DROP POLICY IF EXISTS "Usuários autenticados podem ver matches" ON lista_espera_matches;
+DROP POLICY IF EXISTS "Usuários autenticados podem criar matches" ON lista_espera_matches;
+DROP POLICY IF EXISTS "Usuários autenticados podem atualizar matches" ON lista_espera_matches;
+DROP POLICY IF EXISTS "Usuários autenticados podem deletar matches" ON lista_espera_matches;
+
 -- Política para lista_espera_clientes
--- Usuários autenticados podem ver todos os registros
 CREATE POLICY "Usuários autenticados podem ver clientes"
   ON lista_espera_clientes
   FOR SELECT
-  TO authenticated
   USING (true);
 
--- Usuários autenticados podem inserir
 CREATE POLICY "Usuários autenticados podem criar clientes"
   ON lista_espera_clientes
   FOR INSERT
-  TO authenticated
   WITH CHECK (true);
 
--- Usuários autenticados podem atualizar
 CREATE POLICY "Usuários autenticados podem atualizar clientes"
   ON lista_espera_clientes
   FOR UPDATE
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (true);
 
--- Usuários autenticados podem deletar
 CREATE POLICY "Usuários autenticados podem deletar clientes"
   ON lista_espera_clientes
   FOR DELETE
-  TO authenticated
   USING (true);
 
 -- Política para lista_espera_itens
 CREATE POLICY "Usuários autenticados podem ver itens"
   ON lista_espera_itens
   FOR SELECT
-  TO authenticated
   USING (true);
 
 CREATE POLICY "Usuários autenticados podem criar itens"
   ON lista_espera_itens
   FOR INSERT
-  TO authenticated
   WITH CHECK (true);
 
 CREATE POLICY "Usuários autenticados podem atualizar itens"
   ON lista_espera_itens
   FOR UPDATE
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (true);
 
 CREATE POLICY "Usuários autenticados podem deletar itens"
   ON lista_espera_itens
   FOR DELETE
-  TO authenticated
   USING (true);
 
 -- Política para lista_espera_matches
 CREATE POLICY "Usuários autenticados podem ver matches"
   ON lista_espera_matches
   FOR SELECT
-  TO authenticated
   USING (true);
 
 CREATE POLICY "Usuários autenticados podem criar matches"
   ON lista_espera_matches
   FOR INSERT
-  TO authenticated
   WITH CHECK (true);
 
 CREATE POLICY "Usuários autenticados podem atualizar matches"
   ON lista_espera_matches
   FOR UPDATE
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (true);
 
 CREATE POLICY "Usuários autenticados podem deletar matches"
   ON lista_espera_matches
   FOR DELETE
-  TO authenticated
   USING (true);
 
 -- ========================================

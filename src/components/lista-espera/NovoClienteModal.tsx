@@ -99,8 +99,9 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
     // Filtrar itens que têm tipo_id definido
     const itensValidos = itensDesejados.filter((item) => item.tipo_id);
 
-    if (itensValidos.length === 0) {
-      toast.error("Adicione pelo menos 1 item desejado");
+    // Validar que há pelo menos itens grandes OU outros itens desejados
+    if (itensValidos.length === 0 && !outrosItensDesejados.trim()) {
+      toast.error("Adicione pelo menos 1 item desejado (grande ou outros itens)");
       return;
     }
 

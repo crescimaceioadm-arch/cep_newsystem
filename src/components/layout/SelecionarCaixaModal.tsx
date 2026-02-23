@@ -10,6 +10,7 @@ import { getDateBrasilia } from "@/lib/utils";
 import { MonitorSmartphone, UserCheck } from "lucide-react";
 
 const caixas: CaixaOption[] = ["Caixa 1", "Caixa 2"];
+const STORAGE_KEY_NAO_ABRIR_CAIXA3 = "admin_nao_abrir_caixa3";
 
 export function SelecionarCaixaModal() {
   const { caixaSelecionado, setCaixaSelecionado, showModal, setShowModal } = useCaixa();
@@ -77,6 +78,13 @@ export function SelecionarCaixaModal() {
     navigate("/avaliacao");
   };
 
+  const handleAdminNaoAbrir = () => {
+    // Salvar escolha do admin de não abrir Caixa 3 hoje
+    const hoje = getDateBrasilia();
+    localStorage.setItem(STORAGE_KEY_NAO_ABRIR_CAIXA3, hoje);
+    setShowModal(false);
+  };
+
   // Não renderiza o modal se todos os caixas já estão fechados (exceto para admin)
   if (!isAdmin && todosCaixasFechados) {
     return null;
@@ -111,7 +119,7 @@ export function SelecionarCaixaModal() {
               <Button
                 variant="outline"
                 className="h-14 text-lg w-full"
-                onClick={() => setShowModal(false)}
+                onClick={handleAdminNaoAbrir}
               >
                 Não
               </Button>
