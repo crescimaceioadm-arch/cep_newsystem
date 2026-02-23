@@ -92,7 +92,7 @@ export function useCreateListaEspera() {
     mutationFn: async (dados: {
       nome_cliente: string;
       telefone: string;
-      cpf?: string;
+      cpf: string;
       observacoes?: string;
       itens: Array<{
         tipo_id: string;

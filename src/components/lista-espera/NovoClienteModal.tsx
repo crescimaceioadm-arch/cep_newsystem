@@ -45,6 +45,7 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
   const [telefone, setTelefone] = useState("");
   const [cpf, setCpf] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [outrosItensDesejados, setOutrosItensDesejados] = useState("");
   const [itensDesejados, setItensDesejados] = useState<ItemDesejado[]>([
     { tipo_id: "", descricao: "", cor: "", ordem: 1 },
   ]);
@@ -54,6 +55,7 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
     setTelefone("");
     setCpf("");
     setObservacoes("");
+    setOutrosItensDesejados("");
     setItensDesejados([{ tipo_id: "", descricao: "", cor: "", ordem: 1 }]);
   };
 
@@ -89,6 +91,10 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
       toast.error("Informe o telefone do cliente");
       return;
     }
+    if (!cpf.trim()) {
+      toast.error("Informe o CPF do cliente");
+      return;
+    }
 
     // Filtrar itens que têm tipo_id definido
     const itensValidos = itensDesejados.filter((item) => item.tipo_id);
@@ -98,12 +104,21 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
       return;
     }
 
+    // Concatenar outros itens desejados nas observações
+    let observacoesFinais = "";
+    if (outrosItensDesejados.trim()) {
+      observacoesFinais = `OUTROS ITENS DESEJADOS:\n${outrosItensDesejados.trim()}`;
+    }
+    if (observacoes.trim()) {
+      observacoesFinais += observacoesFinais ? `\n\nOBSERVAÇÕES:\n${observacoes.trim()}` : observacoes.trim();
+    }
+
     createMutation.mutate(
       {
         nome_cliente: nomeCliente,
         telefone: telefone,
-        cpf: cpf || undefined,
-        observacoes: observacoes || undefined,
+        cpf: cpf,
+        observacoes: observacoesFinais || undefined,
         itens: itensValidos,
       },
       {
@@ -149,7 +164,7 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
             </div>
 
             <div>
-              <Label htmlFor="cpf">CPF (opcional)</Label>
+              <Label htmlFor="cpf">CPF *</Label>
               <Input
                 id="cpf"
                 placeholder="000.000.000-00"
@@ -172,10 +187,27 @@ export function NovoClienteModal({ open, onOpenChange }: NovoClienteModalProps) 
 
           <Separator />
 
-          {/* Itens Desejados */}
+          {/* Outros Itens Desejados (não grandes) */}
+          <div>
+            <Label htmlFor="outros-itens">Outros Itens Desejados (não grandes)</Label>
+            <Textarea
+              id="outros-itens"
+              placeholder="Ex: roupas tamanho P, sapatos número 35, brinquedos educativos..."
+              value={outrosItensDesejados}
+              onChange={(e) => setOutrosItensDesejados(e.target.value)}
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Itens que não fazem parte da categoria de itens grandes
+            </p>
+          </div>
+
+          <Separator />
+
+          {/* Itens Grandes Desejados */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <Label className="text-lg font-semibold">Itens Desejados</Label>
+              <Label className="text-lg font-semibold">Itens Grandes Desejados</Label>
               {itensDesejados.length < 3 && (
                 <Button
                   type="button"
