@@ -37,16 +37,18 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: [
     '/', '/recepcao', '/recepcao/clientes', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', 
     '/financeiro', '/estoque', '/dashboard', '/configuracoes', '/auth', '/marketing', '/performance-vendas', '/logs-atividades',
-    '/cockpit-real-time'
+    '/cockpit-real-time', '/lista-espera'
   ],
   caixa: [
-    '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth', '/performance-vendas'
+    '/recepcao', '/vendas', '/vendas/historico', '/atendimentos/historico', '/financeiro', '/dashboard', '/auth', '/performance-vendas',
+    '/lista-espera'
   ],
   avaliadora: [
     '/recepcao', '/avaliacao', '/atendimentos/historico', '/auth'
   ],
   geral: [
-    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing', '/performance-vendas'
+    '/', '/recepcao', '/vendas', '/avaliacao', '/atendimentos/historico', '/vendas/historico', '/financeiro', '/auth', '/marketing', 
+    '/performance-vendas', '/lista-espera'
   ],
   social_media: [
     '/marketing', '/auth'

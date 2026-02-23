@@ -189,3 +189,60 @@ export interface LogAtividade {
   user_agent: string | null;
   created_at: string;
 }
+
+// ========================================
+// LISTA DE ESPERA DE ITENS
+// ========================================
+
+export type StatusListaEspera = 'aguardando' | 'notificado' | 'atendido' | 'cancelado';
+export type StatusItemEspera = 'aguardando' | 'match_encontrado' | 'recusado_pelo_usuario';
+export type StatusMatch = 'pendente' | 'aceito' | 'recusado';
+
+export interface ListaEsperaCliente {
+  id: string;
+  nome_cliente: string;
+  telefone: string;
+  cpf: string | null;
+  observacoes: string | null;
+  status: StatusListaEspera;
+  criado_por: string | null;
+  data_atendimento: string | null;
+  atendido_por: string | null;
+  created_at: string;
+  updated_at: string;
+  
+  // Relações (joins)
+  itens?: ListaEsperaItem[];
+  matches_pendentes?: number; // Contagem de matches pendentes
+}
+
+export interface ListaEsperaItem {
+  id: string;
+  cliente_id: string;
+  tipo_id: string | null;
+  descricao: string | null;
+  cor: string | null;
+  ordem: number;
+  status: StatusItemEspera;
+  created_at: string;
+  
+  // Relações (joins)
+  tipo?: TipoItemGrande;
+}
+
+export interface ListaEsperaMatch {
+  id: string;
+  cliente_id: string;
+  item_desejado_id: string;
+  item_estoque_id: string;
+  status: StatusMatch;
+  verificado_por: string | null;
+  data_verificacao: string | null;
+  motivo_recusa: string | null;
+  created_at: string;
+  
+  // Relações (joins)
+  cliente?: ListaEsperaCliente;
+  item_desejado?: ListaEsperaItem;
+  item_estoque?: ItemGrandeIndividual;
+}

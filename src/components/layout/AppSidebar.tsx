@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Activity,
   ChevronRight,
-  FileText
+  FileText,
+  Bell
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -50,6 +51,7 @@ const allMenuItems = [
   { title: "Histórico Vendas", url: "/vendas/historico", icon: History },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
+  { title: "Lista de Espera", url: "/lista-espera", icon: Bell },
   { title: "Estoque", url: "/estoque", icon: Box, submenu: [
     { title: "Gestão de Estoque", url: "/estoque" },
     { title: "Itens Grandes", url: "/estoque/itens-grandes" },

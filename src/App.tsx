@@ -28,6 +28,7 @@ import RelatorioItensGrandes from "./pages/RelatorioItensGrandes";
 import PerfilVendas from "./pages/PerfilVendas";
 import PerformanceVendas from "./pages/PerformanceVendas";
 import LogsAtividades from "./pages/LogsAtividades";
+import ListaEspera from "./pages/ListaEspera";
 
 const queryClient = new QueryClient();
 
@@ -60,7 +61,8 @@ const App = () => (
                 <Route path="/dashboard/performance-vendas" element={<RequireRole><PerformanceVendas /></RequireRole>} />
                 <Route path="/performance-vendas" element={<RequireRole><PerformanceVendas /></RequireRole>} />
                 <Route path="/configuracoes" element={<RequireRole><Configuracoes /></RequireRole>} />
-                                <Route path="/logs-atividades" element={<RequireRole><LogsAtividades /></RequireRole>} />
+                <Route path="/logs-atividades" element={<RequireRole><LogsAtividades /></RequireRole>} />
+                <Route path="/lista-espera" element={<RequireRole><ListaEspera /></RequireRole>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </InactivityProvider>
