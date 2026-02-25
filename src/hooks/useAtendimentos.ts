@@ -92,7 +92,14 @@ export function useCreateAtendimento() {
       nomeCliente: string;
       origemAvaliacao?: "presencial" | "whatsapp" | null;
     }) => {
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] ==========================================");
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] mutationFn chamada");
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] Nome:", nomeCliente);
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] Origem:", origemAvaliacao);
+      
       const horaChegada = getDateTimeUTC(); // Agora salva em UTC corretamente
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] Hora chegada:", horaChegada);
+      
       const { data, error } = await supabase
         .from("atendimentos")
         .insert({ 
@@ -104,10 +111,17 @@ export function useCreateAtendimento() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error("❌ [DEBUG CRIAR ATENDIMENTO] Erro:", error);
+        throw error;
+      }
+      
+      console.log("✅ [DEBUG CRIAR ATENDIMENTO] Sucesso! ID:", data.id);
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] ========================================== FIM");
       return data;
     },
     onSuccess: (data) => {
+      console.log("🔍 [DEBUG CRIAR ATENDIMENTO] onSuccess - invalidando queries");
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
       log({
         acao: "criar",
@@ -116,6 +130,7 @@ export function useCreateAtendimento() {
         dados_depois: data,
         detalhes: `Atendimento criado para ${data.nome_cliente} (${data.origem_avaliacao || 'presencial'})`
       });
+      console.log("✅ [DEBUG CRIAR ATENDIMENTO] onSuccess concluído");
     },
   });
 }
@@ -171,9 +186,16 @@ export function useFinalizarAtendimento() {
         pagamento_3_banco?: string | null;
       }
     }) => {
-      console.log("[useFinalizarAtendimento] Payload enviado:", pagamento);
+      console.log("╔════════════════════════════════════════════════════════════════");
+      console.log("║ 🔍 [DEBUG PAGAMENTO] INÍCIO DO PROCESSAMENTO");
+      console.log("╠════════════════════════════════════════════════════════════════");
+      console.log("║ Atendimento ID:", id);
+      console.log("║ Cliente:", pagamento);
+      console.log("║ Timestamp:", new Date().toISOString());
+      console.log("╚════════════════════════════════════════════════════════════════");
       
       // 1. Atualizar o atendimento
+      console.log("\n📝 PASSO 1: Atualizando atendimento no banco...");
       const { data, error } = await supabase
         .from("atendimentos")
         .update({
@@ -185,35 +207,91 @@ export function useFinalizarAtendimento() {
         .single();
       
       if (error) {
-        console.error("[useFinalizarAtendimento] Erro Supabase:", error);
+        console.error("❌ ERRO CRÍTICO ao atualizar atendimento:", error);
         throw error;
       }
 
-      // 2. Calcular valor em DINHEIRO para registrar no caixa de Avaliação
+      console.log("✅ PASSO 1 COMPLETO - Atendimento atualizado");
+      console.log("   Nome Cliente:", data.nome_cliente);
+
+      // 2. Calcular valor em DINHEIRO
+      console.log("\n💰 PASSO 2: Analisando métodos de pagamento...");
+      console.log("   Pagamento 1:");
+      console.log("      - Método:", pagamento.pagamento_1_metodo);
+      console.log("      - Valor:", pagamento.pagamento_1_valor);
+      console.log("      - toLowerCase():", pagamento.pagamento_1_metodo?.toLowerCase());
+      console.log("      - É dinheiro?", pagamento.pagamento_1_metodo?.toLowerCase() === 'dinheiro');
+      
+      console.log("   Pagamento 2:");
+      console.log("      - Método:", pagamento.pagamento_2_metodo);
+      console.log("      - Valor:", pagamento.pagamento_2_valor);
+      console.log("      - toLowerCase():", pagamento.pagamento_2_metodo?.toLowerCase());
+      console.log("      - É dinheiro?", pagamento.pagamento_2_metodo?.toLowerCase() === 'dinheiro');
+      
+      console.log("   Pagamento 3:");
+      console.log("      - Método:", pagamento.pagamento_3_metodo);
+      console.log("      - Valor:", pagamento.pagamento_3_valor);
+      console.log("      - toLowerCase():", pagamento.pagamento_3_metodo?.toLowerCase());
+      console.log("      - É dinheiro?", pagamento.pagamento_3_metodo?.toLowerCase() === 'dinheiro');
+      
       let valorDinheiro = 0;
       
       if (pagamento.pagamento_1_metodo?.toLowerCase() === 'dinheiro') {
-        valorDinheiro += pagamento.pagamento_1_valor || 0;
+        const valor = pagamento.pagamento_1_valor || 0;
+        console.log(`   ✅ Pagamento 1 é DINHEIRO: +R$ ${valor}`);
+        valorDinheiro += valor;
       }
       if (pagamento.pagamento_2_metodo?.toLowerCase() === 'dinheiro') {
-        valorDinheiro += pagamento.pagamento_2_valor || 0;
+        const valor = pagamento.pagamento_2_valor || 0;
+        console.log(`   ✅ Pagamento 2 é DINHEIRO: +R$ ${valor}`);
+        valorDinheiro += valor;
       }
       if (pagamento.pagamento_3_metodo?.toLowerCase() === 'dinheiro') {
-        valorDinheiro += pagamento.pagamento_3_valor || 0;
+        const valor = pagamento.pagamento_3_valor || 0;
+        console.log(`   ✅ Pagamento 3 é DINHEIRO: +R$ ${valor}`);
+        valorDinheiro += valor;
       }
 
-      // 3. Se houve pagamento em dinheiro, registrar na movimentação do caixa "Avaliação"
-      if (valorDinheiro > 0) {
-        console.log("[useFinalizarAtendimento] Registrando R$", valorDinheiro, "em dinheiro no caixa Avaliação");
+      console.log("\n💵 TOTAL EM DINHEIRO CALCULADO: R$", valorDinheiro);
+      console.log("   Condição (valorDinheiro > 0):", valorDinheiro > 0);
 
-        // Verificar se o caixa de Avaliação está aberto
-        const caixaAvaliacaoAberto = localStorage.getItem("caixa_avaliacao_aberto") === "1";
-        if (!caixaAvaliacaoAberto) {
+      // 3. Se houve pagamento em dinheiro, registrar na movimentação
+      if (valorDinheiro > 0) {
+        console.log("\n🏦 PASSO 3: REGISTRANDO NO CAIXA (valorDinheiro > 0)");
+        console.log("═══════════════════════════════════════════════════════════════");
+
+        // 3.1 Verificar localStorage
+        console.log("\n🔐 PASSO 3.1: Verificando localStorage...");
+        console.log("   localStorage completo:");
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.includes('caixa')) {
+            console.log(`      ${key}:`, localStorage.getItem(key));
+          }
+        }
+        
+        const caixaAvaliacaoAberto = localStorage.getItem("caixa_avaliacao_aberto");
+        console.log("\n   Valor de 'caixa_avaliacao_aberto':", caixaAvaliacaoAberto);
+        console.log("   Tipo:", typeof caixaAvaliacaoAberto);
+        console.log("   Comparação === '1':", caixaAvaliacaoAberto === "1");
+        console.log("   Comparação == 1:", caixaAvaliacaoAberto == 1);
+        
+        const isAberto = caixaAvaliacaoAberto === "1";
+        console.log("   Resultado final (isAberto):", isAberto);
+        
+        if (!isAberto) {
+          console.error("\n❌❌❌ BLOQUEADO: Caixa Avaliação NÃO está aberto!");
+          console.error("   FLUXO INTERROMPIDO - Movimentação NÃO será criada");
+          console.error("   Cliente:", data.nome_cliente);
+          console.error("   Valor:", valorDinheiro);
           toast.error("❌ O Caixa de Avaliação não está aberto. Abra o caixa antes de finalizar pagamentos em dinheiro.");
           throw new Error("Caixa de Avaliação não está aberto");
         }
 
-        // Buscar o caixa de Avaliação
+        console.log("✅ PASSO 3.1 COMPLETO - Caixa está aberto");
+
+        // 3.2 Buscar o caixa de Avaliação
+        console.log("\n🔍 PASSO 3.2: Buscando caixa Avaliação no banco...");
         const { data: caixaAvaliacao, error: caixaError } = await supabase
           .from("caixas")
           .select("id")
@@ -221,37 +299,81 @@ export function useFinalizarAtendimento() {
           .single();
 
         if (caixaError) {
-          console.error("[useFinalizarAtendimento] Erro ao buscar caixa Avaliação:", caixaError);
+          console.error("\n❌❌❌ ERRO ao buscar caixa Avaliação:", caixaError);
+          console.error("   Código:", caixaError.code);
+          console.error("   Mensagem:", caixaError.message);
+          console.error("   Detalhes:", caixaError.details);
+          console.error("   FLUXO INTERROMPIDO - Movimentação NÃO será criada");
+          console.error("   Cliente:", data.nome_cliente);
           toast.error("⚠️ Avaliação finalizada, mas não foi possível registrar no caixa. Contate o administrador.");
-          // Não lançar erro para não impedir a finalização do atendimento
-        } else if (caixaAvaliacao) {
-          // Registrar movimentação como SAÍDA (origem é o caixa Avaliação)
-          const { error: movError } = await supabase
+          // ⚠️ NÃO lança erro - atendimento continua finalizado mesmo sem movimentação!
+          console.error("⚠️ ATENÇÃO: Atendimento foi finalizado SEM criar movimentação!");
+        } else if (!caixaAvaliacao) {
+          console.error("\n❌❌❌ Caixa Avaliação NÃO encontrado (retornou null)");
+          console.error("   FLUXO INTERROMPIDO - Movimentação NÃO será criada");
+          console.error("   Cliente:", data.nome_cliente);
+          console.error("⚠️ ATENÇÃO: Atendimento foi finalizado SEM criar movimentação!");
+        } else {
+          console.log("✅ PASSO 3.2 COMPLETO - Caixa encontrado");
+          console.log("   ID do Caixa Avaliação:", caixaAvaliacao.id);
+          
+          // 3.3 Criar movimentação
+          console.log("\n💾 PASSO 3.3: Criando movimentação...");
+          const movimentacao = {
+            caixa_origem_id: caixaAvaliacao.id,
+            caixa_destino_id: null,
+            tipo: 'pagamento_avaliacao',
+            valor: valorDinheiro,
+            motivo: `Pagamento avaliação - ${data.nome_cliente || 'Cliente'}`,
+          };
+          console.log("   Dados da movimentação:", JSON.stringify(movimentacao, null, 2));
+          
+          const { data: movimentacaoData, error: movError } = await supabase
             .from("movimentacoes_caixa")
-            .insert({
-              caixa_origem_id: caixaAvaliacao.id,
-              caixa_destino_id: null,
-              tipo: 'pagamento_avaliacao',
-              valor: valorDinheiro,
-              motivo: `Pagamento avaliação - ${data.nome_cliente || 'Cliente'}`,
-            });
+            .insert(movimentacao)
+            .select()
+            .single();
 
           if (movError) {
-            console.error("[useFinalizarAtendimento] Erro ao registrar movimentação:", movError);
+            console.error("\n❌❌❌ ERRO ao inserir movimentação:", movError);
+            console.error("   Código:", movError.code);
+            console.error("   Mensagem:", movError.message);
+            console.error("   Detalhes:", movError.details);
+            console.error("   Hint:", movError.hint);
+            console.error("   DADOS QUE TENTARAM SER INSERIDOS:", movimentacao);
+            console.error("   Cliente:", data.nome_cliente);
             toast.error("⚠️ Avaliação finalizada, mas não foi possível registrar no caixa. Contate o administrador.");
+            // ⚠️ NÃO lança erro - atendimento continua finalizado mesmo sem movimentação!
+            console.error("⚠️ ATENÇÃO: Atendimento foi finalizado SEM criar movimentação!");
           } else {
-            console.log("[useFinalizarAtendimento] ✅ Movimentação registrada com sucesso no caixa Avaliação");
+            console.log("\n✅✅✅ PASSO 3.3 COMPLETO - MOVIMENTAÇÃO CRIADA COM SUCESSO!");
+            console.log("   ID da movimentação:", movimentacaoData?.id);
+            console.log("   Data/Hora:", movimentacaoData?.data_hora);
+            console.log("   Valor:", movimentacaoData?.valor);
+            console.log("   Cliente:", data.nome_cliente);
           }
         }
+      } else {
+        console.log("\n⏭️ PASSO 3 IGNORADO: Nenhum pagamento em dinheiro (valorDinheiro =", valorDinheiro, ")");
       }
+
+      console.log("\n╔════════════════════════════════════════════════════════════════");
+      console.log("║ ✅ [DEBUG PAGAMENTO] FIM DO PROCESSAMENTO");
+      console.log("║ Cliente:", data.nome_cliente);
+      console.log("║ Status: Finalizado");
+      console.log("╚════════════════════════════════════════════════════════════════\n");
 
       return data;
     },
     onSuccess: (data) => {
+      console.log("🔍 [DEBUG PAGAMENTO] onSuccess - Invalidando queries...");
       queryClient.invalidateQueries({ queryKey: ["atendimentos"] });
       queryClient.invalidateQueries({ queryKey: ["caixas"] });
       queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
       queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
+      console.log("✅ [DEBUG PAGAMENTO] Queries invalidadas");
+      
       log({
         acao: "finalizar",
         tabela_afetada: "atendimentos",

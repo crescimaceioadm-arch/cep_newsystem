@@ -273,9 +273,9 @@ export default function Financeiro() {
   const [modalAbrirAvaliacao, setModalAbrirAvaliacao] = useState(false);
   const [caixaAbrirAvaliacao, setCaixaAbrirAvaliacao] = useState<Caixa | null>(null);
 
-  // Filtro de Data
-  const [dataInicio, setDataInicio] = useState<string>("");
-  const [dataFim, setDataFim] = useState<string>("");
+  // Filtro de Data - INICIALIZAR COM HOJE POR PADRÃO
+  const [dataInicio, setDataInicio] = useState<string>(getDateBrasilia());
+  const [dataFim, setDataFim] = useState<string>(getDateBrasilia());
   
   // Caixa selecionado para o extrato (pode ser diferente do caixa logado)
   const [caixaExtrato, setCaixaExtrato] = useState<string>("");
@@ -1040,9 +1040,9 @@ N
                   </div>
                 </CardContent>
               </Card>
-            ) : !caixaSelecionado ? (
+            ) : !caixaParaExtrato ? (
               <div className="text-center py-8 text-muted-foreground">
-                <p>Selecione um caixa no login para ver o extrato</p>
+                <p>Selecione um caixa usando o dropdown acima</p>
               </div>
             ) : loadingMov || loadingCaixas ? (
               <p className="text-muted-foreground">Carregando...</p>

@@ -105,6 +105,23 @@ export function FinalizarAtendimentoModal({
     }
 
     try {
+      console.log("╔════════════════════════════════════════════════════════════════");
+      console.log("║ 📋 [MODAL FINALIZAÇÃO] PREPARANDO DADOS");
+      console.log("╠════════════════════════════════════════════════════════════════");
+      console.log("║ Atendimento ID:", atendimento.id);
+      console.log("║ Cliente:", atendimento.nome_cliente);
+      console.log("║ Valor Total:", valorTotalNum);
+      console.log("║ Desconto:", descontoNum);
+      console.log("║ Valor com Desconto:", valorComDesconto);
+      console.log("╚════════════════════════════════════════════════════════════════");
+      
+      console.log("\n📊 Pagamentos informados:");
+      pagamentos.forEach((pag, idx) => {
+        console.log(`   Pagamento ${idx + 1}:`);
+        console.log(`      - Método: "${pag.metodo}" (tipo: ${typeof pag.metodo})`);
+        console.log(`      - Valor: ${pag.valor} (tipo: ${typeof pag.valor})`);
+        console.log(`      - Banco: ${pag.banco || 'N/A'}`);
+      });
       
       // CORREÇÃO CRÍTICA AQUI:
       // Adicionado status: 'finalizado' e hora_encerramento
@@ -130,13 +147,17 @@ export function FinalizarAtendimentoModal({
         pagamento_3_banco: pagamentos[2]?.metodo === 'PIX' ? (pagamentos[2]?.banco || null) : null,
       };
 
-      console.log("[FinalizarAtendimentoModal] Payload enviado:", pagamentoData);
+      console.log("\n📤 PAYLOAD FINAL MONTADO:");
+      console.log(JSON.stringify(pagamentoData, null, 2));
+      console.log("\n🚀 Enviando para useFinalizarAtendimento...\n");
 
       await finalizarAtendimento.mutateAsync({
         id: atendimento.id,
         pagamento: pagamentoData,
       });
 
+      console.log("✅ [MODAL FINALIZAÇÃO] Sucesso - atendimento finalizado\n");
+      
       toast({
         title: "Sucesso!",
         description: "Venda finalizada e registrada no financeiro!",
@@ -148,7 +169,9 @@ export function FinalizarAtendimentoModal({
       setPagamentos([{ metodo: "", valor: "", banco: undefined }]);
       onOpenChange(false);
     } catch (error: any) {
-      console.error("[FinalizarAtendimentoModal] Erro:", error);
+      console.error("❌ [MODAL FINALIZAÇÃO] ERRO:", error);
+      console.error("   Mensagem:", error?.message);
+      console.error("   Stack:", error?.stack);
       toast({
         variant: "destructive",
         title: "Erro técnico",

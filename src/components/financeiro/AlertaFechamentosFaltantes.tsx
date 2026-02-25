@@ -37,7 +37,7 @@ export function AlertaFechamentosFaltantes() {
   const [justificativa, setJustificativa] = useState<string>("");
 
   const isAdmin = cargo === "admin";
-  const isCaixaOuGeral = cargo === "caixa" || cargo === "geral";
+  const isCaixaOuGeral = cargo === "caixa";
 
   // Data de referencia: ultimo dia util (pula domingos)
   let dataReferencia = subDays(startOfDay(new Date()), 1);
@@ -88,7 +88,7 @@ export function AlertaFechamentosFaltantes() {
     refetchInterval: 5 * 60 * 1000, // Atualiza a cada 5 minutos
   });
 
-  // Abrir popup automaticamente para Caixa/Geral quando houver fechamentos faltantes
+  // Abrir popup automaticamente para Caixa quando houver fechamentos faltantes
   useEffect(() => {
     if (isCaixaOuGeral && caixasSemFechamento.length > 0 && !dialogAberto && !ignorarHoje) {
       setDialogAberto(true);
@@ -141,10 +141,10 @@ export function AlertaFechamentosFaltantes() {
   // Se o dia foi assumido como sem abertura, nao alertar
   if (ignorarHoje) return null;
 
-  // Não mostrar nada se o usuário não for Admin, Caixa ou Geral
+  // Não mostrar nada se o usuário não for Admin ou Caixa
   if (!isAdmin && !isCaixaOuGeral) return null;
 
-  // POPUP para Caixa e Geral
+  // POPUP para Caixa
   if (isCaixaOuGeral) {
     return (
       <AlertDialog open={dialogAberto} onOpenChange={setDialogAberto}>

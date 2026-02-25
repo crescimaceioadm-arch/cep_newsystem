@@ -426,7 +426,11 @@ export function useMovimentacoesCaixa() {
           table: 'movimentacoes_caixa'
         },
         () => {
+          // Invalidar TODAS as queries relacionadas a movimentações
           queryClient.invalidateQueries({ queryKey: ["movimentacoes_caixa"] });
+          queryClient.invalidateQueries({ queryKey: ["movimentacoes_dinheiro"] });
+          queryClient.invalidateQueries({ queryKey: ["saldo_inicial"] });
+          queryClient.invalidateQueries({ queryKey: ["saldo_final_hoje"] });
           queryClient.invalidateQueries({ queryKey: ["caixas"] });
         }
       )

@@ -27,7 +27,13 @@ export function NovoAtendimentoModal({ open, onOpenChange }: NovoAtendimentoModa
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log("🔍 [DEBUG CADASTRO] ==========================================");
+    console.log("🔍 [DEBUG CADASTRO] handleSubmit chamado");
+    console.log("🔍 [DEBUG CADASTRO] isPending:", createAtendimento.isPending);
+    console.log("🔍 [DEBUG CADASTRO] Nome cliente:", nomeCliente.trim());
+    
     if (!nomeCliente.trim()) {
+      console.log("⚠️ [DEBUG CADASTRO] Nome vazio - abortando");
       toast({
         variant: "destructive",
         title: "Erro",
@@ -36,11 +42,20 @@ export function NovoAtendimentoModal({ open, onOpenChange }: NovoAtendimentoModa
       return;
     }
 
+    // Prevenir múltiplas submissões
+    if (createAtendimento.isPending) {
+      console.log("⚠️ [DEBUG CADASTRO] Já está processando - abortando");
+      return;
+    }
+
     try {
+      console.log("🔍 [DEBUG CADASTRO] Iniciando mutateAsync...");
       await createAtendimento.mutateAsync({
         nomeCliente: nomeCliente.trim(),
         origemAvaliacao: isWhatsapp ? "whatsapp" : "presencial",
       });
+      console.log("✅ [DEBUG CADASTRO] mutateAsync concluído com sucesso");
+      
       toast({
         title: "Sucesso!",
         description: "Atendimento registrado com sucesso.",
@@ -48,13 +63,16 @@ export function NovoAtendimentoModal({ open, onOpenChange }: NovoAtendimentoModa
       setNomeCliente("");
       setIsWhatsapp(false);
       onOpenChange(false);
+      console.log("✅ [DEBUG CADASTRO] Modal fechado");
     } catch (error) {
+      console.error("❌ [DEBUG CADASTRO] Erro ao cadastrar:", error);
       toast({
         variant: "destructive",
         title: "Erro",
         description: "Não foi possível registrar o atendimento.",
       });
     }
+    console.log("🔍 [DEBUG CADASTRO] ========================================== FIM");
   };
 
   return (

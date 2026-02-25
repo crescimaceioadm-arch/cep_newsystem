@@ -26,10 +26,10 @@ export function CaixaGuard() {
   useEffect(() => {
     // Only show modal if:
     // 1. User is authenticated (not loading and has user)
-    // 2. User has a role that uses cash registers (caixa, geral, admin)
+    // 2. User has a role that uses cash registers (caixa, admin)
     // 3. No cash register is selected
     // 4. Not on auth page
-    const needsCaixa = cargo === "caixa" || cargo === "geral" || cargo === "admin";
+    const needsCaixa = cargo === "caixa" || cargo === "admin";
     const isAuthPage = location.pathname === "/auth";
     
     // Verificar se admin já escolheu "não abrir" hoje
